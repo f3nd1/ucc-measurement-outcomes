@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UCC Measurement Outcomes Studio</title>
+<style>
+  :root {
+    --navy:#17294d;
+    --navy-2:#223a6b;
+    --gold:#b58a45;
+    --gold-2:#d7b46a;
+    --ink:#172033;
+    --muted:#687386;
+    --line:#dfe5ec;
+    --soft:#f4f6f9;
+    --soft-blue:#edf3fb;
+    --green:#237a57;
+    --amber:#a86d12;
+    --red:#b94848;
+    --purple:#6f58a8;
+    --shadow:0 10px 30px rgba(23,41,77,.09);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:#eef1f5;overflow:hidden}
+  button,input,select,textarea{font:inherit}
+  button{cursor:pointer}
+  .app{display:grid;grid-template-columns:240px 1fr;height:100vh}
+  .sidebar{background:var(--navy);color:#fff;padding:18px 14px;display:flex;flex-direction:column;gap:18px}
+  .brand{display:flex;align-items:center;gap:12px;padding:5px 8px 16px;border-bottom:1px solid rgba(255,255,255,.14)}
+  .logo{width:40px;height:40px;border-radius:14px;background:linear-gradient(150deg,#fff 0 48%,var(--gold) 49% 72%,#fff 73%);position:relative;box-shadow:inset 0 0 0 4px rgba(255,255,255,.12)}
+  .brand h1{font-size:15px;line-height:1.15;margin:0}
+  .brand small{color:#cbd4e4;font-size:11px}
+  .nav{display:flex;flex-direction:column;gap:6px}
+  .nav button{border:0;background:transparent;color:#dce4f1;text-align:left;padding:11px 12px;border-radius:10px;display:flex;gap:10px;align-items:center}
+  .nav button:hover,.nav button.active{background:rgba(255,255,255,.12);color:#fff}
+  .nav .icon{width:23px;text-align:center}
+  .side-card{margin-top:auto;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px;font-size:12px;line-height:1.45;color:#d9e1ed}
+  .side-card b{color:#fff}
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{height:66px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px;flex:0 0 auto}
+  .crumb{font-size:13px;color:var(--muted)}
+  .crumb strong{color:var(--ink)}
+  .top-actions{display:flex;gap:8px;align-items:center}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 12px;color:var(--ink);display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:#bac4d1;background:#fafbfd}
+  .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .btn.gold{background:var(--gold);color:#fff;border-color:var(--gold)}
+  .btn.danger{color:var(--red)}
+  .btn.small{padding:6px 9px;font-size:12px}
+  .badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700;background:var(--soft-blue);color:var(--navy-2)}
+  .badge.green{background:#e8f5ef;color:var(--green)}
+  .badge.amber{background:#fff4df;color:var(--amber)}
+  .badge.red{background:#fbeaea;color:var(--red)}
+  .content{overflow:auto;padding:20px;height:calc(100vh - 66px)}
+  .view{display:none;min-height:100%}
+  .view.active{display:block}
+  .page-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:16px}
+  .page-head h2{margin:0 0 5px;font-size:25px}
+  .page-head p{margin:0;color:var(--muted);font-size:13px;max-width:850px}
+  .tabs{display:flex;gap:4px;background:#e8edf3;padding:4px;border-radius:10px;width:max-content;margin-bottom:16px}
+  .tabs button{border:0;background:transparent;border-radius:8px;padding:8px 12px;color:#586477}
+  .tabs button.active{background:#fff;color:var(--navy);box-shadow:0 2px 8px rgba(23,41,77,.08)}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+  .panel-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .panel-head h3{font-size:14px;margin:0}
+  .panel-body{padding:16px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:13px;padding:14px 15px;box-shadow:var(--shadow)}
+  .kpi .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .kpi .value{font-size:27px;font-weight:750;margin:5px 0 3px}
+  .kpi .note{font-size:11px;color:var(--muted)}
+  .metric-up{color:var(--green);font-weight:700}
+  .metric-down{color:var(--red);font-weight:700}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;font-size:12px;vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;color:#657184;background:#f8fafc;letter-spacing:.03em}
+  tr:hover td{background:#fbfcfe}
+  .progress{height:8px;border-radius:99px;background:#e9edf2;overflow:hidden}
+  .progress span{display:block;height:100%;background:var(--navy-2);border-radius:99px}
+  .flow-wrap{position:relative;padding:18px;min-height:480px;background:linear-gradient(180deg,#fff,#fafbfd);overflow:auto}
+  .workflow{display:flex;align-items:center;gap:9px;min-width:1480px;padding:35px 15px 24px}
+  .flow-node{width:145px;min-height:100px;border:1px solid #cfd7e2;border-radius:13px;background:#fff;padding:13px;box-shadow:0 8px 20px rgba(23,41,77,.07);position:relative;transition:.18s}
+  .flow-node:hover{transform:translateY(-3px);border-color:var(--gold)}
+  .flow-node .num{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--navy);color:#fff;font-size:11px;margin-bottom:8px}
+  .flow-node b{font-size:12px;display:block;margin-bottom:4px}
+  .flow-node small{font-size:10px;color:var(--muted);line-height:1.35;display:block}
+  .arrow{font-size:22px;color:#8692a4}
+  .loop-row{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0 0}
+  .loop-step{background:var(--soft-blue);border:1px solid #d5e1f0;border-radius:999px;padding:8px 12px;font-size:11px}
+  .survey-layout{display:grid;grid-template-columns:220px minmax(520px,1fr) 300px;gap:14px;align-items:start}
+  .palette{position:sticky;top:0}
+  .palette-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .palette-item{border:1px solid var(--line);border-radius:9px;background:#fff;padding:10px 8px;font-size:11px;text-align:center;cursor:grab;user-select:none}
+  .palette-item:hover{border-color:var(--gold);background:#fffaf2}
+  .palette-item:active{cursor:grabbing}
+  .builder{min-height:700px}
+  .survey-meta{display:grid;grid-template-columns:1fr 140px;gap:10px;padding:16px;border-bottom:1px solid var(--line)}
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
+  .field label{font-size:11px;color:#5e6a7d;font-weight:700}
+  .field input,.field select,.field textarea{border:1px solid #ccd5df;border-radius:8px;padding:8px 9px;background:#fff;color:var(--ink);min-width:0}
+  .field textarea{resize:vertical;min-height:72px}
+  .question-list{padding:14px;min-height:540px;background:#f8fafc;border-radius:0 0 14px 14px}
+  .empty-drop{border:2px dashed #cbd4df;border-radius:12px;min-height:140px;display:grid;place-items:center;color:#7b8798;background:#fff}
+  .question-card{background:#fff;border:1px solid var(--line);border-radius:11px;padding:12px;margin-bottom:10px;display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:start;box-shadow:0 4px 14px rgba(23,41,77,.04)}
+  .question-card.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(181,138,69,.12)}
+  .question-card.dragging{opacity:.45}
+  .drag-handle{cursor:grab;color:#8995a6;font-size:16px;line-height:1}
+  .q-title{font-size:13px;font-weight:700;line-height:1.35}
+  .q-help{font-size:11px;color:var(--muted);margin-top:4px}
+  .q-preview{margin-top:9px;padding:9px;background:#f7f9fc;border-radius:8px;border:1px solid #edf0f4;font-size:11px;color:#677386}
+  .q-actions{display:flex;gap:4px}
+  .icon-btn{border:0;background:transparent;border-radius:7px;padding:5px;color:#778397}
+  .icon-btn:hover{background:#eef2f7;color:var(--navy)}
+  .required{color:var(--red)}
+  .inspector{position:sticky;top:0}
+  .switch{display:flex;align-items:center;gap:8px;font-size:12px}
+  .switch input{width:16px;height:16px}
+  .bulk-box{background:#fff8ea;border:1px solid #ecd6aa;border-radius:10px;padding:10px;font-size:11px;color:#715824}
+  .campaign-card{border:1px solid var(--line);border-radius:12px;padding:13px;background:#fff}
+  .campaign-card h4{margin:0 0 5px;font-size:13px}
+  .campaign-card p{margin:0;color:var(--muted);font-size:11px}
+  .mapping-layout{display:grid;grid-template-columns:minmax(650px,1fr) 300px;gap:14px}
+  .mapping-table{max-height:610px;overflow:auto}
+  .node-shell{position:relative;height:650px;background:radial-gradient(circle at 1px 1px,#dbe1e8 1px,transparent 0);background-size:20px 20px;overflow:hidden;border-radius:0 0 14px 14px}
+  .node-stage{position:absolute;inset:0;transform-origin:0 0}
+  .edge-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .graph-node{position:absolute;width:170px;border-radius:12px;border:1px solid #cfd7e2;background:#fff;padding:11px;box-shadow:0 8px 22px rgba(23,41,77,.1);cursor:move;user-select:none}
+  .graph-node:hover,.graph-node.selected{outline:2px solid rgba(181,138,69,.34);border-color:var(--gold)}
+  .graph-node .node-type{font-size:9px;text-transform:uppercase;color:#758196;letter-spacing:.08em;margin-bottom:4px}
+  .graph-node b{font-size:12px;line-height:1.3;display:block}
+  .graph-node small{font-size:10px;color:var(--muted);display:block;margin-top:5px}
+  .graph-node.metric{border-left:5px solid #5972a9}
+  .graph-node.dimension{border-left:5px solid var(--purple)}
+  .graph-node.index{border-left:5px solid var(--gold)}
+  .graph-node.source{border-left:5px solid var(--green)}
+  .graph-node.clause{border-left:5px solid #bf6b45}
+  .graph-node.objective{border-left:5px solid #2f8196}
+  .canvas-tools{position:absolute;right:12px;top:12px;display:flex;gap:5px;z-index:20}
+  .canvas-tools button{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:#fff}
+  .coverage{display:grid;grid-template-columns:190px repeat(4,1fr) 100px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .coverage>div{padding:9px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:11px}
+  .coverage .head{background:#f7f9fc;font-weight:700;color:#637084}
+  .heat{border-radius:5px;text-align:center;font-weight:700}
+  .heat.high{background:#dff2e8;color:var(--green)}
+  .heat.med{background:#fff0d4;color:var(--amber)}
+  .heat.low{background:#f7e3e3;color:var(--red)}
+  .index-layout{display:grid;grid-template-columns:minmax(650px,1fr) 320px;gap:14px}
+  .formula-box{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#111b31;color:#e6edf8;border-radius:9px;padding:11px;font-size:11px;line-height:1.5;overflow:auto}
+  .validation-item{display:flex;gap:8px;align-items:flex-start;font-size:11px;padding:7px 0;border-bottom:1px dashed #e4e8ee}
+  .dot{width:9px;height:9px;border-radius:50%;margin-top:3px;background:var(--green);flex:0 0 auto}
+  .dot.warn{background:var(--amber)}
+  .dashboard-grid{display:grid;grid-template-columns:1.45fr 1fr;gap:14px;margin-top:14px}
+  .chart{height:270px;position:relative;padding:10px 8px 0}
+  .chart svg{width:100%;height:100%}
+  .legend{display:flex;gap:15px;font-size:11px;color:var(--muted);padding:0 16px 12px}
+  .legend span:before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--navy-2);margin-right:6px}
+  .contrib-row{display:grid;grid-template-columns:130px 1fr 48px;gap:9px;align-items:center;margin:12px 0;font-size:11px}
+  .contrib-bar{height:12px;background:#e9edf2;border-radius:99px;overflow:hidden}
+  .contrib-bar span{height:100%;display:block;background:linear-gradient(90deg,var(--navy-2),var(--gold));border-radius:99px}
+  .filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .filter-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 10px;font-size:11px}
+  .explorer-controls{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .explorer-output{display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px}
+  .bar-chart{display:flex;align-items:flex-end;gap:14px;height:225px;padding:25px 16px 24px;border-bottom:1px solid var(--line)}
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:6px}
+  .bar-col .bar{width:55%;min-width:24px;background:linear-gradient(180deg,var(--gold),var(--navy-2));border-radius:7px 7px 0 0;transition:.25s}
+  .bar-col b{font-size:11px}
+  .bar-col span{font-size:10px;color:var(--muted);text-align:center}
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.48);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+  .modal.show{display:flex}
+  .modal-card{background:#fff;border-radius:16px;width:min(860px,96vw);max-height:90vh;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.25)}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line)}
+  .modal-body{padding:18px}
+  .preview-form{max-width:650px;margin:auto}
+  .preview-form h2{margin-bottom:6px}
+  .preview-q{padding:14px 0;border-bottom:1px solid var(--line)}
+  .preview-q label{display:block;font-size:13px;font-weight:700;margin-bottom:7px}
+  .likert{display:flex;gap:7px;flex-wrap:wrap}
+  .likert button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px;font-size:11px}
+  .toast{position:fixed;right:22px;bottom:22px;background:#14213c;color:#fff;border-radius:10px;padding:11px 14px;font-size:12px;opacity:0;transform:translateY(8px);pointer-events:none;transition:.25s;z-index:120}
+  .toast.show{opacity:1;transform:none}
+  .subview{display:none}
+  .subview.active{display:block}
+  .library-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .survey-card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:14px;box-shadow:var(--shadow)}
+  .survey-card h3{font-size:14px;margin:8px 0 5px}
+  .survey-card p{font-size:11px;color:var(--muted);margin:0 0 12px;min-height:32px}
+  .survey-card .meta{display:grid;grid-template-columns:1fr 1fr;gap:7px;font-size:10px;color:#657184;margin-bottom:11px}
+  .card-actions{display:flex;gap:6px}
+  .split{display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .mini-node-path{display:flex;align-items:center;gap:6px;overflow:auto;padding:10px 0}
+  .mini-node{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 9px;font-size:10px;white-space:nowrap}
+  @media(max-width:1200px){
+    .survey-layout{grid-template-columns:190px minmax(460px,1fr)}
+    .inspector{grid-column:1/-1;position:static}
+    .library-cards{grid-template-columns:1fr 1fr}
+    .grid-4{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo"></div>
+      <div><h1>United Ceres College</h1><small>Measurement Outcomes Studio</small></div>
+    </div>
+    <div class="nav">
+      <button class="active" data-view="workflow"><span class="icon">⌘</span>Outcome Workflow</button>
+      <button data-view="survey"><span class="icon">▤</span>Survey Studio</button>
+      <button data-view="mapping"><span class="icon">⌁</span>Mapping Studio</button>
+      <button data-view="index"><span class="icon">◉</span>Index Studio</button>
+      <button data-view="dashboard"><span class="icon">▥</span>Dashboard Studio</button>
+      <button data-view="explorer"><span class="icon">⌕</span>Data Explorer</button>
+    </div>
+    <div class="side-card"><b>Prototype mode</b><br/>Self-contained HTML. Drag questions, move nodes, edit weights, preview surveys and run sample analysis.</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb">SMS / Criterion 7 / <strong id="crumbTitle">Outcome Workflow</strong></div>
+      <div class="top-actions">
+        <span class="badge green">D3-ready interaction model</span>
+        <button class="btn small" onclick="showToast('Draft saved')">Save draft</button>
+        <button class="btn small gold" onclick="showToast('Prototype configuration published')">Publish</button>
+      </div>
+    </header>
+
+    <section class="content">
+      <div id="workflow" class="view active">
+        <div class="page-head">
+          <div><h2>Criterion 7.1.1 Measurement Outcomes</h2><p>End-to-end workflow from data collection to verified improvement, aligned with the ARTEMIA improvement cycle and ATHENA outcome hierarchy.</p></div>
+          <div><span class="badge">GD4 7.1.1</span> <span class="badge amber">Closed-loop evidence</span></div>
+        </div>
+        <div class="grid-4">
+          <div class="kpi"><div class="label">Published surveys</div><div class="value">12</div><div class="note">4 student journey stages</div></div>
+          <div class="kpi"><div class="label">Mapped questions</div><div class="value">101</div><div class="note">96% objective coverage</div></div>
+          <div class="kpi"><div class="label">Active indices</div><div class="value">6</div><div class="note">Strategic, tactical and operational</div></div>
+          <div class="kpi"><div class="label">Open quality actions</div><div class="value">7</div><div class="note"><span class="metric-down">2 overdue</span></div></div>
+        </div>
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head"><h3>Interactive Criterion 7 workflow</h3><span class="badge">Click any stage</span></div>
+          <div class="flow-wrap">
+            <div class="workflow" id="workflowNodes"></div>
+            <div class="panel" style="box-shadow:none;margin:0 15px">
+              <div class="panel-body split"><div><b id="flowDetailTitle">Survey and data source management</b><div id="flowDetailText" style="font-size:12px;color:var(--muted);margin-top:5px">Define surveys, owners, stakeholder stages, collection rules and operational data sources.</div></div><button class="btn small" onclick="switchView('survey')">Open workspace</button></div>
+            </div>
+            <div class="loop-row">
+              <span class="loop-step">Assessment</span><span class="loop-step">Review</span><span class="loop-step">Targeting</span><span class="loop-step">Execution & Mitigation</span><span class="loop-step">Improvement</span><span class="loop-step">Accountability</span>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2" style="margin-top:14px">
+          <div class="panel">
+            <div class="panel-head"><h3>ATHENA hierarchy</h3></div>
+            <div class="panel-body">
+              <div class="mini-node-path"><span class="mini-node">Survey / ERPNext data</span> → <span class="mini-node">Metric</span> → <span class="mini-node">SEQI / SAPI / ESI / TEI</span> → <span class="mini-node">Performance domain</span> → <span class="mini-node">API</span></div>
+              <table><tr><th>Level</th><th>Examples</th><th>Purpose</th></tr><tr><td>Strategic</td><td>Aggregated Performance Index</td><td>Institution-wide view</td></tr><tr><td>Tactical</td><td>SEQI, SAPI, ESI, TEI</td><td>Department monitoring</td></tr><tr><td>Operational</td><td>Question metrics, ratios, counts</td><td>Root-cause analysis</td></tr></table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h3>Traceability test</h3><button class="btn small" onclick="animateTrace()">Trace example</button></div>
+            <div class="panel-body">
+              <div class="mini-node-path" id="tracePath"><span class="mini-node">End of Module Q11</span> → <span class="mini-node">OBJ-0403</span> → <span class="mini-node">GD4 5.2.2.2</span> → <span class="mini-node">TEACHING_CLARITY</span> → <span class="mini-node">SEQI Reliability</span> → <span class="mini-node">Quality Action</span></div>
+              <p style="font-size:12px;color:var(--muted)">Every reported result can be traced back to source questions, objectives, clauses, scoring rules and affected respondents.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="survey" class="view">
+        <div class="page-head"><div><h2>Survey Studio</h2><p>Create, govern, distribute and analyse SurveyMonkey-style surveys inside ERPNext.</p></div><button class="btn primary" onclick="openSurveyBuilder()">+ New survey</button></div>
+        <div class="tabs" id="surveyTabs"><button class="active" data-sub="survey-library">Survey library</button><button data-sub="survey-builder">Builder</button><button data-sub="survey-campaigns">Campaigns & collection</button><button data-sub="survey-analysis">Question analytics</button></div>
+
+        <div id="survey-library" class="subview active">
+          <div class="filter-row"><button class="filter-chip">All departments</button><button class="filter-chip">All stages</button><button class="filter-chip">Published</button><button class="filter-chip">2026</button></div>
+          <div class="library-cards" id="surveyLibrary"></div>
+        </div>
+
+        <div id="survey-builder" class="subview">
+          <div class="survey-layout">
+            <div class="panel palette">
+              <div class="panel-head"><h3>Question types</h3></div>
+              <div class="panel-body"><div class="palette-grid" id="paletteGrid"></div><div class="bulk-box" style="margin-top:12px"><b>Bulk paste</b><br/>Paste multiple questions using: question | type | options</div><button class="btn small" style="width:100%;margin-top:9px" onclick="openBulkModal()">Paste questions</button></div>
+            </div>
+            <div class="panel builder">
+              <div class="panel-head"><div><h3>Student Onboarding Survey v.03</h3><span class="badge amber">Draft</span></div><div><button class="btn small" onclick="openPreview()">Preview</button> <button class="btn small gold" onclick="publishSurvey()">Publish</button></div></div>
+              <div class="survey-meta"><div class="field"><label>Survey title</label><input value="Student Onboarding Survey v.03" /></div><div class="field"><label>Version</label><input value="03" /></div><div class="field" style="grid-column:1/-1"><label>Description</label><textarea>Collect actionable feedback from new students on orientation, support, communication, agent conduct and preparedness.</textarea></div></div>
+              <div class="question-list" id="questionList"></div>
+            </div>
+            <div class="panel inspector">
+              <div class="panel-head"><h3>Question inspector</h3><span id="selectedQBadge" class="badge">No selection</span></div>
+              <div class="panel-body" id="questionInspector"><p style="font-size:12px;color:var(--muted)">Select a question to edit wording, validation, logic, objective and metric mapping.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="survey-campaigns" class="subview">
+          <div class="grid-4">
+            <div class="kpi"><div class="label">Invited</div><div class="value">148</div><div class="note">Current campaigns</div></div>
+            <div class="kpi"><div class="label">Completed</div><div class="value">93</div><div class="note">62.8% response rate</div></div>
+            <div class="kpi"><div class="label">Target</div><div class="value">40%</div><div class="note">Graduate survey target</div></div>
+            <div class="kpi"><div class="label">Median completion</div><div class="value">4m 12s</div><div class="note">Across published surveys</div></div>
+          </div>
+          <div class="grid-3" style="margin-top:14px" id="campaignGrid"></div>
+        </div>
+
+        <div id="survey-analysis" class="subview">
+          <div class="grid-3">
+            <div class="panel"><div class="panel-head"><h3>Q11 Teaching clarity</h3><span class="badge green">4.42 / 5</span></div><div class="panel-body"><div class="contrib-row"><span>Strongly agree</span><div class="contrib-bar"><span style="width:58%"></span></div><b>58%</b></div><div class="contrib-row"><span>Agree</span><div class="contrib-bar"><span style="width:29%"></span></div><b>29%</b></div><div class="contrib-row"><span>Neutral</span><div class="contrib-bar"><span style="width:8%"></span></div><b>8%</b></div><div class="contrib-row"><span>Disagree</span><div class="contrib-bar"><span style="width:5%"></span></div><b>5%</b></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Response funnel</h3></div><div class="panel-body"><div class="contrib-row"><span>Invited</span><div class="contrib-bar"><span style="width:100%"></span></div><b>82</b></div><div class="contrib-row"><span>Opened</span><div class="contrib-bar"><span style="width:83%"></span></div><b>68</b></div><div class="contrib-row"><span>Started</span><div class="contrib-bar"><span style="width:74%"></span></div><b>61</b></div><div class="contrib-row"><span>Completed</span><div class="contrib-bar"><span style="width:65%"></span></div><b>53</b></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Comment themes</h3></div><div class="panel-body"><table><tr><th>Theme</th><th>Mentions</th></tr><tr><td>LMS access</td><td>11</td></tr><tr><td>Timetable clarity</td><td>8</td></tr><tr><td>Agent information</td><td>5</td></tr><tr><td>Orientation duration</td><td>4</td></tr></table></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mapping" class="view">
+        <div class="page-head"><div><h2>Mapping Studio</h2><p>Link survey questions to objectives, clauses, standards and reusable metrics.</p></div><button class="btn gold" onclick="showToast('Mapping validation completed: 3 warnings')">Validate mapping</button></div>
+        <div class="tabs" id="mappingTabs"><button class="active" data-sub="mapping-table">Objective & clause table</button><button data-sub="mapping-node">Node mapping</button><button data-sub="mapping-coverage">Coverage analysis</button></div>
+        <div id="mapping-table" class="subview active">
+          <div class="mapping-layout">
+            <div class="panel"><div class="panel-head"><h3>Survey Objective-Question Mapping</h3><span class="badge">101 rows</span></div><div class="mapping-table"><table id="mappingTable"></table></div></div>
+            <div class="panel"><div class="panel-head"><h3>Selected mapping</h3></div><div class="panel-body" id="mappingInspector"><p style="font-size:12px;color:var(--muted)">Select a row to edit mapping and scoring.</p></div></div>
+          </div>
+        </div>
+        <div id="mapping-node" class="subview">
+          <div class="mapping-layout">
+            <div class="panel"><div class="panel-head"><h3>Question lineage canvas</h3><span class="badge">Drag nodes</span></div><div class="node-shell"><div class="canvas-tools"><button onclick="zoomGraph('mapping',.1)">+</button><button onclick="zoomGraph('mapping',-.1)">−</button><button onclick="resetGraph('mapping')">↺</button></div><div class="node-stage" id="mappingStage"><svg class="edge-layer" id="mappingEdges"></svg></div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Node settings</h3></div><div class="panel-body" id="mappingNodeInspector"><p style="font-size:12px;color:var(--muted)">Click a node to configure its objective, clause or reusable metric.</p></div></div>
+          </div>
+        </div>
+        <div id="mapping-coverage" class="subview">
+          <div class="panel"><div class="panel-head"><h3>Student journey objective coverage</h3><span class="badge amber">3 gaps</span></div><div class="panel-body"><div class="coverage" id="coverageGrid"></div></div></div>
+        </div>
+      </div>
+
+      <div id="index" class="view">
+        <div class="page-head"><div><h2>Index Studio</h2><p>Build normalisation, metric, dimension and composite-index logic through a draggable node canvas.</p></div><div><button class="btn" onclick="loadIndexTemplate('SAPI')">Load SAPI</button> <button class="btn primary" onclick="loadIndexTemplate('SEQI')">Load SEQI</button></div></div>
+        <div class="index-layout">
+          <div class="panel"><div class="panel-head"><div><h3 id="indexTitle">Student Experience Quality Index</h3><span class="badge green">Published v.02</span></div><div><button class="btn small" onclick="validateIndex()">Validate</button> <button class="btn small gold" onclick="showToast('Index version published')">Publish version</button></div></div><div class="node-shell" style="height:700px"><div class="canvas-tools"><button onclick="zoomGraph('index',.1)">+</button><button onclick="zoomGraph('index',-.1)">−</button><button onclick="resetGraph('index')">↺</button></div><div class="node-stage" id="indexStage"><svg class="edge-layer" id="indexEdges"></svg></div></div></div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="panel"><div class="panel-head"><h3>Node configuration</h3></div><div class="panel-body" id="indexInspector"><p style="font-size:12px;color:var(--muted)">Click a node. Metric nodes allow selection of any mapped field or metric code.</p></div></div>
+            <div class="panel"><div class="panel-head"><h3>Formula preview</h3></div><div class="panel-body"><div class="formula-box" id="formulaBox">SEQI = Reliability × 20% + Assurance × 15% + Tangibles × 20% + Empathy × 15% + Responsiveness × 15% + Outcome Alignment × 15%</div></div></div>
+            <div class="panel"><div class="panel-head"><h3>Validation</h3><span class="badge green" id="validationBadge">Ready</span></div><div class="panel-body" id="validationList"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="dashboard" class="view">
+        <div class="page-head"><div><h2>Dashboard Studio</h2><p>Interactive outcome monitoring, benchmarking, contribution analysis and student-level drill-down.</p></div><button class="btn primary" onclick="showToast('Dashboard layout saved')">Save layout</button></div>
+        <div class="filter-row"><button class="filter-chip">Year: 2026</button><button class="filter-chip">Programme: All</button><button class="filter-chip">Intake: All</button><button class="filter-chip">Teacher: All</button><button class="filter-chip">Index version: v.02</button></div>
+        <div class="grid-4">
+          <div class="kpi"><div class="label">SEQI</div><div class="value">4.49</div><div class="note">Target 4.20, <span class="metric-up">+0.29</span></div></div>
+          <div class="kpi"><div class="label">SAPI</div><div class="value">83.64</div><div class="note">Target 75.00, <span class="metric-up">+8.64</span></div></div>
+          <div class="kpi"><div class="label">Response coverage</div><div class="value">92%</div><div class="note">86 valid responses</div></div>
+          <div class="kpi"><div class="label">Quality actions</div><div class="value">7</div><div class="note">5 on track, 2 overdue</div></div>
+        </div>
+        <div class="dashboard-grid">
+          <div class="panel"><div class="panel-head"><h3>SEQI trend</h3><button class="btn small" onclick="showToast('Trend annotation added')">+ Annotation</button></div><div class="chart" id="trendChart"></div><div class="legend"><span>Actual score</span><span style="margin-left:auto">Target: 4.20</span></div></div>
+          <div class="panel"><div class="panel-head"><h3>Component contribution</h3></div><div class="panel-body" id="contributionPanel"></div></div>
+        </div>
+        <div class="grid-2" style="margin-top:14px">
+          <div class="panel"><div class="panel-head"><h3>Programme comparison</h3></div><div class="panel-body"><div class="contrib-row"><span>Diploma in AI</span><div class="contrib-bar"><span style="width:91%"></span></div><b>4.56</b></div><div class="contrib-row"><span>Diploma in Business</span><div class="contrib-bar"><span style="width:88%"></span></div><b>4.41</b></div><div class="contrib-row"><span>English</span><div class="contrib-bar"><span style="width:86%"></span></div><b>4.31</b></div></div></div>
+          <div class="panel"><div class="panel-head"><h3>Student-level drill-down</h3><span class="badge">Click a row</span></div><div class="panel-body" style="padding:0"><table id="studentTable"><tr><th>Student</th><th>Programme</th><th>Onboarding</th><th>Learning</th><th>Overall</th></tr><tr onclick="showToast('Opened respondent evidence trail')"><td>STU-2026-0015</td><td>DBM</td><td>82</td><td>76</td><td><b>79.0</b></td></tr><tr onclick="showToast('Opened respondent evidence trail')"><td>STU-2026-0021</td><td>DAI</td><td>95</td><td>84</td><td><b>88.5</b></td></tr><tr onclick="showToast('Opened respondent evidence trail')"><td>STU-2026-0034</td><td>English</td><td>74</td><td>71</td><td><b>72.5</b></td></tr></table></div></div>
+        </div>
+      </div>
+
+      <div id="explorer" class="view">
+        <div class="page-head"><div><h2>Data Explorer</h2><p>Build ad hoc tables and visualisations from raw answers, mapped metrics, indices and ERPNext context.</p></div><button class="btn" onclick="exportCSV()">Export CSV</button></div>
+        <div class="panel"><div class="panel-head"><h3>Analysis builder</h3><span class="badge">Drag-and-drop model</span></div><div class="panel-body"><div class="explorer-controls"><div class="field"><label>Dataset</label><select id="expDataset"><option>Metric Results</option><option>Survey Answers</option><option>Index Results</option><option>Objective Mapping</option></select></div><div class="field"><label>Measure</label><select id="expMeasure"><option>Average Score</option><option>Response Count</option><option>Positive Percentage</option><option>Coverage</option></select></div><div class="field"><label>Rows</label><select id="expRows"><option>Programme</option><option>Teacher</option><option>Metric</option><option>Survey</option></select></div><div class="field"><label>Columns</label><select id="expColumns"><option>Survey Period</option><option>Academic Year</option><option>Index Version</option></select></div><div class="field"><label>Filter</label><select id="expFilter"><option>All programmes</option><option>Diploma in Business</option><option>Diploma in AI</option><option>English</option></select></div></div><button class="btn primary" onclick="runExplorer()">Run analysis</button></div></div>
+        <div class="explorer-output">
+          <div class="panel"><div class="panel-head"><h3>Result table</h3><span class="badge" id="resultCount">3 rows</span></div><div class="panel-body" style="padding:0"><table id="explorerTable"></table></div></div>
+          <div class="panel"><div class="panel-head"><h3>Visualisation</h3><select id="chartType" onchange="runExplorer()"><option>Bar chart</option><option>Table only</option></select></div><div class="panel-body"><div class="bar-chart" id="explorerChart"></div></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="modal" id="previewModal"><div class="modal-card"><div class="modal-head"><b>Survey preview</b><button class="icon-btn" onclick="closeModal('previewModal')">✕</button></div><div class="modal-body"><div class="preview-form" id="previewForm"></div></div></div></div>
+<div class="modal" id="bulkModal"><div class="modal-card" style="max-width:680px"><div class="modal-head"><b>Bulk paste questions</b><button class="icon-btn" onclick="closeModal('bulkModal')">✕</button></div><div class="modal-body"><div class="field"><label>One question per line: Question | Type | Options</label><textarea id="bulkText" style="min-height:200px">The orientation process was clear | Rating | 1,2,3,4,5
+I received LMS access on time | Yes/No
+Which programme are you enrolled in? | Dropdown | DBM,DAI,English
+What should UCC improve? | Paragraph</textarea></div><button class="btn primary" onclick="parseBulk()">Create questions</button></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const questionTypes=[
+  ['Short text','text'],['Paragraph','paragraph'],['Email','email'],['Number','number'],['Date','date'],['Rating','rating'],['Single choice','single'],['Multiple choice','multiple'],['Dropdown','dropdown'],['Yes / No','yesno'],['Likert matrix','matrix'],['NPS','nps'],['Ranking','ranking'],['Slider','slider'],['File upload','file'],['Section heading','section']
+];
+let questions=[
+  {id:1,type:'rating',title:'During orientation, I was helped to understand UCC’s values, goals and expectations.',help:'Measures stakeholder engagement and institutional alignment.',required:true,objective:'OBJ-0397',clause:'GD4_1.1.1.2',metric:'SEQI_ASSURANCE_VALUES',options:'Strongly Agree,Agree,Neutral,Disagree,Strongly Disagree'},
+  {id:2,type:'rating',title:'The onboarding information I received from UCC was accurate, consistent and easy to understand.',help:'Measures effectiveness of communication.',required:true,objective:'OBJ-0400',clause:'GD4_2.2.1.2',metric:'SEQI_RELIABILITY_INFORMATION',options:'Strongly Agree,Agree,Neutral,Disagree,Strongly Disagree'},
+  {id:3,type:'yesno',title:'Did the recruitment agent collect any course fees from you?',help:'Course fees refer to fees stated in the Fee Payable and Student Contract.',required:true,objective:'OBJ-0401',clause:'GD4_3.2.1',metric:'AGENT_FEE_COLLECTION',options:'Yes,No'},
+  {id:4,type:'rating',title:'The expectations for my conduct and attendance were clearly explained during onboarding.',help:'Measures awareness of conduct and attendance requirements.',required:true,objective:'OBJ-0404',clause:'GD4_4.6.1',metric:'ONBOARD_CONDUCT_CLARITY',options:'Strongly Agree,Agree,Neutral,Disagree,Strongly Disagree'},
+  {id:5,type:'paragraph',title:'What could UCC improve about the onboarding experience?',help:'Open-ended improvement input.',required:false,objective:'OBJ-0404',clause:'GD4_2.4.1.3',metric:'',options:''}
+];
+let selectedQuestionId=null;
+let dragIndex=null;
+const surveyCards=[
+ {name:'Student Onboarding Survey v.02',dept:'SSO',stage:'Orientation',status:'Published',responses:'38',rate:'76%',desc:'Clarity, preparedness, support and recruitment-agent conduct.'},
+ {name:'End of Module Survey (Student) v.03',dept:'Course Management',stage:'Active Study',status:'Published',responses:'53',rate:'65%',desc:'Module delivery, teaching quality, resources and assessment.'},
+ {name:'End of Course Survey v.02',dept:'Course Management',stage:'Graduation',status:'Published',responses:'29',rate:'58%',desc:'Academic journey, support services and immediate outcomes.'},
+ {name:'Graduate and Alumni Survey v.02',dept:'SSO',stage:'First-Year Out',status:'Draft',responses:'18',rate:'40%',desc:'Employment, further study and post-graduation impact.'},
+ {name:'Agent Onboarding Survey v.02',dept:'Sales',stage:'Onboarding',status:'Published',responses:'16',rate:'80%',desc:'Agent understanding, data protection and marketing rules.'},
+ {name:'Staff Survey 2026',dept:'HR',stage:'Annual',status:'Draft',responses:'0',rate:'0%',desc:'Employee satisfaction, engagement and resources.'}
+];
+const campaigns=[
+ {name:'End of Module, July 2026',audience:'82 active students',period:'20 Jul to 4 Aug',rate:65,status:'Open'},
+ {name:'Graduate Follow-up, Cohort 2025',audience:'45 graduates',period:'1 to 20 Aug',rate:40,status:'Open'},
+ {name:'Student Onboarding, Aug intake',audience:'21 new students',period:'5 to 12 Aug',rate:76,status:'Scheduled'}
+];
+const mappingRows=[
+ {survey:'Student Onboarding',q:'Q1',question:'During orientation, I was helped to understand UCC’s values, goals and expectations.',objective:'OBJ-0397',clause:'GD4_1.1.1.2',metric:'SEQI_ASSURANCE_VALUES',standard:'GD4, ISO 9001'},
+ {survey:'Student Onboarding',q:'Q6',question:'The onboarding information I received was accurate, consistent and easy to understand.',objective:'OBJ-0400',clause:'GD4_2.2.1.2',metric:'SEQI_RELIABILITY_INFORMATION',standard:'GD4, ISO 9001'},
+ {survey:'End of Module',q:'Q11',question:'The teacher explained concepts clearly and helped me learn effectively in this module.',objective:'OBJ-0403',clause:'GD4_5.2.2.2',metric:'TEACHING_CLARITY',standard:'GD4, ISO 9001'},
+ {survey:'End of Module',q:'Q14',question:'Assessment practices upheld validity, reliability, fairness and authenticity.',objective:'OBJ-0405',clause:'GD4_5.5.1.1',metric:'ASSESSMENT_FAIRNESS',standard:'GD4, ISO 9001'},
+ {survey:'End of Course',q:'Q21',question:'How satisfied were you with how UCC used student feedback and communicated related actions?',objective:'OBJ-0397',clause:'GD4_2.4.1.3',metric:'FEEDBACK_RESPONSIVENESS',standard:'GD4, ISO 9001'},
+ {survey:'Graduate & Alumni',q:'Q13',question:'How long did it take you to secure employment after graduation?',objective:'OBJ-0420',clause:'GD4_7.2.1.1',metric:'EMPLOYMENT_TIME',standard:'GD4, ISO 9001'}
+];
+const workflowSteps=[
+ ['Survey & Data Sources','Define surveys, respondent stages, owners and ERPNext data sources.','survey'],
+ ['Campaign & Collection','Distribute secure links, track invitations, responses and drop-off.','survey'],
+ ['Objective & Clause Mapping','Map questions to approved objectives, GD4, ISO, PDPA and ISMS clauses.','mapping'],
+ ['Metric Mapping','Assign reusable metric codes and scoring rules.','mapping'],
+ ['Validation & Normalisation','Convert Likert scales, ratios, counts and hours into comparable scores.','index'],
+ ['Index Calculation','Calculate operational, tactical and strategic indices.','index'],
+ ['D3 Analytics','Render trends, comparisons, heatmaps and drill-downs.','dashboard'],
+ ['Quality Performance Outcomes','Evaluate actual results against targets and benchmarks.','dashboard'],
+ ['Quality Action','Create corrective or improvement actions from performance gaps.','workflow'],
+ ['Quality Meeting','Review evidence, decisions, owners and due dates.','workflow'],
+ ['Effectiveness Verification','Verify that later data confirms the action worked.','workflow']
+];
+
+function switchView(id){
+ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+ document.getElementById(id).classList.add('active');
+ document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===id));
+ const labels={workflow:'Outcome Workflow',survey:'Survey Studio',mapping:'Mapping Studio',index:'Index Studio',dashboard:'Dashboard Studio',explorer:'Data Explorer'};
+ document.getElementById('crumbTitle').textContent=labels[id];
+ if(id==='mapping'){renderMappingGraph();}
+ if(id==='index'){renderIndexGraph();}
+}
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
+function bindTabs(container){document.querySelectorAll('#'+container+' button').forEach(btn=>btn.onclick=()=>{const parent=btn.parentElement;parent.querySelectorAll('button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');const root=parent.parentElement;root.querySelectorAll(':scope > .subview').forEach(s=>s.classList.remove('active'));document.getElementById(btn.dataset.sub).classList.add('active');if(btn.dataset.sub==='mapping-node')setTimeout(renderMappingGraph,20);});}
+bindTabs('surveyTabs');bindTabs('mappingTabs');
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>t.classList.remove('show'),2200)}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+function openSurveyBuilder(){switchView('survey');document.querySelector('#surveyTabs button[data-sub="survey-builder"]').click();}
+function renderWorkflow(){const root=document.getElementById('workflowNodes');root.innerHTML='';workflowSteps.forEach((s,i)=>{const node=document.createElement('div');node.className='flow-node';node.innerHTML=`<div class="num">${i+1}</div><b>${s[0]}</b><small>${s[1]}</small>`;node.onclick=()=>{document.getElementById('flowDetailTitle').textContent=s[0];document.getElementById('flowDetailText').textContent=s[1];document.querySelector('#flowDetailTitle').parentElement.parentElement.querySelector('button').onclick=()=>switchView(s[2]);};root.appendChild(node);if(i<workflowSteps.length-1){const a=document.createElement('span');a.className='arrow';a.textContent='→';root.appendChild(a);}})}
+function animateTrace(){const nodes=[...document.querySelectorAll('#tracePath .mini-node')];nodes.forEach((n,i)=>setTimeout(()=>{n.style.background='#fff1d5';n.style.borderColor='var(--gold)';setTimeout(()=>{n.style.background='';n.style.borderColor=''},650)},i*240));}
+
+function renderSurveyLibrary(){const root=document.getElementById('surveyLibrary');root.innerHTML=surveyCards.map((s,i)=>`<div class="survey-card"><div class="split"><span class="badge ${s.status==='Published'?'green':'amber'}">${s.status}</span><span style="font-size:11px;color:var(--muted)">${s.rate} response</span></div><h3>${s.name}</h3><p>${s.desc}</p><div class="meta"><span>Department<br><b>${s.dept}</b></span><span>Stage<br><b>${s.stage}</b></span><span>Responses<br><b>${s.responses}</b></span><span>Version control<br><b>${s.name.match(/v\.\d+/)?.[0]||'Draft'}</b></span></div><div class="card-actions"><button class="btn small" onclick="openSurveyBuilder()">Open</button><button class="btn small" onclick="showToast('Survey duplicated')">Duplicate</button><button class="btn small" onclick="showToast('Version comparison opened')">Compare</button></div></div>`).join('');}
+function renderPalette(){document.getElementById('paletteGrid').innerHTML=questionTypes.map(q=>`<div class="palette-item" draggable="true" data-type="${q[1]}">${q[0]}</div>`).join('');document.querySelectorAll('.palette-item').forEach(el=>el.addEventListener('dragstart',e=>{e.dataTransfer.setData('newType',el.dataset.type)}));}
+function qPreview(q){if(q.type==='rating'||q.type==='single'||q.type==='dropdown'||q.type==='yesno')return (q.options||'Option 1,Option 2').split(',').slice(0,5).map(x=>`◯ ${x.trim()}`).join('&nbsp;&nbsp;');if(q.type==='paragraph')return 'Long text response';if(q.type==='section')return 'Section divider';return 'Sample response field';}
+function renderQuestions(){const root=document.getElementById('questionList');if(!questions.length){root.innerHTML='<div class="empty-drop">Drag a question type here</div>';return;}root.innerHTML=questions.map((q,i)=>`<div class="question-card ${selectedQuestionId===q.id?'selected':''}" draggable="true" data-index="${i}" data-id="${q.id}"><div class="drag-handle">⋮⋮</div><div onclick="selectQuestion(${q.id})"><div class="q-title">${i+1}. ${escapeHtml(q.title)} ${q.required?'<span class="required">*</span>':''}</div><div class="q-help">${escapeHtml(q.help||'')}</div><div class="q-preview">${qPreview(q)}</div><div style="margin-top:7px"><span class="badge">${friendlyType(q.type)}</span> ${q.objective?`<span class="badge">${q.objective}</span>`:''} ${q.metric?`<span class="badge green">${q.metric}</span>`:''}</div></div><div class="q-actions"><button class="icon-btn" onclick="duplicateQuestion(${q.id});event.stopPropagation()">⧉</button><button class="icon-btn" onclick="deleteQuestion(${q.id});event.stopPropagation()">⌫</button></div></div>`).join('');
+ root.querySelectorAll('.question-card').forEach(card=>{card.addEventListener('dragstart',e=>{dragIndex=+card.dataset.index;card.classList.add('dragging');e.dataTransfer.setData('moveIndex',dragIndex)});card.addEventListener('dragend',()=>card.classList.remove('dragging'));card.addEventListener('dragover',e=>e.preventDefault());card.addEventListener('drop',e=>{e.preventDefault();const newType=e.dataTransfer.getData('newType');if(newType){insertQuestion(newType,+card.dataset.index);return;}const from=+e.dataTransfer.getData('moveIndex');const to=+card.dataset.index;if(Number.isInteger(from)&&from!==to){const moved=questions.splice(from,1)[0];questions.splice(to,0,moved);renderQuestions();showToast('Question reordered');}});});
+ root.addEventListener('dragover',e=>e.preventDefault());root.addEventListener('drop',e=>{if(e.target===root){const type=e.dataTransfer.getData('newType');if(type)insertQuestion(type,questions.length)}});
+}
+function friendlyType(t){return questionTypes.find(x=>x[1]===t)?.[0]||t}
+function insertQuestion(type,index){const q={id:Date.now(),type,title:type==='section'?'New section':'Enter your question',help:'',required:false,objective:'',clause:'',metric:'',options:['rating','single','multiple','dropdown'].includes(type)?'Option 1,Option 2,Option 3':type==='yesno'?'Yes,No':''};questions.splice(index,0,q);selectedQuestionId=q.id;renderQuestions();renderInspector();showToast('Question added')}
+function selectQuestion(id){selectedQuestionId=id;renderQuestions();renderInspector();}
+function duplicateQuestion(id){const idx=questions.findIndex(q=>q.id===id);const q={...questions[idx],id:Date.now(),title:questions[idx].title+' (Copy)'};questions.splice(idx+1,0,q);renderQuestions();showToast('Question duplicated')}
+function deleteQuestion(id){questions=questions.filter(q=>q.id!==id);if(selectedQuestionId===id)selectedQuestionId=null;renderQuestions();renderInspector();showToast('Question removed')}
+function renderInspector(){const root=document.getElementById('questionInspector');const q=questions.find(x=>x.id===selectedQuestionId);document.getElementById('selectedQBadge').textContent=q?friendlyType(q.type):'No selection';if(!q){root.innerHTML='<p style="font-size:12px;color:var(--muted)">Select a question to edit wording, validation, logic, objective and metric mapping.</p>';return;}root.innerHTML=`<div class="field"><label>Question</label><textarea id="insTitle">${escapeHtml(q.title)}</textarea></div><div class="field"><label>Help text</label><textarea id="insHelp">${escapeHtml(q.help||'')}</textarea></div><div class="field"><label>Question type</label><select id="insType">${questionTypes.map(t=>`<option value="${t[1]}" ${t[1]===q.type?'selected':''}>${t[0]}</option>`).join('')}</select></div><label class="switch"><input id="insRequired" type="checkbox" ${q.required?'checked':''}> Required question</label><div class="field" style="margin-top:11px"><label>Options, comma separated</label><textarea id="insOptions">${escapeHtml(q.options||'')}</textarea></div><div class="field"><label>Objective ID</label><select id="insObjective"><option value="">Not mapped</option>${['OBJ-0397','OBJ-0399','OBJ-0400','OBJ-0401','OBJ-0403','OBJ-0404','OBJ-0405','OBJ-0406','OBJ-0420'].map(x=>`<option ${x===q.objective?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label>Related clause</label><input id="insClause" value="${escapeHtml(q.clause||'')}" /></div><div class="field"><label>Reusable metric code</label><input id="insMetric" value="${escapeHtml(q.metric||'')}" placeholder="e.g. TEACHING_CLARITY" /></div><div class="field"><label>Display logic</label><select><option>Always show</option><option>Show if previous answer matches</option><option>Skip to section</option><option>End survey</option></select></div><button class="btn primary" style="width:100%" onclick="saveInspector()">Apply changes</button>`;}
+function saveInspector(){const q=questions.find(x=>x.id===selectedQuestionId);q.title=document.getElementById('insTitle').value;q.help=document.getElementById('insHelp').value;q.type=document.getElementById('insType').value;q.required=document.getElementById('insRequired').checked;q.options=document.getElementById('insOptions').value;q.objective=document.getElementById('insObjective').value;q.clause=document.getElementById('insClause').value;q.metric=document.getElementById('insMetric').value;renderQuestions();showToast('Question updated')}
+function openPreview(){const root=document.getElementById('previewForm');root.innerHTML=`<h2>Student Onboarding Survey v.03</h2><p style="color:var(--muted);font-size:12px">Your feedback helps UCC improve onboarding, communication and student support.</p>${questions.map((q,i)=>`<div class="preview-q"><label>${i+1}. ${escapeHtml(q.title)} ${q.required?'<span class="required">*</span>':''}</label>${previewInput(q)}</div>`).join('')}<button class="btn primary" style="margin-top:16px" onclick="showToast('Demo response submitted')">Submit response</button>`;document.getElementById('previewModal').classList.add('show')}
+function previewInput(q){if(q.type==='paragraph')return '<textarea style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px" placeholder="Type your response"></textarea>';if(q.type==='rating'||q.type==='yesno'||q.type==='single')return `<div class="likert">${(q.options||'1,2,3,4,5').split(',').map(x=>`<button>${escapeHtml(x.trim())}</button>`).join('')}</div>`;if(q.type==='dropdown')return `<select style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px">${(q.options||'Option 1,Option 2').split(',').map(x=>`<option>${escapeHtml(x.trim())}</option>`).join('')}</select>`;if(q.type==='section')return '<div style="height:2px;background:var(--gold)"></div>';return '<input style="width:100%;padding:9px;border:1px solid var(--line);border-radius:8px" />'}
+function publishSurvey(){showToast('Published. Share link copied: /survey/student-onboarding-v03')}
+function openBulkModal(){document.getElementById('bulkModal').classList.add('show')}
+function parseBulk(){const lines=document.getElementById('bulkText').value.split('\n').filter(Boolean);lines.forEach(line=>{const [title,typeText,opts]=line.split('|').map(x=>x.trim());const match=questionTypes.find(t=>t[0].toLowerCase()===typeText.toLowerCase()||t[1].toLowerCase()===typeText.toLowerCase());questions.push({id:Date.now()+Math.random(),type:match?match[1]:'text',title,help:'',required:false,objective:'',clause:'',metric:'',options:opts||''});});closeModal('bulkModal');renderQuestions();showToast(lines.length+' questions created')}
+function renderCampaigns(){document.getElementById('campaignGrid').innerHTML=campaigns.map(c=>`<div class="campaign-card"><div class="split"><span class="badge ${c.status==='Open'?'green':'amber'}">${c.status}</span><span style="font-size:11px;color:var(--muted)">${c.rate}%</span></div><h4>${c.name}</h4><p>${c.audience}<br>${c.period}</p><div class="progress" style="margin:13px 0 9px"><span style="width:${c.rate}%"></span></div><div class="card-actions"><button class="btn small" onclick="showToast('Campaign opened')">Open</button><button class="btn small" onclick="showToast('Reminder list prepared')">Send reminders</button></div></div>`).join('')}
+
+function renderMappingTable(){const table=document.getElementById('mappingTable');table.innerHTML='<tr><th>Survey</th><th>Qn</th><th>Question</th><th>Objective</th><th>Clause</th><th>Metric</th><th>Standards</th></tr>'+mappingRows.map((r,i)=>`<tr onclick="selectMapping(${i})"><td>${r.survey}</td><td>${r.q}</td><td>${r.question}</td><td><span class="badge">${r.objective}</span></td><td>${r.clause}</td><td><span class="badge green">${r.metric}</span></td><td>${r.standard}</td></tr>`).join('')}
+function selectMapping(i){const r=mappingRows[i];document.getElementById('mappingInspector').innerHTML=`<div class="field"><label>Survey question</label><textarea>${r.question}</textarea></div><div class="field"><label>Objective</label><select><option>${r.objective}</option><option>OBJ-0397</option><option>OBJ-0400</option><option>OBJ-0403</option><option>OBJ-0420</option></select></div><div class="field"><label>Primary clause</label><input value="${r.clause}"></div><div class="field"><label>Reusable metric</label><select><option>${r.metric}</option><option>TEACHING_CLARITY</option><option>ASSESSMENT_FAIRNESS</option><option>SEQI_ASSURANCE_VALUES</option></select></div><div class="field"><label>Scale conversion</label><select><option>Likert 1–5 to 0–100</option><option>Yes / No to 100 / 0</option><option>Category only, no score</option></select></div><label class="switch"><input type="checkbox"> Reverse scoring</label><button class="btn primary" style="width:100%;margin-top:12px" onclick="showToast('Mapping updated')">Save mapping</button>`}
+const graphState={mapping:{scale:1,nodes:[],edges:[]},index:{scale:1,nodes:[],edges:[]}};
+function makeMappingGraph(){graphState.mapping.nodes=[
+ {id:'q',type:'source',title:'End of Module Q11',sub:'Teacher explained concepts clearly',x:55,y:265},
+ {id:'obj',type:'objective',title:'OBJ-0403',sub:'Academic staff performance',x:275,y:120},
+ {id:'clause',type:'clause',title:'GD4 5.2.2.2',sub:'Monitor delivery quality',x:275,y:405},
+ {id:'metric',type:'metric',title:'TEACHING_CLARITY',sub:'Likert 1–5 → 0–100',x:525,y:265},
+ {id:'dimension',type:'dimension',title:'SEQI Reliability',sub:'Weight 20%',x:755,y:265}
+ ];graphState.mapping.edges=[['q','obj'],['q','clause'],['q','metric'],['metric','dimension']];}
+function makeSeqiGraph(){graphState.index.nodes=[
+ {id:'src1',type:'source',title:'Mapped survey metrics',sub:'Onboarding, module, course, graduate',x:35,y:285},
+ {id:'rel',type:'dimension',title:'Reliability',sub:'20%',x:250,y:55,weight:20,source:'SEQI_RELIABILITY_*'},
+ {id:'ass',type:'dimension',title:'Assurance',sub:'15%',x:250,y:155,weight:15,source:'SEQI_ASSURANCE_*'},
+ {id:'tan',type:'dimension',title:'Tangibles',sub:'20%',x:250,y:255,weight:20,source:'SEQI_TANGIBLES_*'},
+ {id:'emp',type:'dimension',title:'Empathy',sub:'15%',x:250,y:355,weight:15,source:'SEQI_EMPATHY_*'},
+ {id:'res',type:'dimension',title:'Responsiveness',sub:'15%',x:250,y:455,weight:15,source:'SEQI_RESPONSIVENESS_*'},
+ {id:'out',type:'dimension',title:'Outcome Alignment',sub:'15%',x:250,y:555,weight:15,source:'SEQI_OUTCOME_*'},
+ {id:'seqi',type:'index',title:'Student Experience Quality Index',sub:'Target 4.20',x:560,y:285}
+ ];graphState.index.edges=[['src1','rel'],['src1','ass'],['src1','tan'],['src1','emp'],['src1','res'],['src1','out'],['rel','seqi'],['ass','seqi'],['tan','seqi'],['emp','seqi'],['res','seqi'],['out','seqi']];document.getElementById('indexTitle').textContent='Student Experience Quality Index';document.getElementById('formulaBox').textContent='SEQI = Reliability × 20% + Assurance × 15% + Tangibles × 20% + Empathy × 15% + Responsiveness × 15% + Outcome Alignment × 15%';}
+function makeSapiGraph(){graphState.index.nodes=[
+ {id:'results',type:'source',title:'Assessment & Student Records',sub:'ERPNext data',x:40,y:270},
+ {id:'attr',type:'metric',title:'Attrition Rate',sub:'Reverse scored, 30%',x:275,y:90,weight:30,source:'Student Admission.status'},
+ {id:'pass',type:'metric',title:'Passing Rate',sub:'30%',x:275,y:220,weight:30,source:'Assessment Result.status'},
+ {id:'quality',type:'metric',title:'Quality of Passes',sub:'20%',x:275,y:350,weight:20,source:'Assessment Result.grade'},
+ {id:'grad',type:'metric',title:'Graduation Rate',sub:'20%',x:275,y:480,weight:20,source:'Student.completion_status'},
+ {id:'sapi',type:'index',title:'Student Academic Performance Index',sub:'Target 75',x:585,y:270}
+ ];graphState.index.edges=[['results','attr'],['results','pass'],['results','quality'],['results','grad'],['attr','sapi'],['pass','sapi'],['quality','sapi'],['grad','sapi']];document.getElementById('indexTitle').textContent='Student Academic Performance Index';document.getElementById('formulaBox').textContent='SAPI = Reverse(Attrition Rate) × 30% + Passing Rate × 30% + Quality of Passes × 20% + Graduation Rate × 20%';}
+function renderGraph(kind){const state=graphState[kind],stage=document.getElementById(kind+'Stage');stage.querySelectorAll('.graph-node').forEach(n=>n.remove());stage.style.transform=`scale(${state.scale})`;state.nodes.forEach(n=>{const el=document.createElement('div');el.className=`graph-node ${n.type}`;el.dataset.id=n.id;el.style.left=n.x+'px';el.style.top=n.y+'px';el.innerHTML=`<div class="node-type">${n.type}</div><b>${n.title}</b><small>${n.sub||''}</small>`;stage.appendChild(el);makeDraggable(el,n,kind);el.onclick=e=>{e.stopPropagation();stage.querySelectorAll('.graph-node').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');showNodeInspector(kind,n)};});requestAnimationFrame(()=>drawEdges(kind));}
+function drawEdges(kind){const state=graphState[kind],svg=document.getElementById(kind+'Edges'),stage=document.getElementById(kind+'Stage');svg.innerHTML='';const box=stage.getBoundingClientRect();state.edges.forEach(([a,b])=>{const A=stage.querySelector(`[data-id="${a}"]`),B=stage.querySelector(`[data-id="${b}"]`);if(!A||!B)return;const ar=A.getBoundingClientRect(),br=B.getBoundingClientRect();const x1=(ar.right-box.left)/state.scale,y1=(ar.top+ar.height/2-box.top)/state.scale,x2=(br.left-box.left)/state.scale,y2=(br.top+br.height/2-box.top)/state.scale;const path=document.createElementNS('http://www.w3.org/2000/svg','path');const c=Math.max(60,(x2-x1)/2);path.setAttribute('d',`M ${x1} ${y1} C ${x1+c} ${y1}, ${x2-c} ${y2}, ${x2} ${y2}`);path.setAttribute('fill','none');path.setAttribute('stroke','#8793a5');path.setAttribute('stroke-width','2');path.setAttribute('marker-end','url(#arrowhead)');svg.appendChild(path);});const defs=document.createElementNS('http://www.w3.org/2000/svg','defs');defs.innerHTML='<marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#8793a5"></path></marker>';svg.prepend(defs)}
+function makeDraggable(el,node,kind){let sx,sy,ox,oy;el.addEventListener('mousedown',e=>{if(e.button!==0)return;sx=e.clientX;sy=e.clientY;ox=node.x;oy=node.y;const move=ev=>{node.x=ox+(ev.clientX-sx)/graphState[kind].scale;node.y=oy+(ev.clientY-sy)/graphState[kind].scale;el.style.left=node.x+'px';el.style.top=node.y+'px';drawEdges(kind)};const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)};document.addEventListener('mousemove',move);document.addEventListener('mouseup',up)});}
+function showNodeInspector(kind,n){if(kind==='mapping'){document.getElementById('mappingNodeInspector').innerHTML=`<div class="field"><label>Node type</label><input value="${n.type}" disabled></div><div class="field"><label>Label</label><input value="${n.title}"></div>${n.id==='metric'?`<div class="field"><label>Select reusable metric</label><select><option>TEACHING_CLARITY</option><option>TEACHER_PROFESSIONALISM</option><option>LEARNING_SUPPORT</option><option>ASSESSMENT_FAIRNESS</option></select></div><div class="field"><label>Scoring rule</label><select><option>Likert 1–5 to 0–100</option><option>Yes / No to 100 / 0</option></select></div>`:''}<button class="btn primary" style="width:100%" onclick="showToast('Node mapping saved')">Save node</button>`;}else{const options=['TEACHING_CLARITY','ASSESSMENT_FAIRNESS','SEQI_ASSURANCE_VALUES','Student Admission.status','Assessment Result.grade','Student.completion_status'];document.getElementById('indexInspector').innerHTML=`<div class="field"><label>Node type</label><input value="${n.type}" disabled></div><div class="field"><label>Name</label><input value="${n.title}"></div>${n.type!=='index'?`<div class="field"><label>Choose mapped field or metric</label><select id="nodeSource">${options.map(o=>`<option ${o===n.source?'selected':''}>${o}</option>`).join('')}</select></div><div class="field"><label>Weight (%)</label><input id="nodeWeight" type="number" value="${n.weight||0}"></div><div class="field"><label>Normalisation</label><select><option>0–100 scale</option><option>1–5 scale</option><option>Reverse 0–100</option><option>Moderated three-year average</option></select></div>`:`<div class="field"><label>Target</label><input value="${n.id==='seqi'?'4.20':'75'}"></div><div class="field"><label>Minimum coverage</label><input value="40%"></div>`}<button class="btn primary" style="width:100%" onclick="saveIndexNode('${n.id}')">Apply node settings</button>`;}}
+function saveIndexNode(id){const n=graphState.index.nodes.find(x=>x.id===id);const w=document.getElementById('nodeWeight'),s=document.getElementById('nodeSource');if(w)n.weight=+w.value;if(s)n.source=s.value;n.sub=(n.weight?`${n.weight}% · `:'')+(n.source||n.sub);renderIndexGraph();updateFormula();showToast('Node settings updated')}
+function zoomGraph(kind,delta){graphState[kind].scale=Math.max(.65,Math.min(1.5,graphState[kind].scale+delta));renderGraph(kind)}
+function resetGraph(kind){graphState[kind].scale=1;if(kind==='mapping')makeMappingGraph();else makeSeqiGraph();renderGraph(kind)}
+function renderMappingGraph(){if(!graphState.mapping.nodes.length)makeMappingGraph();renderGraph('mapping')}
+function renderIndexGraph(){if(!graphState.index.nodes.length)makeSeqiGraph();renderGraph('index');renderValidation()}
+function loadIndexTemplate(name){if(name==='SAPI')makeSapiGraph();else makeSeqiGraph();renderIndexGraph();renderValidation();document.getElementById('indexInspector').innerHTML='<p style="font-size:12px;color:var(--muted)">Template loaded. Click a node to choose a field, metric code, weight or normalisation rule.</p>';showToast(name+' template loaded')}
+function updateFormula(){const nodes=graphState.index.nodes.filter(n=>n.weight);const title=document.getElementById('indexTitle').textContent.split(' ').map(x=>x[0]).join('');document.getElementById('formulaBox').textContent=nodes.map(n=>`${n.title} × ${n.weight}%`).join(' + ')}
+function renderValidation(){const weighted=graphState.index.nodes.filter(n=>n.weight);const total=weighted.reduce((a,b)=>a+(b.weight||0),0);const items=[['All source nodes are connected',true],['No circular references detected',true],[`Weights total ${total}%`,total===100],['Published source mappings are versioned',true],['Minimum response coverage is defined',true]];document.getElementById('validationList').innerHTML=items.map(x=>`<div class="validation-item"><span class="dot ${x[1]?'':'warn'}"></span><span>${x[0]}</span></div>`).join('');document.getElementById('validationBadge').textContent=total===100?'Ready':'Check weights';document.getElementById('validationBadge').className='badge '+(total===100?'green':'amber')}
+function validateIndex(){renderValidation();showToast('Index validation completed')}
+function renderCoverage(){const rows=[['OBJ-0397','2','1','3','2','Complete'],['OBJ-0400','3','2','1','1','Complete'],['OBJ-0403','0','3','3','1','Good'],['OBJ-0405','0','2','3','0','Gap'],['OBJ-0420','0','0','4','8','Stage-specific']];const root=document.getElementById('coverageGrid');root.innerHTML=['Objective','Onboarding','Module','Course','Graduate','Status'].map(x=>`<div class="head">${x}</div>`).join('')+rows.map(r=>r.map((v,i)=>`<div class="${i>0&&i<5?'heat '+(+v>=3?'high':+v>=1?'med':'low'):''}">${v}</div>`).join('')).join('')}
+
+function renderTrend(){const vals=[3.88,4.01,4.12,4.21,4.35,4.49],labels=['2025 T1','2025 T2','2025 T3','2025 T4','2026 T1','2026 T2'];const w=700,h=235,p=35,min=3.6,max=4.7;const points=vals.map((v,i)=>`${p+i*(w-2*p)/(vals.length-1)},${h-p-(v-min)/(max-min)*(h-2*p)}`).join(' ');document.getElementById('trendChart').innerHTML=`<svg viewBox="0 0 ${w} ${h}"><g stroke="#e1e6ed" stroke-width="1">${[0,1,2,3,4].map(i=>`<line x1="${p}" y1="${p+i*40}" x2="${w-p}" y2="${p+i*40}"/>`).join('')}</g><line x1="${p}" y1="${h-p-(4.2-min)/(max-min)*(h-2*p)}" x2="${w-p}" y2="${h-p-(4.2-min)/(max-min)*(h-2*p)}" stroke="#b58a45" stroke-dasharray="6 5"/><polyline points="${points}" fill="none" stroke="#223a6b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${vals.map((v,i)=>{const [x,y]=points.split(' ')[i].split(',');return `<circle cx="${x}" cy="${y}" r="5" fill="#fff" stroke="#223a6b" stroke-width="3"><title>${labels[i]}: ${v}</title></circle><text x="${x}" y="${h-8}" text-anchor="middle" font-size="10" fill="#687386">${labels[i]}</text>`}).join('')}</svg>`}
+function renderContribution(){const comps=[['Reliability',4.42,20],['Assurance',4.55,15],['Tangibles',4.36,20],['Empathy',4.61,15],['Responsiveness',4.28,15],['Outcome Alignment',4.53,15]];document.getElementById('contributionPanel').innerHTML=comps.map(c=>`<div class="contrib-row" onclick="showToast('${c[0]} drill-down opened')"><span>${c[0]} (${c[2]}%)</span><div class="contrib-bar"><span style="width:${c[1]/5*100}%"></span></div><b>${c[1]}</b></div>`).join('')}
+
+const explorerData=[['Diploma in AI',4.56,38],['Diploma in Business',4.41,31],['English',4.31,17]];
+function runExplorer(){const rows=document.getElementById('expRows').value,measure=document.getElementById('expMeasure').value;document.getElementById('explorerTable').innerHTML=`<tr><th>${rows}</th><th>${measure}</th><th>Responses</th><th>Coverage</th></tr>`+explorerData.map(x=>`<tr><td>${x[0]}</td><td><b>${x[1]}</b></td><td>${x[2]}</td><td>${Math.round(x[2]/40*100)}%</td></tr>`).join('');document.getElementById('resultCount').textContent=explorerData.length+' rows';document.getElementById('explorerChart').innerHTML=explorerData.map(x=>`<div class="bar-col"><b>${x[1]}</b><div class="bar" style="height:${x[1]/5*100}%"></div><span>${x[0]}</span></div>`).join('');showToast('Analysis refreshed')}
+function exportCSV(){const csv='Programme,Average Score,Responses\n'+explorerData.map(x=>x.join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='ucc_measurement_outcomes.csv';a.click();showToast('CSV exported')}
+function escapeHtml(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+renderWorkflow();renderSurveyLibrary();renderPalette();renderQuestions();renderInspector();renderCampaigns();renderMappingTable();renderCoverage();makeSeqiGraph();renderIndexGraph();renderTrend();renderContribution();runExplorer();
+</script>
+</body>
+</html>
