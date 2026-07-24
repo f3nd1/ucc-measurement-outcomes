@@ -225,8 +225,21 @@ Criterion 7 layouts, which are composed from the same widgets (KPIs, trend,
 contribution, comparison) plus a weak-areas widget. Filters wired to real result
 fields (index, index_version, period, entity_type, entity).
 
+## Survey Studio editorial conveniences (checkpoint 12)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 43 | QR generation needs the `qrcode` package | `pyproject.toml` (dep added), `api/builder.campaign_qr` | Confirm `qrcode` installs in the bench env (SVG factory, no Pillow needed) |
+| 44 | Undo/redo is id-based; a deleted item's undo re-creates it with a new id | `survey_builder.js` `_record`/`_delete` | Fine for linear edit/undo/redo; deep interleaved undo across recreated items can desync |
+
+Built: bulk-paste (pure parser `bulk_parse.py`, unit-tested), multi-select +
+bulk delete / copy-to-version, structural undo/redo (reorder, delete, paste),
+desktop/mobile preview, and a public-link QR button on the Campaign form.
+Duplicate-question already existed from checkpoint 2. Copy/paste section is
+available via `duplicate_section` (API).
+
 ## Not yet built (future phases, not assumptions)
 
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
-- QR / secure per-respondent invitation links
+- Secure per-respondent invitation links
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

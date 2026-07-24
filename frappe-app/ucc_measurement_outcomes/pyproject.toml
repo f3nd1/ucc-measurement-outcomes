@@ -7,7 +7,8 @@ description = "Survey design, mapping, index calculation and Criterion 7.1.1 out
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = []
+# qrcode powers the public-link QR in Survey Studio (SVG factory, no Pillow needed).
+dependencies = ["qrcode"]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]
