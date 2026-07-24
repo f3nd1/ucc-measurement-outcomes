@@ -37,7 +37,10 @@ def normalise(value, rule, reverse=False):
 	elif rule in ("Count", "Hours"):
 		return v
 	else:
-		out = v
+		# Unknown/missing rule: refuse to score rather than silently clamping the
+		# raw value into 0-100 (a Likert 4 with a lost rule would have become
+		# 4/100 and quietly poisoned every index above it — Pass 2 finding).
+		return None
 	out = _clamp(out, 0, 100)
 	if reverse:
 		out = 100 - out
@@ -79,6 +82,11 @@ def structural_issues(nodes):
 					  if n.get("parent_key") and n["parent_key"] not in keyset)
 	if dangling:
 		issues.append("Nodes reference a missing parent: %s." % ", ".join(dangling))
+	negative = sorted(n["key"] for n in nodes if (n.get("weight") or 0) < 0)
+	if negative:
+		# weights_valid only checks the SUM per parent, so 120 + (-20) would
+		# otherwise publish as a "valid" 100.
+		issues.append("Negative weights on: %s." % ", ".join(negative))
 	parent = {n["key"]: (n.get("parent_key") or None) for n in nodes}
 	for start in parent:
 		seen = set()

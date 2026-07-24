@@ -24,6 +24,11 @@ def test_normalise():
 	assert normalise(7, "Hours") == 7                         # raw, not scored
 	assert normalise("x", "Category Only (No Score)") is None
 	assert normalise(None, "Likert 1-5 to 0-100") is None
+	# Unknown/missing rule must refuse to score, not clamp raw into 0-100
+	# (a Likert 4 with a lost rule used to become 4/100 — Pass 2 finding).
+	assert normalise(4, None) is None
+	assert normalise(4, "") is None
+	assert normalise(4, "Some Future Rule") is None
 
 
 def test_weighted_score():
@@ -100,6 +105,15 @@ def test_structural_issues():
 	no_root = [{"key": "a", "parent_key": "b"}, {"key": "b", "parent_key": "a"}]
 	issues = structural_issues(no_root)
 	assert any("no root" in i for i in issues)
+	# negative weights: weights_valid only checks the SUM, so 120 + (-20)
+	# would otherwise publish as a "valid" 100 (Pass 2 finding)
+	neg = [
+		{"key": "idx", "parent_key": None},
+		{"key": "a", "parent_key": "idx", "weight": 120},
+		{"key": "b", "parent_key": "idx", "weight": -20},
+	]
+	assert any("Negative weights" in i for i in structural_issues(neg))
+	assert weights_valid([120, -20])  # documents WHY the structural check exists
 
 
 if __name__ == "__main__":

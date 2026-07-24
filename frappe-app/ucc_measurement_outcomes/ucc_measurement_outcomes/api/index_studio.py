@@ -41,11 +41,16 @@ def create_index_from_template(template_code):
 			"index_name": meta[template_code], "target": index_templates.template_target(template_code),
 		}).insert()
 
-	# Next version number for this index (zero-padded).
-	existing = frappe.db.count(INDEX_VERSION, {"index": template_code})
+	# Next free version number. count() alone collides after a deletion
+	# (delete V01 of V01+V02 -> count 1 -> "next" V02 already exists ->
+	# DuplicateEntry crash, Pass 2 finding). Probe until free.
+	# ponytail: linear probe, fine at human version counts.
+	n = frappe.db.count(INDEX_VERSION, {"index": template_code}) + 1
+	while frappe.db.exists(INDEX_VERSION, f"{template_code}-V{n:02d}"):
+		n += 1
 	version = frappe.get_doc({
 		"doctype": INDEX_VERSION, "index": template_code,
-		"version_number": f"{existing + 1:02d}", "status": "Draft",
+		"version_number": f"{n:02d}", "status": "Draft",
 	})
 	for n in index_templates.build_nodes(template_code):
 		version.append("nodes", n)
@@ -107,7 +112,8 @@ def validate_index(index_version):
 	_require(index_version, "read")
 	version = frappe.get_doc(INDEX_VERSION, index_version)
 	issues = list(structural_issues(
-		[{"key": n.node_key, "parent_key": n.parent_key} for n in version.nodes]
+		[{"key": n.node_key, "parent_key": n.parent_key, "weight": n.weight}
+		 for n in version.nodes]
 	))
 	groups = {}
 	for n in version.nodes:
