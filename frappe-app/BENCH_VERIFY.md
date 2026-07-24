@@ -47,8 +47,27 @@ Manual smoke test once installed: open a Draft version in the builder, drag a
 type in, reorder, edit via inspector, then publish the version and confirm the
 builder shows the read-only banner and blocks edits.
 
+## Campaign + public submission (checkpoint 3)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 9 | `frappe.rate_limit(key="token", limit=20, seconds=3600)` | `api/public.py` | Confirm the decorator signature on the target Frappe version + agree real limits with UCC (per-token and per-IP) |
+| 10 | Storing `respondent_ip` is acceptable | `ucc_survey_submission.json`, `api/public.py` | Confirm PDPA/retention; drop or hash if not permitted |
+| 11 | One-response enforcement keys on `respondent_key` only | `api/public.py submit_survey` | When Secure-Token invitations land, derive the key from the invitation; decide IP fallback for pure-anonymous |
+| 12 | Multi-select answers stored comma-joined in one row | `submission_utils.to_text` | Confirm per-option breakdown can be parsed later, or split into rows if needed |
+| 13 | Guest writes use `ignore_permissions=True` inside the endpoint | `api/public.py` | Intended trust-boundary pattern; confirm no guest role is granted on the DocTypes themselves |
+
+Not built yet in this checkpoint (natural next small piece): the public-facing
+web page (portal/`www` route) that renders `get_public_survey` and POSTs to
+`submit_survey`. The endpoint + data model are complete and testable via
+`frappe.call` without it.
+
+Manual smoke test once installed: publish a version, open a campaign, hit
+`get_public_survey`/`submit_survey` as Guest, confirm one Submission + one
+Answer row per question and that a second submit with the same respondent_key
+is rejected.
+
 ## Not yet built (later checkpoints, not assumptions)
 
-- Campaign / Submission / Answer + guest endpoint (checkpoint 3)
 - Mapping + Metric DocTypes and node canvas (checkpoint 4)
 - Index DocTypes, scoring/normalisation, results (checkpoint 5)

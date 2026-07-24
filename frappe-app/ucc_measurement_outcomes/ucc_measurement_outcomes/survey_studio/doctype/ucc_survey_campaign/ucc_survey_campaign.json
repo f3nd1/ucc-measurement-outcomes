@@ -1,0 +1,136 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "campaign_name",
+  "survey_version",
+  "status",
+  "column_break_meta",
+  "access_mode",
+  "opens_on",
+  "closes_on",
+  "section_break_targets",
+  "target_responses",
+  "allow_multiple_responses",
+  "column_break_token",
+  "public_token"
+ ],
+ "fields": [
+  {
+   "default": "CMP-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "CMP-.####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "campaign_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Campaign Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "survey_version",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Survey Version",
+   "options": "UCC Survey Version",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nScheduled\nOpen\nClosed"
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Anonymous Link",
+   "description": "Anonymous Link uses this campaign's public token. Secure Token (per-respondent invitations) is a later addition.",
+   "fieldname": "access_mode",
+   "fieldtype": "Select",
+   "label": "Access Mode",
+   "options": "Anonymous Link\nSecure Token"
+  },
+  {
+   "fieldname": "opens_on",
+   "fieldtype": "Date",
+   "label": "Opens On"
+  },
+  {
+   "fieldname": "closes_on",
+   "fieldtype": "Date",
+   "label": "Closes On"
+  },
+  {
+   "fieldname": "section_break_targets",
+   "fieldtype": "Section Break",
+   "label": "Targets"
+  },
+  {
+   "fieldname": "target_responses",
+   "fieldtype": "Int",
+   "label": "Target Responses"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_multiple_responses",
+   "fieldtype": "Check",
+   "label": "Allow Multiple Responses Per Respondent"
+  },
+  {
+   "fieldname": "column_break_token",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Opaque token used in the public survey link. Generated automatically.",
+   "fieldname": "public_token",
+   "fieldtype": "Data",
+   "label": "Public Token",
+   "read_only": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "UCC Survey Campaign",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "campaign_name",
+ "track_changes": 1
+}

@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "campaign",
+  "survey_version",
+  "status",
+  "column_break_meta",
+  "submitted_on",
+  "respondent_key",
+  "source",
+  "respondent_ip"
+ ],
+ "fields": [
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "UCC Survey Campaign",
+   "reqd": 1
+  },
+  {
+   "fieldname": "survey_version",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Survey Version",
+   "options": "UCC Survey Version",
+   "reqd": 1
+  },
+  {
+   "default": "In Progress",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "In Progress\nCompleted\nAbandoned"
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "submitted_on",
+   "fieldtype": "Datetime",
+   "label": "Submitted On",
+   "read_only": 1
+  },
+  {
+   "description": "Hashed/opaque respondent identity used to enforce one response per respondent. Null for pure anonymous responses.",
+   "fieldname": "respondent_key",
+   "fieldtype": "Data",
+   "label": "Respondent Key"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source",
+   "read_only": 1
+  },
+  {
+   "description": "TODO: bench-verify - confirm PDPA/retention policy for storing respondent IP; drop or hash if not permitted.",
+   "fieldname": "respondent_ip",
+   "fieldtype": "Data",
+   "label": "Respondent IP",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "UCC Survey Submission",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
