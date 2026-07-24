@@ -129,8 +129,25 @@ Manual smoke test once installed: calculate at least one index result, open
 Dashboard Studio, and confirm KPI cards, trend, contribution and comparison
 render and respond to the index/period/entity filters.
 
+## Data Explorer shell (checkpoint 7)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 26 | Catalogue covers Answers / Metric Results / Index Results / Objective Mapping | `api/explorer.DATASETS` | Extend the catalogue as more approved datasets are needed — never open it to arbitrary SQL |
+| 27 | Aggregation done in Python after `get_all` | `explorer_agg.aggregate` | Fine for shell volumes; push down to SQL group-by (still parameterised) if datasets get large |
+| 28 | Export returns file content to the browser to save | `api/explorer.export_analysis` | Confirm acceptable; switch to a streamed `frappe.response` download if preferred |
+
+Security: Data Explorer takes **no SQL**. Every request is checked against the
+approved `DATASETS` catalogue — only whitelisted doctypes, dimensions, measures
+and filter fields are accepted; anything off-catalogue is rejected, and rows are
+fetched with parameterised `frappe.get_all`. Pivot + CSV are pure and
+unit-tested (`test_explorer_agg.py`). Reads only this app's own DocTypes.
+
+Manual smoke test once installed: with some Metric/Index Results present, pick a
+dataset + measure + row/column, Run, and Export CSV/JSON; confirm off-catalogue
+field names are rejected.
+
 ## Not yet built (future phases, not assumptions)
 
-- Data Explorer (approved dataset catalogue, never arbitrary SQL) — checkpoint 7
 - Public survey web page (portal route rendering `get_public_survey`)
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
