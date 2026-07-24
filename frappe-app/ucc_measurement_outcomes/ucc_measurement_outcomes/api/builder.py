@@ -35,6 +35,31 @@ def _loads(value):
 	return json.loads(value) if isinstance(value, str) else value
 
 
+def _resequence(survey_version, make_room_at=None):
+	"""Renumber a version's questions densely (0..n-1), optionally leaving a gap
+	at make_room_at for an insert. Returns the question count after renumbering.
+
+	Root cause of the Pass 2 ordering bugs: deletions left sequences sparse, but
+	every insert path assumed position == sequence (drop-at-position collided
+	with an existing sequence and, on the creation-date tiebreak, landed one slot
+	late). Dense sequences restore that invariant everywhere. Only ever called
+	inside an already-guarded write (insert/delete on a frozen version throws and
+	rolls the whole request back, so these set_values cannot survive alone)."""
+	names = frappe.get_all(
+		QUESTION,
+		filters={"survey_version": survey_version},
+		order_by="sequence asc, creation asc",
+		pluck="name",
+	)
+	seq = 0
+	for name in names:
+		if make_room_at is not None and seq == make_room_at:
+			seq += 1
+		frappe.db.set_value(QUESTION, name, "sequence", seq, update_modified=False)
+		seq += 1
+	return len(names)
+
+
 def _require(survey_version, ptype):
 	if not frappe.has_permission(VERSION, ptype, doc=survey_version):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
@@ -82,11 +107,11 @@ def add_question(survey_version, question_type="Short Text", section=None, seque
 	doc.question_text = _("Enter your question")
 	if section:
 		doc.section = section
-	doc.sequence = (
-		frappe.db.count(QUESTION, {"survey_version": survey_version})
-		if sequence is None
-		else int(sequence)
-	)
+	if sequence is None:
+		doc.sequence = _resequence(survey_version)  # append after the last
+	else:
+		doc.sequence = int(sequence)
+		_resequence(survey_version, make_room_at=doc.sequence)
 	for i, label in enumerate(CHOICE_DEFAULTS.get(question_type, [])):
 		doc.append("choices", {"choice_label": label, "sequence": i})
 	doc.insert()
@@ -138,13 +163,17 @@ def duplicate_question(question):
 	dup = frappe.copy_doc(src)
 	dup.question_text = (src.question_text or "") + " (Copy)"
 	dup.sequence = (src.sequence or 0) + 1
+	_resequence(src.survey_version, make_room_at=dup.sequence)
 	dup.insert()
 	return dup.name
 
 
 @frappe.whitelist()
 def delete_question(question):
+	survey_version = frappe.db.get_value(QUESTION, question, "survey_version")
 	frappe.delete_doc(QUESTION, question)
+	if survey_version:
+		_resequence(survey_version)  # keep sequences dense after deletion
 	return True
 
 
@@ -161,7 +190,7 @@ def _choices_from_options(options):
 def bulk_paste_questions(survey_version, text):
 	"""Create many questions from `question | type | options` lines."""
 	_require(survey_version, "write")
-	start = frappe.db.count(QUESTION, {"survey_version": survey_version})
+	start = _resequence(survey_version)  # dense append base, not raw count
 	created = []
 	for i, q in enumerate(parse_bulk_questions(text)):
 		doc = frappe.new_doc(QUESTION)
@@ -199,8 +228,12 @@ def create_question(survey_version, payload):
 
 @frappe.whitelist()
 def bulk_delete_questions(names):
+	versions = set()
 	for name in _loads(names):
+		versions.add(frappe.db.get_value(QUESTION, name, "survey_version"))
 		frappe.delete_doc(QUESTION, name)
+	for version in filter(None, versions):
+		_resequence(version)  # keep sequences dense after deletion
 	return True
 
 
@@ -209,7 +242,7 @@ def copy_questions_to_version(names, target_version):
 	"""Copy selected questions (with choices) into another version — the basis
 	for copying content between surveys."""
 	_require(target_version, "write")
-	base = frappe.db.count(QUESTION, {"survey_version": target_version})
+	base = _resequence(target_version)  # dense append base, not raw count
 	created = []
 	for i, name in enumerate(_loads(names)):
 		dup = frappe.copy_doc(frappe.get_doc(QUESTION, name))
@@ -234,7 +267,7 @@ def duplicate_section(section, target_version=None):
 		new_section.section_title = (src.section_title or "Section") + " (Copy)"
 	new_section.insert()
 
-	base = frappe.db.count(QUESTION, {"survey_version": target_version})
+	base = _resequence(target_version)  # dense append base, not raw count
 	for i, q in enumerate(frappe.get_all(QUESTION, filters={"section": section}, order_by="sequence asc")):
 		dup = frappe.copy_doc(frappe.get_doc(QUESTION, q.name))
 		dup.survey_version = target_version
