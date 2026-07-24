@@ -21,7 +21,9 @@ const CHOICE_TYPES = new Set([
 	"Rating", "Single Choice", "Multiple Choice", "Dropdown", "Yes / No",
 	"Likert Matrix", "Ranking",
 ]);
-const DISPLAY_LOGIC = ["Always Show", "Show If Previous Answer Matches", "Skip To Section", "End Survey"];
+// Display-logic UI removed per decision V1: the fields exist in the schema but
+// nothing executes them yet. Re-add the controls together with the logic
+// engine (which must include a server-side logic-aware required check).
 const API = "ucc_measurement_outcomes.api.builder.";
 
 class SurveyBuilder {
@@ -262,7 +264,7 @@ class SurveyBuilder {
 		const q = this.questions.find((x) => x.name === name) || {};
 		return {
 			question_text: q.question_text, question_type: q.question_type, help_text: q.help_text,
-			is_required: q.is_required, sequence: q.sequence, section: q.section,
+			is_required: q.is_required, sequence: q.sequence,
 			display_logic: q.display_logic, display_logic_config: q.display_logic_config,
 			choices: q.choices || [],
 		};
@@ -385,12 +387,9 @@ class SurveyBuilder {
 			<div class="form-group"><label>${__("Type")}</label><select class="form-control" data-f="question_type" ${dis}>${opt(QUESTION_TYPES, q.question_type)}</select></div>
 			<div class="checkbox"><label><input type="checkbox" data-f="is_required" ${q.is_required ? "checked" : ""} ${dis}> ${__("Required")}</label></div>
 			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label>${__("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
-			<div class="form-group"><label>${__("Display Logic")}</label><select class="form-control" data-f="display_logic" ${dis}>${opt(DISPLAY_LOGIC, q.display_logic || "Always Show")}</select></div>
-			<div class="form-group ucc-sb-logiccfg" style="${q.display_logic && q.display_logic !== "Always Show" ? "" : "display:none"}"><label>${__("Logic Condition")}</label><textarea class="form-control" data-f="display_logic_config" ${dis}>${frappe.utils.escape_html(q.display_logic_config || "")}</textarea></div>
 			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-sb-apply">${__("Apply Changes")}</button>` : ""}
 		`);
 		this.$inspector.find('[data-f="question_type"]').on("change", (e) => this.$inspector.find(".ucc-sb-choices").toggle(CHOICE_TYPES.has(e.target.value)));
-		this.$inspector.find('[data-f="display_logic"]').on("change", (e) => this.$inspector.find(".ucc-sb-logiccfg").toggle(e.target.value !== "Always Show"));
 		this.$inspector.find(".ucc-sb-apply").on("click", () => this._apply(q.name));
 	}
 
@@ -404,7 +403,6 @@ class SurveyBuilder {
 		const payload = {
 			question_text: val("question_text").val(), help_text: val("help_text").val(),
 			question_type: val("question_type").val(), is_required: val("is_required").is(":checked") ? 1 : 0,
-			display_logic: val("display_logic").val(), display_logic_config: val("display_logic_config").val(),
 			choices,
 		};
 		this._call("update_question", { question: name, payload: JSON.stringify(payload) }).then(() => {
