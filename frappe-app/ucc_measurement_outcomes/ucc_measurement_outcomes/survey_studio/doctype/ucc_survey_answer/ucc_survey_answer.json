@@ -55,7 +55,7 @@
    "label": "Question Type"
   },
   {
-   "description": "Raw answer as submitted. Multiple-choice answers are joined with commas.",
+   "description": "Raw answer as submitted. Multiple-choice answers are stored as a JSON array (decision V7).",
    "fieldname": "answer_value",
    "fieldtype": "Small Text",
    "label": "Answer Value"
