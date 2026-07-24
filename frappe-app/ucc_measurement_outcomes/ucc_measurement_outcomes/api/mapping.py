@@ -11,6 +11,8 @@ governance concerns independent.
 import frappe
 from frappe import _
 
+from ucc_measurement_outcomes.coverage import coverage_summary
+
 QUESTION = "UCC Survey Question"
 MAPPING = "UCC Question Mapping"
 METRIC = "UCC Metric Definition"
@@ -102,6 +104,27 @@ def set_question_metric(question, metric_code, normalisation=None):
 		})
 	metric.save()
 	return metric.name
+
+
+@frappe.whitelist()
+def mapping_coverage(survey_version):
+	"""Gap / coverage analysis for one version: unmapped questions, questions
+	without a clause, unused objectives, and duplicate questions."""
+	_require(survey_version, "read")
+	questions = frappe.get_all(
+		QUESTION, filters={"survey_version": survey_version},
+		fields=["name", "question_text"],
+	)
+	mappings = frappe.get_all(
+		MAPPING, filters={"survey_version": survey_version},
+		fields=["question", "objective", "primary_clause"],
+	)
+	# Objectives in scope = every defined objective (which ones this survey misses).
+	objectives = frappe.get_all("UCC Objective", pluck="name")
+	summary = coverage_summary(questions, mappings, objectives)
+	# Attach question text so the UI can label the gap lists + flag canvas nodes.
+	summary["question_text"] = {q["name"]: q["question_text"] for q in questions}
+	return summary
 
 
 @frappe.whitelist()

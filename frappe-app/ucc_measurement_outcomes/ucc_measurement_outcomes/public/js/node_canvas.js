@@ -39,6 +39,7 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		.ucc-nc-node.metric{border-left:5px solid #5972a9}
 		.ucc-nc-node.dimension{border-left:5px solid #6f58a8}
 		.ucc-nc-node.index{border-left:5px solid #b58a45}
+		.ucc-nc-node.gap{border:1px dashed #b94848;border-left:5px solid #b94848;background:#fbeaea}
 		.ucc-nc-tools{position:absolute;right:10px;top:10px;display:flex;gap:5px;z-index:5}
 		.ucc-nc-tools button{width:30px;height:30px;border-radius:7px;border:1px solid var(--border-color,#e2e6ea);background:var(--card-bg,#fff);cursor:pointer}
 		.ucc-nc-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted,#8b95a5);font-size:12px}

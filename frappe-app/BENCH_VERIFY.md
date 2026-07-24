@@ -191,6 +191,17 @@ Manual smoke test once installed: open a campaign, visit
 Submission + one Answer per question; check that a closed campaign shows the
 unavailable message.
 
+## Mapping Studio coverage analysis (checkpoint 9)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 37 | Duplicate detection is exact-text (normalised whitespace/case), version-scoped | `coverage.find_duplicate_questions` | Add fuzzy / cross-version dedup if UCC needs it |
+| 38 | "Unmapped objectives" = every defined UCC Objective not used by this version | `api/mapping.mapping_coverage` | Confirm scope (per-version vs per-programme) once real objective sets are imported |
+
+Coverage/gap analysis is a computed view over existing Mapping/Objective/Question
+data (pure `coverage.py`, unit-tested). Unmapped questions render as red "gap"
+nodes on the shared canvas.
+
 ## Not yet built (future phases, not assumptions)
 
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
