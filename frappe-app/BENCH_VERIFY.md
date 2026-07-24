@@ -238,6 +238,17 @@ desktop/mobile preview, and a public-link QR button on the Campaign form.
 Duplicate-question already existed from checkpoint 2. Copy/paste section is
 available via `duplicate_section` (API).
 
+## Data Explorer remaining datasets (checkpoint 13)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 45 | Two new active datasets (Survey Campaigns, Submissions) over existing DocTypes | `api/explorer.DATASETS` | None — bench-safe (this app's own DocTypes) |
+| 46 | Four pending datasets (Student Records, Programme Records, Assessment Results, Graduate Outcomes) read external DocTypes | `api/explorer.PENDING_DATASETS` | Confirm each real DocType/field, then move from PENDING_DATASETS into DATASETS |
+
+Pending datasets are listed in the UI (disabled, with a note) but rejected by
+`run_analysis`/`export_analysis` until wired — no arbitrary SQL, no guessed
+external field names.
+
 ## Not yet built (future phases, not assumptions)
 
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

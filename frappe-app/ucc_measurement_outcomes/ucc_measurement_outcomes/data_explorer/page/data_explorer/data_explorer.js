@@ -18,9 +18,17 @@ class DataExplorer {
 	constructor(page) {
 		this.page = page;
 		this.catalogue = {};
+		this.pending = [];
 		this.sel = { dataset: null, measure: null, row: null, column: null };
 		this._build();
-		frappe.call({ method: XAPI + "list_datasets", callback: (r) => { this.catalogue = r.message || {}; this._initControls(); } });
+		frappe.call({
+			method: XAPI + "list_datasets",
+			callback: (r) => {
+				this.catalogue = (r.message && r.message.datasets) || {};
+				this.pending = (r.message && r.message.pending) || [];
+				this._initControls();
+			},
+		});
 	}
 
 	_build() {
@@ -30,16 +38,26 @@ class DataExplorer {
 		$(`<button class="btn btn-primary btn-sm">${__("Run")}</button>`).appendTo($bar).on("click", () => this.run());
 		$(`<button class="btn btn-default btn-sm">${__("Export CSV")}</button>`).appendTo($bar).on("click", () => this.exportAs("csv"));
 		$(`<button class="btn btn-default btn-sm">${__("Export JSON")}</button>`).appendTo($bar).on("click", () => this.exportAs("json"));
+		this.$note = $('<div class="text-muted" style="font-size:11px;margin-top:8px"></div>').appendTo($m);
 		this.$out = $('<div style="margin-top:14px"></div>').appendTo($m);
 	}
 
 	_initControls() {
 		const datasets = Object.keys(this.catalogue);
 		this.$controls.empty();
-		this.dsField = this._select("Dataset", datasets, (v) => this._onDataset(v));
+		// Active datasets are selectable; pending ones appear disabled with a note.
+		const dsOptions = datasets.concat(this.pending.map((p) => p.name + " " + __("(pending bench)")));
+		this.dsField = this._select("Dataset", dsOptions, (v) => this._onDataset(v));
+		this.pending.forEach((p) => {
+			this.dsField.find(`option:contains('${p.name}')`).prop("disabled", true);
+		});
 		this.measureField = this._select("Measure", [], (v) => (this.sel.measure = v));
 		this.rowField = this._select("Rows", [], (v) => (this.sel.row = v || null));
 		this.colField = this._select("Columns", [], (v) => (this.sel.column = v || null));
+		if (this.pending.length) {
+			this.$note.html(__("Pending datasets need their external DocTypes confirmed on the bench: ") +
+				this.pending.map((p) => frappe.utils.escape_html(p.name)).join(", "));
+		}
 		if (datasets.length) { this.dsField.val(datasets[0]).trigger("change"); }
 	}
 
