@@ -1,3 +1,5 @@
 Survey Studio
 Mapping Studio
 Index Studio
+Dashboard Studio
+Data Explorer

@@ -112,8 +112,63 @@ metric nodes), validate weights=100, publish, seed a few `UCC Metric Result`
 rows (or pass `metric_values`), calculate, and open the result's breakdown to
 trace the score to each metric.
 
+## Dashboard Studio shell (checkpoint 6)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 23 | Custom Desk page for KPIs/trend/contribution/comparison | `dashboard_studio` page | Fine; move simple KPI tiles to native Number Cards on the bench if preferred |
+| 24 | Trend sorts periods lexicographically | `api/dashboard._trend` | Sort by real period order once the period structure is confirmed |
+| 25 | Dashboard reads only this app's Index Results | `api/dashboard.py` | Bench-safe; no external DocType dependency |
+
+Dashboard Studio reads only this app's own `UCC Index Result` + `UCC Score
+Breakdown` (no external DocTypes), so it renders as soon as an index is
+calculated. No new DocTypes were added — configurable dashboards
+(UCC Dashboard / Widget) are deferred until a real need appears.
+
+Manual smoke test once installed: calculate at least one index result, open
+Dashboard Studio, and confirm KPI cards, trend, contribution and comparison
+render and respond to the index/period/entity filters.
+
+## Data Explorer shell (checkpoint 7)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 26 | Catalogue covers Answers / Metric Results / Index Results / Objective Mapping | `api/explorer.DATASETS` | Extend the catalogue as more approved datasets are needed — never open it to arbitrary SQL |
+| 27 | Aggregation done in Python after `get_all` | `explorer_agg.aggregate` | Fine for shell volumes; push down to SQL group-by (still parameterised) if datasets get large |
+| 28 | Export returns file content to the browser to save | `api/explorer.export_analysis` | Confirm acceptable; switch to a streamed `frappe.response` download if preferred |
+
+Security: Data Explorer takes **no SQL**. Every request is checked against the
+approved `DATASETS` catalogue — only whitelisted doctypes, dimensions, measures
+and filter fields are accepted; anything off-catalogue is rejected, and rows are
+fetched with parameterised `frappe.get_all`. Pivot + CSV are pure and
+unit-tested (`test_explorer_agg.py`). Reads only this app's own DocTypes.
+
+Manual smoke test once installed: with some Metric/Index Results present, pick a
+dataset + measure + row/column, Run, and Export CSV/JSON; confirm off-catalogue
+field names are rejected.
+
+## Public survey web page (checkpoint 8)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 29 | Guest website access is enabled (Website Settings) | `www/survey.py`, `www/survey.html` | Confirm the site serves guest web pages |
+| 30 | Guest `frappe.call()` to `submit_survey` passes CSRF as configured | `www/survey.html` submit handler | Confirm CSRF handling for guest POST on the real site; adjust if the site enforces it differently |
+| 31 | Anonymous model: public campaign token in the URL, no respondent_key | `www/survey.html` | Add per-respondent secure tokens (invitations) + one-response key when that flow lands |
+| 32 | Page served at `/survey?token=<public_token>` | `www/survey.py` | Confirm the route; add a QR/link generator on the campaign form later |
+
+The page renders only published content (via `public_survey_payload`, a plain
+helper split out of the rate-limited endpoint) and submits through the existing
+guest-whitelisted `submit_survey` — the single trusted write boundary. No new
+DocTypes. The submission endpoint's own guards (token, one-response, atomic
+write) are unchanged.
+
+Manual smoke test once installed: open a campaign, visit
+`/survey?token=<public_token>` as a logged-out user, submit, and confirm one
+Submission + one Answer per question; check that a closed campaign shows the
+unavailable message.
+
 ## Not yet built (future phases, not assumptions)
 
-- Dashboard Studio + Data Explorer (native Frappe charts first)
-- Public survey web page (portal route rendering `get_public_survey`)
+- Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
+- QR / secure per-respondent invitation links
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
