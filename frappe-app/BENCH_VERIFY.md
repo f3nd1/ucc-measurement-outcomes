@@ -10,6 +10,30 @@ grep -rn "TODO: bench-verify" frappe-app/
 
 The bench-connected (OrbStack) session must resolve each before install/migrate.
 
+## Step 1 integration audit (post-merge) — findings + fixes
+
+Field-name cross-check across all cross-module references: **0 mismatches**.
+Three semantic gaps in already-merged code were found and fixed:
+
+| Finding | Fix |
+|---|---|
+| Nothing computed `UCC Metric Result` from answers (index only *read* them) | Added `metric_calc.py` + pure `metric_engine.py` (answers → normalised → Metric Result) |
+| `answer_numeric` was read by Explorer but never written | `metric_calc` backfills it from the normalised answer |
+| `compute_index` re-normalised metric values → double-normalisation with real 0-100 Metric Results | Index now applies **weights only**; normalisation happens once at the metric layer (decision log 2026-07-24) |
+
+Chain proven end-to-end two ways: `test_chain_contract.py` (bench-free, runs
+now) and `test_integration_chain.py` (DB-level, **bench-run**:
+`bench --site <site> run-tests --module ucc_measurement_outcomes.test_integration_chain`).
+
+New bench-verify items from this step:
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 33 | Metric result aggregates across all answers (no entity/period split) | `metric_calc.calculate_metric_result` | Add programme/intake/term breakdown once Student/Programme DocTypes confirmed |
+| 34 | Operational-field metric sources are skipped in metric calc | `metric_calc` | Wire once external DocTypes (Assessment Result, etc.) confirmed |
+| 35 | Worded Likert choices need numeric `choice_value` to score | `metric_engine` (non-numeric → unscored) | Ensure survey choices carry numeric values, or add a label→score map |
+| 36 | Index node `normalisation`/`reverse_scored` are now informational only | `ucc_index_node` | Consider removing these fields in a later cleanup; calc ignores them |
+
 ## Global
 
 | # | Assumption | Where | Action on bench |

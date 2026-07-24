@@ -83,7 +83,10 @@ def compute_index(nodes, metric_values):
 		kids = children.get(node["key"], [])
 		if not kids:
 			raw = metric_values.get(node.get("source_metric"))
-			val = normalise(raw, node.get("normalisation", ""), bool(node.get("reverse")))
+			# Metric values arrive already normalised to 0-100 from the metric
+			# mapping layer (UCC Metric Result). The index applies weights only and
+			# never re-normalises, so a value can't be normalised twice.
+			val = None if raw is None else _clamp(float(raw), 0, 100)
 			breakdown[node["key"]] = {
 				"key": node["key"], "label": node.get("label", node["key"]),
 				"type": node.get("type"), "raw_value": raw, "value": val,
