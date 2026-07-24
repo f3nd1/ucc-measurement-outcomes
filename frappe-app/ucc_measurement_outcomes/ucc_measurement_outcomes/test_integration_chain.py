@@ -224,3 +224,61 @@ class TestGuestAndExplorerGuards(FrappeTestCase):
 			"Metric Results", "Row Count", "metric", None,
 			'{"metric": ["like", "%x%"]}',
 		)
+
+
+class TestBuilderOrdering(FrappeTestCase):
+	"""Pass 2 review: question ordering after deletions. Sequences drifted
+	sparse after deletes, so every position==sequence assumption broke."""
+
+	def _draft_version(self):
+		survey = frappe.get_doc({"doctype": "UCC Survey", "title": "Order"}).insert()
+		return frappe.get_doc({
+			"doctype": "UCC Survey Version", "survey": survey.name,
+			"version_number": "01", "status": "Draft",
+		}).insert()
+
+	def _ordered_texts(self, version):
+		from ucc_measurement_outcomes.api.builder import get_survey_builder
+		return [q["question_text"] for q in get_survey_builder(version.name)["questions"]]
+
+	def test_insert_at_position_lands_at_position(self):
+		from ucc_measurement_outcomes.api.builder import add_question, update_question
+		version = self._draft_version()
+		names = [add_question(version.name) for _ in range(3)]
+		for i, n in enumerate(names):
+			update_question(n, '{"question_text": "Q%d"}' % i)
+		inserted = add_question(version.name, question_type="Short Text", sequence=1)
+		update_question(inserted, '{"question_text": "NEW"}')
+		self.assertEqual(self._ordered_texts(version), ["Q0", "NEW", "Q1", "Q2"])
+
+	def test_delete_then_append_stays_dense_and_last(self):
+		from ucc_measurement_outcomes.api.builder import (
+			add_question, delete_question, get_survey_builder, update_question,
+		)
+		version = self._draft_version()
+		names = [add_question(version.name) for _ in range(3)]
+		for i, n in enumerate(names):
+			update_question(n, '{"question_text": "Q%d"}' % i)
+		delete_question(names[1])
+		appended = add_question(version.name)
+		update_question(appended, '{"question_text": "LAST"}')
+		self.assertEqual(self._ordered_texts(version), ["Q0", "Q2", "LAST"])
+		seqs = [q["sequence"] for q in get_survey_builder(version.name)["questions"]]
+		self.assertEqual(seqs, [0, 1, 2])  # dense after delete
+
+	def test_duplicate_lands_directly_after_source(self):
+		from ucc_measurement_outcomes.api.builder import add_question, duplicate_question, update_question
+		version = self._draft_version()
+		names = [add_question(version.name) for _ in range(3)]
+		for i, n in enumerate(names):
+			update_question(n, '{"question_text": "Q%d"}' % i)
+		duplicate_question(names[0])
+		self.assertEqual(self._ordered_texts(version), ["Q0", "Q0 (Copy)", "Q1", "Q2"])
+
+	def test_template_version_number_survives_deletion(self):
+		from ucc_measurement_outcomes.api.index_studio import create_index_from_template
+		v1 = create_index_from_template("SEQI")
+		create_index_from_template("SEQI")           # V02
+		frappe.delete_doc("UCC Index Version", v1)   # delete V01, count now 1
+		v3 = create_index_from_template("SEQI")      # used to crash: DuplicateEntry on V02
+		self.assertTrue(v3.endswith("-V03"))
