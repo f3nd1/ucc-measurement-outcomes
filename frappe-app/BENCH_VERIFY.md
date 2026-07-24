@@ -147,7 +147,28 @@ Manual smoke test once installed: with some Metric/Index Results present, pick a
 dataset + measure + row/column, Run, and Export CSV/JSON; confirm off-catalogue
 field names are rejected.
 
+## Public survey web page (checkpoint 8)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 29 | Guest website access is enabled (Website Settings) | `www/survey.py`, `www/survey.html` | Confirm the site serves guest web pages |
+| 30 | Guest `frappe.call()` to `submit_survey` passes CSRF as configured | `www/survey.html` submit handler | Confirm CSRF handling for guest POST on the real site; adjust if the site enforces it differently |
+| 31 | Anonymous model: public campaign token in the URL, no respondent_key | `www/survey.html` | Add per-respondent secure tokens (invitations) + one-response key when that flow lands |
+| 32 | Page served at `/survey?token=<public_token>` | `www/survey.py` | Confirm the route; add a QR/link generator on the campaign form later |
+
+The page renders only published content (via `public_survey_payload`, a plain
+helper split out of the rate-limited endpoint) and submits through the existing
+guest-whitelisted `submit_survey` — the single trusted write boundary. No new
+DocTypes. The submission endpoint's own guards (token, one-response, atomic
+write) are unchanged.
+
+Manual smoke test once installed: open a campaign, visit
+`/survey?token=<public_token>` as a logged-out user, submit, and confirm one
+Submission + one Answer per question; check that a closed campaign shows the
+unavailable message.
+
 ## Not yet built (future phases, not assumptions)
 
-- Public survey web page (portal route rendering `get_public_survey`)
+- Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
+- QR / secure per-respondent invitation links
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

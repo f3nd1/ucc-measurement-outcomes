@@ -1,0 +1,128 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ (survey.title if survey else "Survey") }}{% endblock %}
+
+{% block page_content %}
+<div class="container ucc-survey" style="max-width:680px;margin-top:24px;margin-bottom:48px">
+	{% if error %}
+		<div class="alert alert-warning">{{ error }}</div>
+	{% else %}
+		<div id="ucc-survey-root"><p class="text-muted">Loading…</p></div>
+	{% endif %}
+</div>
+
+<style>
+	.ucc-q{padding:14px 0;border-bottom:1px solid #e2e6ea}
+	.ucc-q > label{display:block;font-weight:600;margin-bottom:6px}
+	.ucc-q .help{font-size:12px;color:#8b95a5;margin-bottom:8px}
+	.ucc-opt{display:block;margin:4px 0;font-weight:400}
+	.ucc-req{color:#b94848}
+	.ucc-thanks{padding:30px;text-align:center}
+</style>
+
+<script>
+window.UCC_SURVEY = {{ survey_json or "null" }};
+window.UCC_TOKEN = {{ (token or "") | tojson }};
+
+(function () {
+	var survey = window.UCC_SURVEY;
+	var root = document.getElementById("ucc-survey-root");
+	if (!survey || !root) return;
+
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+		});
+	}
+
+	function field(q) {
+		var name = q.name;
+		var choices = (q.choices || []);
+		var opt = function (c, type) {
+			var v = c.choice_value != null && c.choice_value !== "" ? c.choice_value : c.choice_label;
+			return '<label class="ucc-opt"><input type="' + type + '" name="q_' + esc(name) + '" value="' + esc(v) + '"> ' + esc(c.choice_label) + "</label>";
+		};
+		switch (q.question_type) {
+			case "Paragraph":
+				return '<textarea class="form-control" data-q="' + esc(name) + '" rows="3"></textarea>';
+			case "Single Choice":
+			case "Rating":
+			case "Yes / No":
+				return '<div data-q="' + esc(name) + '" data-multi="0">' + choices.map(function (c) { return opt(c, "radio"); }).join("") + "</div>";
+			case "Multiple Choice":
+				return '<div data-q="' + esc(name) + '" data-multi="1">' + choices.map(function (c) { return opt(c, "checkbox"); }).join("") + "</div>";
+			case "Dropdown":
+				return '<select class="form-control" data-q="' + esc(name) + '"><option value=""></option>' + choices.map(function (c) {
+					var v = c.choice_value != null && c.choice_value !== "" ? c.choice_value : c.choice_label;
+					return '<option value="' + esc(v) + '">' + esc(c.choice_label) + "</option>";
+				}).join("") + "</select>";
+			case "Number":
+				return '<input type="number" class="form-control" data-q="' + esc(name) + '">';
+			case "Date":
+				return '<input type="date" class="form-control" data-q="' + esc(name) + '">';
+			case "Email":
+				return '<input type="email" class="form-control" data-q="' + esc(name) + '">';
+			case "Section Heading":
+				return "";
+			default:
+				return '<input type="text" class="form-control" data-q="' + esc(name) + '">';
+		}
+	}
+
+	var html = "<h2>" + esc(survey.title) + "</h2>";
+	html += '<form id="ucc-form">';
+	survey.questions.forEach(function (q, i) {
+		if (q.question_type === "Section Heading") {
+			html += '<h4 style="margin-top:18px">' + esc(q.question_text) + "</h4>";
+			return;
+		}
+		html += '<div class="ucc-q" data-question="' + esc(q.name) + '" data-type="' + esc(q.question_type) + '" data-required="' + (q.is_required ? 1 : 0) + '">';
+		html += "<label>" + (i + 1) + ". " + esc(q.question_text) + (q.is_required ? ' <span class="ucc-req">*</span>' : "") + "</label>";
+		if (q.help_text) html += '<div class="help">' + esc(q.help_text) + "</div>";
+		html += field(q);
+		html += "</div>";
+	});
+	html += '<button type="submit" class="btn btn-primary" style="margin-top:18px">Submit</button></form>';
+	root.innerHTML = html;
+
+	function collect(qEl) {
+		var type = qEl.getAttribute("data-type");
+		if (type === "Multiple Choice") {
+			return Array.prototype.slice.call(qEl.querySelectorAll("input:checked")).map(function (el) { return el.value; });
+		}
+		if (["Single Choice", "Rating", "Yes / No"].indexOf(type) !== -1) {
+			var checked = qEl.querySelector("input:checked");
+			return checked ? checked.value : null;
+		}
+		var input = qEl.querySelector("[data-q]");
+		return input ? input.value : null;
+	}
+
+	document.getElementById("ucc-form").addEventListener("submit", function (e) {
+		e.preventDefault();
+		var answers = [];
+		var missing = false;
+		Array.prototype.slice.call(root.querySelectorAll(".ucc-q")).forEach(function (qEl) {
+			var val = collect(qEl);
+			var required = qEl.getAttribute("data-required") === "1";
+			var empty = val == null || val === "" || (Array.isArray(val) && !val.length);
+			if (required && empty) missing = true;
+			answers.push({ question: qEl.getAttribute("data-question"), value: val });
+		});
+		if (missing) {
+			frappe.msgprint("Please answer all required questions.");
+			return;
+		}
+		frappe.call({
+			method: "ucc_measurement_outcomes.api.public.submit_survey",
+			args: { token: window.UCC_TOKEN, answers: JSON.stringify(answers) },
+			callback: function (r) {
+				if (r.message) {
+					root.innerHTML = '<div class="ucc-thanks"><h3>Thank you</h3><p class="text-muted">Your response has been recorded.</p></div>';
+				}
+			},
+		});
+	});
+})();
+</script>
+{% endblock %}

@@ -48,10 +48,10 @@ def _published_questions(survey_version, fields):
 	)
 
 
-@frappe.whitelist(allow_guest=True)
-@frappe.rate_limit(key="token", **RATE_LIMIT)
-def get_public_survey(token):
-	"""Return published questions for rendering the public form. Read-only."""
+def public_survey_payload(token):
+	"""Core: published questions for a campaign token. Plain function (no rate
+	limit / whitelist) so the public web page can render it server-side without
+	going through the API layer."""
 	campaign = _get_open_campaign(token)
 	version = campaign.survey_version
 	header = frappe.db.get_value(
@@ -73,6 +73,13 @@ def get_public_survey(token):
 		"version_number": header.version_number if header else None,
 		"questions": questions,
 	}
+
+
+@frappe.whitelist(allow_guest=True)
+@frappe.rate_limit(key="token", **RATE_LIMIT)
+def get_public_survey(token):
+	"""Return published questions for rendering the public form. Read-only."""
+	return public_survey_payload(token)
 
 
 @frappe.whitelist(allow_guest=True)
