@@ -1,0 +1,102 @@
+# Copyright (c) 2026, United Ceres College and contributors
+# For license information, please see license.txt
+
+"""Read-only whitelisted endpoints for Dashboard Studio.
+
+Reads only this app's own result DocTypes (UCC Index Result + Score Breakdown),
+so it is bench-safe. Simple KPI tiles could later move to native Frappe Number
+Cards; the contribution / target-vs-actual views stay custom.
+"""
+
+import frappe
+from frappe import _
+
+RESULT = "UCC Index Result"
+
+
+def _require_read():
+	if not frappe.has_permission(RESULT, "read"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+
+def _latest_per_index(results):
+	seen = {}
+	for r in results:  # results are newest-first
+		if r["index"] in seen:
+			continue
+		delta = None
+		if r["value"] is not None and r["target"] is not None:
+			delta = round(r["value"] - r["target"], 2)
+		seen[r["index"]] = {
+			"index": r["index"], "value": r["value"], "target": r["target"],
+			"delta": delta, "period": r["period"], "entity": r["entity"],
+		}
+	return list(seen.values())
+
+
+def _trend(results, index):
+	rows = [r for r in results if not index or r["index"] == index]
+	# TODO: bench-verify - period is free-text Data; sorted lexicographically for
+	# now. Sort by a real period order once the period structure is confirmed.
+	rows = sorted(rows, key=lambda r: (r["period"] or ""))
+	return [{"period": r["period"], "value": r["value"], "target": r["target"]} for r in rows]
+
+
+def _contribution(results):
+	if not results:
+		return []
+	latest = results[0]["name"]
+	return frappe.get_all(
+		"UCC Score Breakdown",
+		filters={"parent": latest, "parenttype": RESULT},
+		fields=["component_key", "component_label", "normalised_value", "weight", "contribution"],
+		order_by="idx asc",
+	)
+
+
+def _comparison(results, index):
+	rows = [r for r in results if not index or r["index"] == index]
+	seen = {}
+	for r in rows:  # newest-first: keep latest per entity
+		key = r["entity"] or "—"
+		if key not in seen:
+			seen[key] = {"entity": key, "value": r["value"], "period": r["period"]}
+	return list(seen.values())
+
+
+@frappe.whitelist()
+def get_dashboard_data(index=None, period=None, entity_type=None, entity=None):
+	_require_read()
+	filters = {}
+	for k, v in (("index", index), ("period", period), ("entity_type", entity_type), ("entity", entity)):
+		if v:
+			filters[k] = v
+	results = frappe.get_all(
+		RESULT,
+		filters=filters,
+		fields=["name", "index", "index_version", "period", "entity", "entity_type",
+				"value", "target", "calculation_date"],
+		order_by="calculation_date desc",
+	)
+	return {
+		"kpis": _latest_per_index(results),
+		"trend": _trend(results, index),
+		"contribution": _contribution(results),
+		"comparison": _comparison(results, index),
+		"result_count": len(results),
+	}
+
+
+@frappe.whitelist()
+def dashboard_filters():
+	_require_read()
+
+	def distinct(field):
+		return sorted({r[field] for r in frappe.get_all(RESULT, fields=[field]) if r.get(field)})
+
+	return {
+		"indexes": distinct("index"),
+		"periods": distinct("period"),
+		"entity_types": distinct("entity_type"),
+		"entities": distinct("entity"),
+	}

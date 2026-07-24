@@ -112,8 +112,25 @@ metric nodes), validate weights=100, publish, seed a few `UCC Metric Result`
 rows (or pass `metric_values`), calculate, and open the result's breakdown to
 trace the score to each metric.
 
+## Dashboard Studio shell (checkpoint 6)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 23 | Custom Desk page for KPIs/trend/contribution/comparison | `dashboard_studio` page | Fine; move simple KPI tiles to native Number Cards on the bench if preferred |
+| 24 | Trend sorts periods lexicographically | `api/dashboard._trend` | Sort by real period order once the period structure is confirmed |
+| 25 | Dashboard reads only this app's Index Results | `api/dashboard.py` | Bench-safe; no external DocType dependency |
+
+Dashboard Studio reads only this app's own `UCC Index Result` + `UCC Score
+Breakdown` (no external DocTypes), so it renders as soon as an index is
+calculated. No new DocTypes were added — configurable dashboards
+(UCC Dashboard / Widget) are deferred until a real need appears.
+
+Manual smoke test once installed: calculate at least one index result, open
+Dashboard Studio, and confirm KPI cards, trend, contribution and comparison
+render and respond to the index/period/entity filters.
+
 ## Not yet built (future phases, not assumptions)
 
-- Dashboard Studio + Data Explorer (native Frappe charts first)
+- Data Explorer (approved dataset catalogue, never arbitrary SQL) — checkpoint 7
 - Public survey web page (portal route rendering `get_public_survey`)
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
