@@ -8,7 +8,7 @@ import json
 import frappe
 from frappe import _
 
-from ucc_measurement_outcomes.index_engine import weights_valid
+from ucc_measurement_outcomes.index_engine import structural_issues, weights_valid
 from ucc_measurement_outcomes import index_templates
 
 INDEX_VERSION = "UCC Index Version"
@@ -92,19 +92,26 @@ def save_nodes(index_version, nodes):
 			"pos_x": n.get("pos_x") or 0,
 			"pos_y": n.get("pos_y") or 0,
 		})
-	version.save()  # blocked by the immutability guard if the version is frozen
+	# Blocked by UCCIndexVersion.validate's frozen-formula guard when the version
+	# is Published/Closed. (Before that guard existed, this comment was wrong and
+	# a published formula WAS silently editable via this method.)
+	version.save()
 	return True
 
 
 @frappe.whitelist()
 def validate_index(index_version):
-	"""Check that each parent's child weights total 100%."""
+	"""Check formula structure (single root, no cycles, no dangling parents)
+	and that each parent's child weights total 100%. publish_version calls
+	this, so a structurally broken formula cannot be published."""
 	_require(index_version, "read")
 	version = frappe.get_doc(INDEX_VERSION, index_version)
+	issues = list(structural_issues(
+		[{"key": n.node_key, "parent_key": n.parent_key} for n in version.nodes]
+	))
 	groups = {}
 	for n in version.nodes:
 		groups.setdefault(n.parent_key or "__root__", []).append(n.weight or 0)
-	issues = []
 	for parent, weights in groups.items():
 		if parent == "__root__":
 			continue  # the root index node has no siblings to total
