@@ -74,6 +74,22 @@ Reported, deliberately not changed (working or latent-only):
 - Unused-import sweep across all `.py`: **clean**.
 - Removed tracked `.DS_Store` (junk predating the `.gitignore` that excludes it).
 
+## Pass 3 vague-spec interpretations (deep review session) — decisions needed
+
+Each entry states the interpretation the code currently embodies, verified by
+grep/trace. None were changed: these are design decisions for Felix, not
+defects against a settled spec.
+
+| # | Area | What the code actually does | Decision needed |
+|---|---|---|---|
+| V1 | Display logic | **Inert.** The dropdown + config are stored, but nothing consumes them: the public form and preview render every question; the server requires all required questions. Circular/dangling logic refs can't break anything because nothing parses the field. **Landmine:** if a future logic engine hides questions client-side only, a hidden *required* question makes submission impossible — the server's required check must become logic-aware in the same change. | Build the logic engine (form + preview + logic-aware required check) or hide the dropdown until then |
+| V2 | Archive / version-Closed vs collection | **Campaign status + dates are the only submission gate.** Archiving a survey does NOT stop collection; closing a version does NOT stop collection. | Which statuses should gate public submission? (Archived survey? Closed version? or campaign-only, as now) |
+| V3 | Response rate | **Never computed.** Also structurally impossible beyond completed-vs-target: no invited count exists (no Invitation doctype, no invited field). | Target-based rate now, or wait for Invitation records (secure-token feature)? |
+| V4 | Calculation cadence | **No scheduler events registered** — metric/index calculation runs only on explicit demand; dashboards show stale results until someone triggers it. | Nightly job? On campaign close? Manual only? |
+| V5 | Two sectioning mechanisms | `UCC Survey Section` records exist (with a `duplicate_section` API) but **no UI creates or assigns them** — the inspector doesn't expose `section`. "Section Heading" *question type* is the de-facto mechanism and the only one the public form renders. | Pick one; if Section Heading wins, the Section doctype + API are removable |
+| V6 | Objective mapping cardinality | **Hard 1:1** — `unique` on the mapping's question field. Multi-objective questions are impossible. | Confirm 1:1 against the real Survey Objective-Question Mapping before importing UCC's data |
+| V7 | Submission semantics | Anonymous double-submit allowed (#11); duplicate answers to one question in a payload: last-wins, silent; multi-select stored comma-joined — **irrecoverable if choice labels contain commas** (#12); "In Progress" submission status exists but no code path creates it (save-and-continue not implemented). | Confirm each, esp. the comma-join before real data arrives |
+
 ## Step 1 integration audit (post-merge) — findings + fixes
 
 Field-name cross-check across all cross-module references: **0 mismatches**.
