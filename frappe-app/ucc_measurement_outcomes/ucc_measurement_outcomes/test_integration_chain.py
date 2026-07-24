@@ -214,6 +214,24 @@ class TestGuestAndExplorerGuards(FrappeTestCase):
 			campaign.public_token, '[["not-a-dict"]]',
 		)
 
+	def test_closed_version_stops_collection(self):
+		from ucc_measurement_outcomes.api.public import get_public_survey
+
+		campaign = self._open_campaign()
+		version = frappe.get_doc("UCC Survey Version", campaign.survey_version)
+		version.status = "Closed"  # the one permitted move out of Published
+		version.save()
+		# Campaign is still Open, but decision V2 gates on version status.
+		self.assertRaises(frappe.ValidationError, get_public_survey, campaign.public_token)
+
+	def test_archived_survey_stops_collection(self):
+		from ucc_measurement_outcomes.api.public import get_public_survey
+
+		campaign = self._open_campaign()
+		survey = frappe.db.get_value("UCC Survey Version", campaign.survey_version, "survey")
+		frappe.db.set_value("UCC Survey", survey, "status", "Archived")
+		self.assertRaises(frappe.ValidationError, get_public_survey, campaign.public_token)
+
 	def test_explorer_rejects_operator_filter_values(self):
 		from ucc_measurement_outcomes.api.explorer import run_analysis
 

@@ -42,6 +42,17 @@ def _get_open_campaign(token, for_update=False):
 	campaign = frappe.get_doc(CAMPAIGN, name, for_update=for_update)
 	if not campaign.is_open():
 		frappe.throw(_("This survey is not currently open."))
+	# Decision V2: the campaign window is not the only gate. The version must be
+	# Published (which also blocks Draft/In Review — previously a campaign could
+	# serve unpublished content, violating the only-published-content principle —
+	# and blocks Closed), and an Archived survey stops collecting.
+	version_status, survey = frappe.db.get_value(
+		VERSION, campaign.survey_version, ["status", "survey"]
+	)
+	if version_status != "Published" or frappe.db.get_value(
+		"UCC Survey", survey, "status"
+	) == "Archived":
+		frappe.throw(_("This survey is not currently open."))
 	return campaign
 
 
