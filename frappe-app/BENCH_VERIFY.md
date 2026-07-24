@@ -67,7 +67,25 @@ Manual smoke test once installed: publish a version, open a campaign, hit
 Answer row per question and that a second submit with the same respondent_key
 is rejected.
 
+## Mapping + Metric shell (checkpoint 4)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 14 | Objective/metric codes are invented placeholders | `ucc_objective`, `ucc_metric_definition` | Import real codes from the existing Survey Objective-Question Mapping instead of hand-entering |
+| 15 | Operational metric sources are `Data` paths (e.g. `Assessment Result.grade`) | `ucc_metric_source.source_reference`, `ucc_metric_result.entity` | Confirm real DocType/field paths, then decide Data vs Dynamic Link |
+| 16 | Clauses are free-text codes on the mapping, no UCC Clause master | `ucc_question_mapping.primary_clause` | Confirm whether clauses need their own master DocType |
+| 17 | Shared canvas loaded via `app_include_js` on every Desk page | `hooks.py`, `public/js/node_canvas.js` | Fine (defines one class); move to a page bundle if load cost matters |
+| 18 | Metric mapping uses a `sources` child table (added beyond the listed 5 DocTypes) | `ucc_metric_source` | Confirm this models reusable metrics correctly; it keeps metric mapping separate from objective mapping as required |
+
+Note: added **UCC Metric Source** (child of Metric Definition) beyond the five
+listed DocTypes, so a reusable metric can span multiple questions/surveys.
+Objective mapping (UCC Question Mapping) and metric mapping (Metric Definition
+sources) stay separate records, per the standing decision.
+
+Manual smoke test once installed: open Mapping Studio for a version, map a
+question to an objective + clause, add it as a metric source, and confirm the
+lineage renders on the shared canvas.
+
 ## Not yet built (later checkpoints, not assumptions)
 
-- Mapping + Metric DocTypes and node canvas (checkpoint 4)
 - Index DocTypes, scoring/normalisation, results (checkpoint 5)

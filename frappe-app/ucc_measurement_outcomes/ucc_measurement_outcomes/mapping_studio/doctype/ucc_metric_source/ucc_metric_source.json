@@ -1,0 +1,75 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "source_type",
+  "source_question",
+  "source_reference",
+  "normalisation",
+  "reverse_scored",
+  "weight_within_metric"
+ ],
+ "fields": [
+  {
+   "default": "Survey Question",
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Source Type",
+   "options": "Survey Question\nOperational Field"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='Survey Question'",
+   "fieldname": "source_question",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Question",
+   "options": "UCC Survey Question"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='Operational Field'",
+   "description": "TODO: bench-verify - generic DocType.field path (e.g. Assessment Result.grade). Kept as Data, NOT a Link, until the real DocType/field is confirmed on the bench.",
+   "fieldname": "source_reference",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source Reference"
+  },
+  {
+   "default": "Likert 1-5 to 0-100",
+   "fieldname": "normalisation",
+   "fieldtype": "Select",
+   "label": "Normalisation",
+   "options": "Likert 1-5 to 0-100\nYes/No to 100/0\nReverse 0-100\nRatio to Percentage\nCount\nHours\nCategory Only (No Score)"
+  },
+  {
+   "default": "0",
+   "fieldname": "reverse_scored",
+   "fieldtype": "Check",
+   "label": "Reverse Scored"
+  },
+  {
+   "default": "100",
+   "description": "Share of the metric this source contributes when a metric aggregates several sources.",
+   "fieldname": "weight_within_metric",
+   "fieldtype": "Percent",
+   "label": "Weight Within Metric"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Mapping Studio",
+ "name": "UCC Metric Source",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
