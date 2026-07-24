@@ -42,8 +42,8 @@ def frozen_fields_blocked(before_status, changed_fieldnames, allowed=("status",)
 
 
 def assert_version_editable(version_name):
-	"""Throw if the linked UCC Survey Version is frozen. Called by child records
-	(sections, questions) before they are created, modified or deleted."""
+	"""Throw if the linked UCC Survey Version is frozen. Called by question
+	records before they are created, modified or deleted."""
 	if not version_name:
 		return
 	import frappe
@@ -57,10 +57,10 @@ def assert_version_editable(version_name):
 
 
 def assert_doc_version_editable(doc):
-	"""Version guard for records that belong to a survey version (sections,
-	questions). Checks the CURRENT version, and — when the record is being
-	re-parented — the PREVIOUS version too, so a record cannot be moved out of
-	a frozen version (the old guard only checked the destination)."""
+	"""Version guard for records that belong to a survey version (questions).
+	Checks the CURRENT version, and — when the record is being re-parented —
+	the PREVIOUS version too, so a record cannot be moved out of a frozen
+	version (the old guard only checked the destination)."""
 	assert_version_editable(doc.survey_version)
 	before = doc.get_doc_before_save()
 	if before and before.survey_version != doc.survey_version:
