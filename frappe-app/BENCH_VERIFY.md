@@ -35,9 +35,20 @@ Core Frappe DocTypes are safe to link and **are** linked: `User`
 |---|---|---|
 | 5 | Publish snapshot freezes title + description only | `ucc_survey_version.py before_save` — extend if the reporting layer needs more survey-level fields frozen |
 
+## Builder Desk Page (checkpoint 2)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 6 | Page role access is System Manager only | `page/survey_builder/survey_builder.json` | Add real Survey roles alongside DocType perms |
+| 7 | Choices are edited as `label\|value` lines in the inspector | `survey_builder.js` `_apply` | Confirm this is enough, or build a grid editor if matrix/ranking need richer choices |
+| 8 | Reorder does N per-question saves | `api/builder.py reorder_questions` | Fine now; batch if surveys reach hundreds of questions |
+
+Manual smoke test once installed: open a Draft version in the builder, drag a
+type in, reorder, edit via inspector, then publish the version and confirm the
+builder shows the read-only banner and blocks edits.
+
 ## Not yet built (later checkpoints, not assumptions)
 
-- Builder Desk Page UI (Phase 1, checkpoint 2)
 - Campaign / Submission / Answer + guest endpoint (checkpoint 3)
 - Mapping + Metric DocTypes and node canvas (checkpoint 4)
 - Index DocTypes, scoring/normalisation, results (checkpoint 5)
