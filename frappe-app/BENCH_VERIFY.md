@@ -10,6 +10,32 @@ grep -rn "TODO: bench-verify" frappe-app/
 
 The bench-connected (OrbStack) session must resolve each before install/migrate.
 
+## Pass 1 self-review (deep review session) — claim verification
+
+Independent re-verification of the prior sessions' claims. Outcome per claim:
+
+| Claim | Verdict |
+|---|---|
+| Version immutability (content) | **FAILED — fixed.** The guard only blocked *status transitions*; a Published→Published save could rewrite a survey version's header/snapshots (F2), a published index version's entire formula via `save_nodes` (F1, whose comment falsely claimed it was blocked), and a question/section could be re-parented OUT of a published version because only the destination version was checked (F3). All three now guarded (`frozen_fields_blocked`, `assert_doc_version_editable`, formula signature); adversarial bench-run tests in `test_integration_chain.py`. |
+| Guest endpoint (token, one-response, atomic) | **Held, with 2 fixes.** Token + atomicity confirmed by trace. One-response check was check-then-insert (race, F4) — submit path now locks the campaign row (`for_update`). Non-dict answer items caused a 500 instead of a clean validation error (F5) — now rejected. Anonymous double-submit remains allowed by design (#11). Duplicate question entries in one payload: last-wins, silent (documented, not changed). |
+| Step 1 audit "0 field mismatches" | **Held.** Re-run fresh with stronger checks (24 Links, 4 Table targets, fetch_from, full Explorer catalogue, API field refs): clean. |
+| Index Results immutable | **Held for the result row; provenance hole fixed.** `UCCIndexResult` blocks edits, but the published formula it references was mutable (F1, above). Note: results can still be **deleted** (no on_trash guard) and `frappe.db.set_value` bypasses validate (framework-inherent) — both documented, not changed pending Felix's call on audit-trail requirements. |
+| Explorer rejects off-catalogue | **Held for doctypes/fields/measures; filter-value hole fixed.** List/dict filter values smuggled frappe filter *operators* past the equality-only contract (F6) — values now restricted to scalars. |
+| 9 suites pass | **Held, but assertion gap confirmed:** the versioning suite explicitly asserted Published→Published is unblocked — true for the transition guard, but nothing tested content freezing (the F1/F2 hole). New tests added (`test_frozen_content`, `test_structural_issues`, 3 adversarial bench-run classes). |
+
+Also fixed in this pass: **F8** — `index_calc._load_metric_values` claimed "latest"
+metric result but used unordered `get_value` (nondeterministic pick); now ordered
+by `calculation_date desc`. **F9** — item #22's cycle check was deferred as
+bench-work but is pure logic: `structural_issues()` (single root, no dangling
+parents, no duplicate keys, no cycles) now runs in `validate_index`, so a
+structurally broken formula cannot be published (compute_index silently ignores
+unreachable nodes — that silence is why publish must block it).
+
+| # | New assumption | Where | Action on bench |
+|---|---|---|---|
+| 47 | `frappe.get_doc(..., for_update=True)` row-locks on the target version | `api/public._get_open_campaign` | Confirm locking semantics; without it the one-response race (F4) reopens |
+| 48 | Layout-only edits (`pos_x`/`pos_y`) on a *published* index version stay allowed | `ucc_index_version._formula_signature` | Confirm this interpretation with Felix (canvas layout ≠ formula content) |
+
 ## Step 1 integration audit (post-merge) — findings + fixes
 
 Field-name cross-check across all cross-module references: **0 mismatches**.
