@@ -213,6 +213,18 @@ Templates are structure-only starters (weights total 100 per parent,
 unit-tested). "New from template" in Index Studio creates a Draft Index
 Definition + Version + node graph; the user then attaches real metrics/data.
 
+## Dashboard filters + Criterion 7 view (checkpoint 11)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 41 | Named dimensions (Programme/Intake/Module/Teacher/Department/Student Type) map onto the single generic `entity_type`/`entity` | `api/dashboard.NAMED_DIMENSIONS`, `filter_bar.js` | True simultaneous multi-dimensional filtering needs results dimensioned by real Student/Programme/Module/Instructor DocTypes |
+| 42 | Weak-area component threshold is 60/100 | `api/dashboard.WEAK_THRESHOLD` | Confirm the threshold(s) with UCC quality owners; may differ per index |
+
+Shared `UCCFilterBar` (loaded via `app_include_js`) drives both the Overview and
+Criterion 7 layouts, which are composed from the same widgets (KPIs, trend,
+contribution, comparison) plus a weak-areas widget. Filters wired to real result
+fields (index, index_version, period, entity_type, entity).
+
 ## Not yet built (future phases, not assumptions)
 
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

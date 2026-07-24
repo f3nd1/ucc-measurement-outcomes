@@ -64,11 +64,31 @@ def _comparison(results, index):
 	return list(seen.values())
 
 
+# Weak-area threshold: a normalised component below this is flagged (0-100).
+WEAK_THRESHOLD = 60
+
+# Named dimensions from the brief. They map onto the generic entity_type field.
+# TODO: bench-verify - true simultaneous multi-dimensional filtering (programme
+# AND teacher AND intake) needs results dimensioned by real Student/Programme/
+# Module/Instructor DocTypes; here they are single-dimension via entity_type.
+NAMED_DIMENSIONS = ["Programme", "Intake", "Module", "Teacher", "Department", "Student Type"]
+
+
+def _weak_areas(kpis, contribution):
+	weak_indices = [k for k in kpis if k["delta"] is not None and k["delta"] < 0]
+	weak_components = [
+		c for c in contribution
+		if c.get("normalised_value") is not None and c["normalised_value"] < WEAK_THRESHOLD
+	]
+	return {"indices": weak_indices, "components": weak_components, "threshold": WEAK_THRESHOLD}
+
+
 @frappe.whitelist()
-def get_dashboard_data(index=None, period=None, entity_type=None, entity=None):
+def get_dashboard_data(index=None, index_version=None, period=None, entity_type=None, entity=None):
 	_require_read()
 	filters = {}
-	for k, v in (("index", index), ("period", period), ("entity_type", entity_type), ("entity", entity)):
+	for k, v in (("index", index), ("index_version", index_version), ("period", period),
+				 ("entity_type", entity_type), ("entity", entity)):
 		if v:
 			filters[k] = v
 	results = frappe.get_all(
@@ -78,11 +98,14 @@ def get_dashboard_data(index=None, period=None, entity_type=None, entity=None):
 				"value", "target", "calculation_date"],
 		order_by="calculation_date desc",
 	)
+	kpis = _latest_per_index(results)
+	contribution = _contribution(results)
 	return {
-		"kpis": _latest_per_index(results),
+		"kpis": kpis,
 		"trend": _trend(results, index),
-		"contribution": _contribution(results),
+		"contribution": contribution,
 		"comparison": _comparison(results, index),
+		"weak_areas": _weak_areas(kpis, contribution),
 		"result_count": len(results),
 	}
 
@@ -94,9 +117,12 @@ def dashboard_filters():
 	def distinct(field):
 		return sorted({r[field] for r in frappe.get_all(RESULT, fields=[field]) if r.get(field)})
 
+	# Surface the brief's named dimensions alongside any entity_types present in data.
+	entity_types = sorted(set(NAMED_DIMENSIONS) | set(distinct("entity_type")))
 	return {
 		"indexes": distinct("index"),
+		"index_versions": distinct("index_version"),
 		"periods": distinct("period"),
-		"entity_types": distinct("entity_type"),
+		"entity_types": entity_types,
 		"entities": distinct("entity"),
 	}
