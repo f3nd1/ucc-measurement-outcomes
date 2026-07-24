@@ -124,8 +124,13 @@ def _compute(dataset, measure, row=None, column=None, filters=None):
 	for k, v in filters.items():
 		if k not in spec["filters"]:
 			frappe.throw(_("Filter not allowed: {0}").format(k))
-		if v not in (None, ""):
-			safe_filters[k] = v
+		if v in (None, ""):
+			continue
+		# Catalogue contract is simple equality filters. A list/dict value would
+		# smuggle a frappe filter OPERATOR (like/in/between/…) past the catalogue.
+		if not isinstance(v, (str, int, float)) or isinstance(v, bool):
+			frappe.throw(_("Invalid filter value for {0}.").format(k))
+		safe_filters[k] = v
 
 	agg, field = spec["measures"][measure]
 	fetch = set(f for f in (row, column, field) if f)

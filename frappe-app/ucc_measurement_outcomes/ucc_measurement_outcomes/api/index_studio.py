@@ -8,7 +8,7 @@ import json
 import frappe
 from frappe import _
 
-from ucc_measurement_outcomes.index_engine import weights_valid
+from ucc_measurement_outcomes.index_engine import structural_issues, weights_valid
 from ucc_measurement_outcomes import index_templates
 
 INDEX_VERSION = "UCC Index Version"
@@ -41,11 +41,16 @@ def create_index_from_template(template_code):
 			"index_name": meta[template_code], "target": index_templates.template_target(template_code),
 		}).insert()
 
-	# Next version number for this index (zero-padded).
-	existing = frappe.db.count(INDEX_VERSION, {"index": template_code})
+	# Next free version number. count() alone collides after a deletion
+	# (delete V01 of V01+V02 -> count 1 -> "next" V02 already exists ->
+	# DuplicateEntry crash, Pass 2 finding). Probe until free.
+	# ponytail: linear probe, fine at human version counts.
+	n = frappe.db.count(INDEX_VERSION, {"index": template_code}) + 1
+	while frappe.db.exists(INDEX_VERSION, f"{template_code}-V{n:02d}"):
+		n += 1
 	version = frappe.get_doc({
 		"doctype": INDEX_VERSION, "index": template_code,
-		"version_number": f"{existing + 1:02d}", "status": "Draft",
+		"version_number": f"{n:02d}", "status": "Draft",
 	})
 	for n in index_templates.build_nodes(template_code):
 		version.append("nodes", n)
@@ -92,19 +97,27 @@ def save_nodes(index_version, nodes):
 			"pos_x": n.get("pos_x") or 0,
 			"pos_y": n.get("pos_y") or 0,
 		})
-	version.save()  # blocked by the immutability guard if the version is frozen
+	# Blocked by UCCIndexVersion.validate's frozen-formula guard when the version
+	# is Published/Closed. (Before that guard existed, this comment was wrong and
+	# a published formula WAS silently editable via this method.)
+	version.save()
 	return True
 
 
 @frappe.whitelist()
 def validate_index(index_version):
-	"""Check that each parent's child weights total 100%."""
+	"""Check formula structure (single root, no cycles, no dangling parents)
+	and that each parent's child weights total 100%. publish_version calls
+	this, so a structurally broken formula cannot be published."""
 	_require(index_version, "read")
 	version = frappe.get_doc(INDEX_VERSION, index_version)
+	issues = list(structural_issues(
+		[{"key": n.node_key, "parent_key": n.parent_key, "weight": n.weight}
+		 for n in version.nodes]
+	))
 	groups = {}
 	for n in version.nodes:
 		groups.setdefault(n.parent_key or "__root__", []).append(n.weight or 0)
-	issues = []
 	for parent, weights in groups.items():
 		if parent == "__root__":
 			continue  # the root index node has no siblings to total

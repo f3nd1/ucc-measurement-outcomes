@@ -5,12 +5,22 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from ucc_measurement_outcomes.versioning import version_transition_blocked
+from ucc_measurement_outcomes.versioning import (
+	assert_frozen_content_unchanged,
+	version_transition_blocked,
+)
+
+# Fields frozen once the version is Published/Closed. Section/question content is
+# guarded by those doctypes' own controllers; this covers the version header.
+FROZEN_FIELDS = ("survey", "version_number", "title_snapshot", "description_snapshot")
 
 
 class UCCSurveyVersion(Document):
 	def validate(self):
 		self._guard_transition()
+		assert_frozen_content_unchanged(
+			self, self.get_doc_before_save(), FROZEN_FIELDS, "Survey Version"
+		)
 
 	def _guard_transition(self):
 		before = self.get_doc_before_save()

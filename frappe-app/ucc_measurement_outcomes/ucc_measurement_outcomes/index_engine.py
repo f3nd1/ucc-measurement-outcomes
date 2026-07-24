@@ -37,7 +37,10 @@ def normalise(value, rule, reverse=False):
 	elif rule in ("Count", "Hours"):
 		return v
 	else:
-		out = v
+		# Unknown/missing rule: refuse to score rather than silently clamping the
+		# raw value into 0-100 (a Likert 4 with a lost rule would have become
+		# 4/100 and quietly poisoned every index above it — Pass 2 finding).
+		return None
 	out = _clamp(out, 0, 100)
 	if reverse:
 		out = 100 - out
@@ -55,6 +58,46 @@ def weighted_score(components):
 	if total_w == 0:
 		return None
 	return sum(c["value"] * c["weight"] for c in present) / total_w
+
+
+def structural_issues(nodes):
+	"""Structural problems that make a formula graph invalid: no nodes, missing
+	or multiple roots, duplicate keys, dangling parent references, or cycles.
+	compute_index silently scores only what is reachable from the first root, so
+	any of these means part of the formula would be silently ignored."""
+	if not nodes:
+		return ["Formula has no nodes."]
+	issues = []
+	keys = [n["key"] for n in nodes]
+	keyset = set(keys)
+	if len(keyset) != len(keys):
+		dupes = sorted({k for k in keys if keys.count(k) > 1})
+		issues.append("Duplicate node keys: %s." % ", ".join(dupes))
+	roots = [n["key"] for n in nodes if not n.get("parent_key")]
+	if not roots:
+		issues.append("Formula has no root node.")
+	elif len(roots) > 1:
+		issues.append("Formula has multiple root nodes: %s." % ", ".join(sorted(roots)))
+	dangling = sorted(n["key"] for n in nodes
+					  if n.get("parent_key") and n["parent_key"] not in keyset)
+	if dangling:
+		issues.append("Nodes reference a missing parent: %s." % ", ".join(dangling))
+	negative = sorted(n["key"] for n in nodes if (n.get("weight") or 0) < 0)
+	if negative:
+		# weights_valid only checks the SUM per parent, so 120 + (-20) would
+		# otherwise publish as a "valid" 100.
+		issues.append("Negative weights on: %s." % ", ".join(negative))
+	parent = {n["key"]: (n.get("parent_key") or None) for n in nodes}
+	for start in parent:
+		seen = set()
+		k = start
+		while k is not None and k in parent:
+			if k in seen:
+				issues.append("Circular reference involving '%s'." % k)
+				return issues  # one cycle is enough to block publish
+			seen.add(k)
+			k = parent[k]
+	return issues
 
 
 def weights_total(weights):

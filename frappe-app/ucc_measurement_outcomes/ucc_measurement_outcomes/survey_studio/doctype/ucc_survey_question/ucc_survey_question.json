@@ -8,7 +8,6 @@
  "engine": "InnoDB",
  "field_order": [
   "survey_version",
-  "section",
   "sequence",
   "column_break_meta",
   "question_type",
@@ -31,13 +30,6 @@
    "label": "Survey Version",
    "options": "UCC Survey Version",
    "reqd": 1
-  },
-  {
-   "fieldname": "section",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Section",
-   "options": "UCC Survey Section"
   },
   {
    "default": "0",
@@ -98,12 +90,15 @@
   {
    "fieldname": "section_break_logic",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Display Logic"
   },
   {
    "default": "Always Show",
+   "description": "Hidden per decision V1: no logic engine executes this yet. Unhide together with the engine, which must include a server-side logic-aware required check.",
    "fieldname": "display_logic",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Display Logic",
    "options": "Always Show\nShow If Previous Answer Matches\nSkip To Section\nEnd Survey"
   },
@@ -112,6 +107,7 @@
    "description": "Condition detail for the selected display logic (e.g. which question/answer triggers it).",
    "fieldname": "display_logic_config",
    "fieldtype": "Small Text",
+   "hidden": 1,
    "label": "Display Logic Config"
   }
  ],

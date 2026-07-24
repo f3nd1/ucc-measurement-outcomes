@@ -30,8 +30,7 @@ def _node_dict(n):
 
 
 def _load_metric_values(nodes, period, entity):
-	# TODO: bench-verify - reads the latest UCC Metric Result per metric for the
-	# given period/entity. Real entity resolution depends on confirmed DocTypes.
+	# TODO: bench-verify - entity resolution depends on confirmed DocTypes.
 	values = {}
 	for n in nodes:
 		if n["type"] != "Metric" or not n["source_metric"]:
@@ -41,9 +40,18 @@ def _load_metric_values(nodes, period, entity):
 			filters["period"] = period
 		if entity:
 			filters["entity"] = entity
-		val = frappe.db.get_value("UCC Metric Result", filters, "value")
-		if val is not None:
-			values[n["source_metric"]] = val
+		# Explicit order: "latest" must mean latest. A bare get_value has no
+		# guaranteed ordering, so which of several results fed the index was
+		# previously arbitrary (Pass 1 review finding).
+		rows = frappe.get_all(
+			"UCC Metric Result",
+			filters=filters,
+			fields=["value"],
+			order_by="calculation_date desc",
+			limit_page_length=1,
+		)
+		if rows and rows[0].value is not None:
+			values[n["source_metric"]] = rows[0].value
 	return values
 
 

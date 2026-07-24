@@ -10,6 +10,96 @@ grep -rn "TODO: bench-verify" frappe-app/
 
 The bench-connected (OrbStack) session must resolve each before install/migrate.
 
+## Pass 1 self-review (deep review session) — claim verification
+
+Independent re-verification of the prior sessions' claims. Outcome per claim:
+
+| Claim | Verdict |
+|---|---|
+| Version immutability (content) | **FAILED — fixed.** The guard only blocked *status transitions*; a Published→Published save could rewrite a survey version's header/snapshots (F2), a published index version's entire formula via `save_nodes` (F1, whose comment falsely claimed it was blocked), and a question/section could be re-parented OUT of a published version because only the destination version was checked (F3). All three now guarded (`frozen_fields_blocked`, `assert_doc_version_editable`, formula signature); adversarial bench-run tests in `test_integration_chain.py`. |
+| Guest endpoint (token, one-response, atomic) | **Held, with 2 fixes.** Token + atomicity confirmed by trace. One-response check was check-then-insert (race, F4) — submit path now locks the campaign row (`for_update`). Non-dict answer items caused a 500 instead of a clean validation error (F5) — now rejected. Anonymous double-submit remains allowed by design (#11). Duplicate question entries in one payload: last-wins, silent (documented, not changed). |
+| Step 1 audit "0 field mismatches" | **Held.** Re-run fresh with stronger checks (24 Links, 4 Table targets, fetch_from, full Explorer catalogue, API field refs): clean. |
+| Index Results immutable | **Held for the result row; provenance hole fixed.** `UCCIndexResult` blocks edits, but the published formula it references was mutable (F1, above). Note: results can still be **deleted** (no on_trash guard) and `frappe.db.set_value` bypasses validate (framework-inherent) — both documented, not changed pending Felix's call on audit-trail requirements. |
+| Explorer rejects off-catalogue | **Held for doctypes/fields/measures; filter-value hole fixed.** List/dict filter values smuggled frappe filter *operators* past the equality-only contract (F6) — values now restricted to scalars. |
+| 9 suites pass | **Held, but assertion gap confirmed:** the versioning suite explicitly asserted Published→Published is unblocked — true for the transition guard, but nothing tested content freezing (the F1/F2 hole). New tests added (`test_frozen_content`, `test_structural_issues`, 3 adversarial bench-run classes). |
+
+Also fixed in this pass: **F8** — `index_calc._load_metric_values` claimed "latest"
+metric result but used unordered `get_value` (nondeterministic pick); now ordered
+by `calculation_date desc`. **F9** — item #22's cycle check was deferred as
+bench-work but is pure logic: `structural_issues()` (single root, no dangling
+parents, no duplicate keys, no cycles) now runs in `validate_index`, so a
+structurally broken formula cannot be published (compute_index silently ignores
+unreachable nodes — that silence is why publish must block it).
+
+| # | New assumption | Where | Action on bench |
+|---|---|---|---|
+| 47 | `frappe.get_doc(..., for_update=True)` row-locks on the target version | `api/public._get_open_campaign` | Confirm locking semantics; without it the one-response race (F4) reopens |
+| 48 | Layout-only edits (`pos_x`/`pos_y`) on a *published* index version stay allowed | `ucc_index_version._formula_signature` | Confirm this interpretation with Felix (canvas layout ≠ formula content) |
+
+## Pass 2 fresh bug hunt (deep review session)
+
+Fixed (each with its reproducing test):
+
+| Finding | Fix |
+|---|---|
+| **F10** Unknown/missing normalisation rule silently clamped the raw value into 0-100 (Likert 4 with a lost rule became 4/100 and poisoned every index above it) | `normalise()` now returns None (unscoreable) for unknown rules; pure tests |
+| **F11** Negative weights were publishable — `weights_valid` only checks the sum, so 120 + (-20) passed as 100 | `structural_issues()` flags negative weights; runs at validate/publish |
+| **F12** Question sequences drifted sparse after deletions, breaking every position==sequence assumption: drop-at-position landed one slot late, duplicate landed after the wrong row, append could land mid-list | One `_resequence()` helper (dense 0..n-1, optional insert gap) used by add/delete/bulk-delete/bulk-paste/copy/duplicate-section; bench-run ordering tests |
+| **F13** `create_index_from_template` numbered versions by count() — deleting V01 of V01+V02 made the "next" number V02 → DuplicateEntry crash | Probe for the next free number; bench-run test |
+| **F14** Filter bar kept a stale tracked value when `setOptions` removed the selected option — `get()` then filtered on an option that no longer existed | `setOptions` re-syncs the tracked value; no JS harness exists in the repo (see report), fix documented inline |
+
+**#44 undo/redo — precise characterisation (documented, NOT fixed; fix is not small):**
+the desync boundary is exactly: *any history action whose payload embeds question
+names (reorder lists, bulk-delete name lists), undone or redone after a
+delete+undo pair has recreated one of those names under a new id.* The replayed
+action then references the dead name and the server rejects it ("Question X is
+not part of this version"). Compounding it, the JS `_call` wrapper only resolves
+on success, so a failed undo leaves the action popped from history but never
+pushed to future — the entry is silently lost and the stacks are inconsistent
+until reload. A proper fix is an id-remapping table consulted by every action
+constructor (touches all six action types) — deferred as beyond a surgical
+change. Linear undo/redo without interleaved deletes remains correct.
+
+Reported, deliberately not changed (working or latent-only):
+- `explorer_agg.aggregate` row/column sort would TypeError on mixed str/int
+  dimension values — unreachable with today's all-string catalogue dimensions;
+  becomes real if a numeric dimension is ever catalogued.
+- `bulk_parse` drops anything after a third `|` on a line (options containing
+  pipes); prototype-inherited contract.
+- `data_explorer.js` disables pending datasets via a quote-fragile
+  `option:contains` selector — harmless: the server independently rejects
+  pending datasets.
+- `survey_builder.js` appends its modal to `document.body` once per page load;
+  single instance per Desk session, acceptable.
+- Unused-import sweep across all `.py`: **clean**.
+- Removed tracked `.DS_Store` (junk predating the `.gitignore` that excludes it).
+
+## Pass 3 vague-spec interpretations — DECIDED (Felix, 2026-07-24)
+
+Outcomes, applied where code-able in this environment:
+
+| # | Decision | Status |
+|---|---|---|
+| V1 | **Hide** display-logic UI until a logic engine exists (engine must ship with a server-side logic-aware required check) | ✅ Applied — controls removed from builder inspector; fields hidden in the DocType, schema kept |
+| V2 | **Both gates**: public submission requires version **Published** (blocks Draft/In Review/Closed — the Draft case was a lurking only-published-content violation) and survey not Archived | ✅ Applied in `_get_open_campaign` + 2 bench tests |
+| V3 | **Target-based** response rate (`completed / target_responses`); invitation-based later | 📋 Bench work item |
+| V4 | **Nightly scheduler job + manual recalculate button** | 📋 Bench work item (worker/queue confirm) |
+| V5 | **Consolidate on "Section Heading"** question type | ✅ Applied — `UCC Survey Section` doctype, `duplicate_section` API and the question `section` Link removed (zero migration cost: never installed anywhere) |
+| V6 | 1:1 vs multi-objective: **decide from the real mapping PDF** — unreadable in this container (image-based; no poppler) | ⛔ **HARD GATE before data import**: check `reference-documents/02-…mapping-v02.pdf` on the bench; if any question maps to >1 objective, drop the `unique` constraint BEFORE importing |
+| V7 | Multi-select stored as **JSON array** | ✅ Applied in `to_text` + pure test (comma-in-label round-trip) |
+
+Original analysis (what the code did before these decisions):
+
+| # | Area | What the code actually does | Decision needed |
+|---|---|---|---|
+| V1 | Display logic | **Inert.** The dropdown + config are stored, but nothing consumes them: the public form and preview render every question; the server requires all required questions. Circular/dangling logic refs can't break anything because nothing parses the field. **Landmine:** if a future logic engine hides questions client-side only, a hidden *required* question makes submission impossible — the server's required check must become logic-aware in the same change. | Build the logic engine (form + preview + logic-aware required check) or hide the dropdown until then |
+| V2 | Archive / version-Closed vs collection | **Campaign status + dates are the only submission gate.** Archiving a survey does NOT stop collection; closing a version does NOT stop collection. | Which statuses should gate public submission? (Archived survey? Closed version? or campaign-only, as now) |
+| V3 | Response rate | **Never computed.** Also structurally impossible beyond completed-vs-target: no invited count exists (no Invitation doctype, no invited field). | Target-based rate now, or wait for Invitation records (secure-token feature)? |
+| V4 | Calculation cadence | **No scheduler events registered** — metric/index calculation runs only on explicit demand; dashboards show stale results until someone triggers it. | Nightly job? On campaign close? Manual only? |
+| V5 | Two sectioning mechanisms | `UCC Survey Section` records exist (with a `duplicate_section` API) but **no UI creates or assigns them** — the inspector doesn't expose `section`. "Section Heading" *question type* is the de-facto mechanism and the only one the public form renders. | Pick one; if Section Heading wins, the Section doctype + API are removable |
+| V6 | Objective mapping cardinality | **Hard 1:1** — `unique` on the mapping's question field. Multi-objective questions are impossible. | Confirm 1:1 against the real Survey Objective-Question Mapping before importing UCC's data |
+| V7 | Submission semantics | Anonymous double-submit allowed (#11); duplicate answers to one question in a payload: last-wins, silent; multi-select stored comma-joined — **irrecoverable if choice labels contain commas** (#12); "In Progress" submission status exists but no code path creates it (save-and-continue not implemented). | Confirm each, esp. the comma-join before real data arrives |
+
 ## Step 1 integration audit (post-merge) — findings + fixes
 
 Field-name cross-check across all cross-module references: **0 mismatches**.
@@ -235,8 +325,10 @@ fields (index, index_version, period, entity_type, entity).
 Built: bulk-paste (pure parser `bulk_parse.py`, unit-tested), multi-select +
 bulk delete / copy-to-version, structural undo/redo (reorder, delete, paste),
 desktop/mobile preview, and a public-link QR button on the Campaign form.
-Duplicate-question already existed from checkpoint 2. Copy/paste section is
-available via `duplicate_section` (API).
+Duplicate-question already existed from checkpoint 2. (Historical note: the
+`duplicate_section` API built here was removed by decision V5 — sectioning is
+consolidated on the "Section Heading" question type; `copy_questions_to_version`
+carries Section Heading rows like any other question.)
 
 ## Data Explorer remaining datasets (checkpoint 13)
 
