@@ -1,8 +1,42 @@
-# Claude Code Instructions
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project
 
 UCC Measurement Outcomes for United Ceres College, Singapore.
+
+## Repository status
+
+This repository is a **project starter pack**, not yet an installable Frappe application. It contains documentation, reference PDFs, and a standalone HTML prototype — no application code. `frappe-app/` is a placeholder; generate the actual app there only after environment discovery (Frappe/ERPNext versions, bench location, dev site, existing UCC DocTypes) confirms the details. There is no build, lint, or test tooling yet.
+
+The only runnable command is a starter-file presence check:
+
+```bash
+bash scripts/check_repo.sh
+```
+
+The prototype (`prototype/ucc_measurement_outcomes_studio.html`) opens directly in a browser. It validates the intended UX only — it is not the production architecture.
+
+## Repository layout
+
+- `docs/` — numbered design docs, read in order: `00-start-here.md`, `01-product-scope.md`, `02-user-flows.md`, `03-data-model.md` (proposed DocTypes), `04-architecture.md` (responsibility split and security principles), `05-implementation-plan.md` (milestones 0–5 with verification steps), `06-acceptance-criteria.md`, `07-existing-system-inventory-template.md`, `08-open-questions.md`, `09-decision-log.md`, `10-github-issues.md`
+- `reference-documents/` — UCC PDFs: Criterion 7.1.1 workflow, objective-question mappings, SEQI/SAPI definitions, and real survey instruments
+- `claude-prompts/` — prepared prompts for environment discovery and first-milestone planning
+- `prototype/` — standalone interactive HTML prototype
+- `frappe-app/` — placeholder for the future Frappe app
+
+## First task
+
+Do not build the entire product immediately. Milestone 0 is discovery: inspect the local Frappe environment, inventory existing UCC apps/DocTypes (especially Quality Performance Outcomes, Quality Action and Quality Meeting), confirm a development site, and propose the smallest complete first milestone. See `docs/00-start-here.md` and `docs/05-implementation-plan.md`.
+
+## Proposed data model (summary)
+
+Three record families, detailed in `docs/03-data-model.md`:
+
+1. **Survey**: UCC Survey → Version (immutable once published) → Section → Question → Option, plus Campaign → Invitation → Submission → Answer (one row per question per submission)
+2. **Mapping**: Measurement Objective, Objective Question Mapping, Metric, Metric Mapping — objective mapping and metric mapping are separate
+3. **Index/analytics**: Index Definition → Component (weights as normal fields/child rows, never D3 JSON), Metric Result, Index Result, Calculation Log — results carry period, entity, version, coverage and calculation date
 
 ## Goal
 

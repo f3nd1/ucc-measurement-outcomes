@@ -1,0 +1,129 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "metric",
+  "period",
+  "entity_type",
+  "entity",
+  "column_break_val",
+  "value",
+  "response_count",
+  "coverage",
+  "section_break_trace",
+  "source_version",
+  "calculation_date",
+  "calculation_log"
+ ],
+ "fields": [
+  {
+   "fieldname": "metric",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Metric",
+   "options": "UCC Metric Definition",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "TODO: bench-verify - period structure (term/quarter/academic year) not yet confirmed.",
+   "fieldname": "period",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Period"
+  },
+  {
+   "description": "TODO: bench-verify - entity dimension name (e.g. Programme). Generic until real DocTypes confirmed.",
+   "fieldname": "entity_type",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Entity Type"
+  },
+  {
+   "description": "TODO: bench-verify - generic entity identifier; kept as Data, not a Link, until real DocTypes confirmed.",
+   "fieldname": "entity",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Entity"
+  },
+  {
+   "fieldname": "column_break_val",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Value"
+  },
+  {
+   "fieldname": "response_count",
+   "fieldtype": "Int",
+   "label": "Response Count"
+  },
+  {
+   "fieldname": "coverage",
+   "fieldtype": "Percent",
+   "label": "Coverage"
+  },
+  {
+   "fieldname": "section_break_trace",
+   "fieldtype": "Section Break",
+   "label": "Traceability"
+  },
+  {
+   "description": "Published survey version the metric was computed from.",
+   "fieldname": "source_version",
+   "fieldtype": "Link",
+   "label": "Source Version",
+   "options": "UCC Survey Version"
+  },
+  {
+   "fieldname": "calculation_date",
+   "fieldtype": "Datetime",
+   "label": "Calculation Date",
+   "read_only": 1
+  },
+  {
+   "description": "Populated by the calculation engine (checkpoint 5).",
+   "fieldname": "calculation_log",
+   "fieldtype": "Small Text",
+   "label": "Calculation Log",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Mapping Studio",
+ "name": "UCC Metric Result",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

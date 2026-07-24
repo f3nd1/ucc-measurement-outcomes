@@ -1,0 +1,117 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "node_key",
+  "node_type",
+  "label",
+  "parent_key",
+  "column_break_calc",
+  "source_metric",
+  "weight",
+  "normalisation",
+  "reverse_scored",
+  "section_break_layout",
+  "pos_x",
+  "pos_y"
+ ],
+ "fields": [
+  {
+   "description": "Unique key within the index version, referenced by child nodes' Parent Key.",
+   "fieldname": "node_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Node Key",
+   "reqd": 1
+  },
+  {
+   "default": "Metric",
+   "fieldname": "node_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Node Type",
+   "options": "Source\nMetric\nDimension\nIndex"
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Label"
+  },
+  {
+   "description": "Node Key of this node's aggregation parent. Empty for the root index node.",
+   "fieldname": "parent_key",
+   "fieldtype": "Data",
+   "label": "Parent Key"
+  },
+  {
+   "fieldname": "column_break_calc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.node_type=='Metric'",
+   "fieldname": "source_metric",
+   "fieldtype": "Link",
+   "label": "Source Metric",
+   "options": "UCC Metric Definition"
+  },
+  {
+   "description": "Contribution weight within the parent. Sibling weights should total 100%.",
+   "fieldname": "weight",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Weight"
+  },
+  {
+   "default": "Likert 1-5 to 0-100",
+   "depends_on": "eval:doc.node_type=='Metric'",
+   "fieldname": "normalisation",
+   "fieldtype": "Select",
+   "label": "Normalisation",
+   "options": "Likert 1-5 to 0-100\nYes/No to 100/0\nReverse 0-100\nRatio to Percentage\nCount\nHours\nCategory Only (No Score)"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.node_type=='Metric'",
+   "fieldname": "reverse_scored",
+   "fieldtype": "Check",
+   "label": "Reverse Scored"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_layout",
+   "fieldtype": "Section Break",
+   "label": "Canvas Layout"
+  },
+  {
+   "default": "0",
+   "description": "Canvas position only; not part of the official calculation.",
+   "fieldname": "pos_x",
+   "fieldtype": "Float",
+   "label": "Position X"
+  },
+  {
+   "default": "0",
+   "fieldname": "pos_y",
+   "fieldtype": "Float",
+   "label": "Position Y"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Index Studio",
+ "name": "UCC Index Node",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

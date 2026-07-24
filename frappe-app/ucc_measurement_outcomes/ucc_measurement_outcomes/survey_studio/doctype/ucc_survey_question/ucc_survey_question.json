@@ -1,0 +1,144 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "survey_version",
+  "section",
+  "sequence",
+  "column_break_meta",
+  "question_type",
+  "is_required",
+  "section_break_content",
+  "question_text",
+  "help_text",
+  "section_break_choices",
+  "choices",
+  "section_break_logic",
+  "display_logic",
+  "display_logic_config"
+ ],
+ "fields": [
+  {
+   "fieldname": "survey_version",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Survey Version",
+   "options": "UCC Survey Version",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Section",
+   "options": "UCC Survey Section"
+  },
+  {
+   "default": "0",
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence"
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Short Text",
+   "fieldname": "question_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Question Type",
+   "options": "Short Text\nParagraph\nEmail\nNumber\nDate\nRating\nSingle Choice\nMultiple Choice\nDropdown\nYes / No\nLikert Matrix\nNPS\nRanking\nSlider\nFile Upload\nSection Heading",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_required",
+   "fieldtype": "Check",
+   "label": "Required"
+  },
+  {
+   "fieldname": "section_break_content",
+   "fieldtype": "Section Break",
+   "label": "Content"
+  },
+  {
+   "fieldname": "question_text",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Question Text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "help_text",
+   "fieldtype": "Small Text",
+   "label": "Help Text"
+  },
+  {
+   "depends_on": "eval:['Rating','Single Choice','Multiple Choice','Dropdown','Yes / No','Likert Matrix','Ranking'].includes(doc.question_type)",
+   "fieldname": "section_break_choices",
+   "fieldtype": "Section Break",
+   "label": "Choices"
+  },
+  {
+   "fieldname": "choices",
+   "fieldtype": "Table",
+   "label": "Choices",
+   "options": "UCC Survey Question Choice"
+  },
+  {
+   "fieldname": "section_break_logic",
+   "fieldtype": "Section Break",
+   "label": "Display Logic"
+  },
+  {
+   "default": "Always Show",
+   "fieldname": "display_logic",
+   "fieldtype": "Select",
+   "label": "Display Logic",
+   "options": "Always Show\nShow If Previous Answer Matches\nSkip To Section\nEnd Survey"
+  },
+  {
+   "depends_on": "eval:doc.display_logic && doc.display_logic != 'Always Show'",
+   "description": "Condition detail for the selected display logic (e.g. which question/answer triggers it).",
+   "fieldname": "display_logic_config",
+   "fieldtype": "Small Text",
+   "label": "Display Logic Config"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "UCC Survey Question",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

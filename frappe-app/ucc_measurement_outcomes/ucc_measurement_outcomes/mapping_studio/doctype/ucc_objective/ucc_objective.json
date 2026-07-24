@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:objective_code",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "objective_code",
+  "objective_name",
+  "description"
+ ],
+ "fields": [
+  {
+   "description": "e.g. OBJ-0403. TODO: bench-verify - real objective codes come from the existing Survey Objective-Question Mapping; import rather than invent.",
+   "fieldname": "objective_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Objective Code",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "objective_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Objective Name"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Mapping Studio",
+ "name": "UCC Objective",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

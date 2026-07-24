@@ -1,0 +1,73 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "component_key",
+  "component_label",
+  "source_metric",
+  "raw_value",
+  "normalised_value",
+  "weight",
+  "contribution"
+ ],
+ "fields": [
+  {
+   "fieldname": "component_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Component Key"
+  },
+  {
+   "fieldname": "component_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Component"
+  },
+  {
+   "fieldname": "source_metric",
+   "fieldtype": "Data",
+   "label": "Source Metric"
+  },
+  {
+   "fieldname": "raw_value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Raw Value"
+  },
+  {
+   "fieldname": "normalised_value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Normalised"
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Weight"
+  },
+  {
+   "fieldname": "contribution",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Contribution"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Index Studio",
+ "name": "UCC Score Breakdown",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

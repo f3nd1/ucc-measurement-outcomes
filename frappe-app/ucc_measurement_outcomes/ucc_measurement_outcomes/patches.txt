@@ -1,0 +1,2 @@
+# Data migration patches. One patch reference per line, e.g.
+# ucc_measurement_outcomes.patches.v0_0.some_patch

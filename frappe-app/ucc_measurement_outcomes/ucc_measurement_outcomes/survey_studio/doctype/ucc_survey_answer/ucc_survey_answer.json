@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "submission",
+  "question",
+  "survey_version",
+  "column_break_meta",
+  "question_type",
+  "answer_value",
+  "answer_numeric"
+ ],
+ "fields": [
+  {
+   "fieldname": "submission",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Submission",
+   "options": "UCC Survey Submission",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "question",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Question",
+   "options": "UCC Survey Question",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "survey_version",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Survey Version",
+   "options": "UCC Survey Version",
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Question type snapshot at answer time.",
+   "fieldname": "question_type",
+   "fieldtype": "Data",
+   "label": "Question Type"
+  },
+  {
+   "description": "Raw answer as submitted. Multiple-choice answers are joined with commas.",
+   "fieldname": "answer_value",
+   "fieldtype": "Small Text",
+   "label": "Answer Value"
+  },
+  {
+   "description": "Normalised numeric value. Populated by the scoring layer later, never accepted from the browser.",
+   "fieldname": "answer_numeric",
+   "fieldtype": "Float",
+   "label": "Answer Numeric",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "UCC Survey Answer",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
