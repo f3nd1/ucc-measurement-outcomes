@@ -1,0 +1,117 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:{survey}-V{version_number}",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "survey",
+  "version_number",
+  "status",
+  "column_break_pub",
+  "published_on",
+  "published_by",
+  "is_immutable",
+  "section_break_snapshot",
+  "title_snapshot",
+  "description_snapshot"
+ ],
+ "fields": [
+  {
+   "fieldname": "survey",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Survey",
+   "options": "UCC Survey",
+   "reqd": 1
+  },
+  {
+   "fieldname": "version_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Version Number",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nIn Review\nPublished\nClosed"
+  },
+  {
+   "fieldname": "column_break_pub",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "published_on",
+   "fieldtype": "Datetime",
+   "label": "Published On",
+   "read_only": 1
+  },
+  {
+   "description": "Frappe core User DocType.",
+   "fieldname": "published_by",
+   "fieldtype": "Link",
+   "label": "Published By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_immutable",
+   "fieldtype": "Check",
+   "label": "Immutable",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_snapshot",
+   "fieldtype": "Section Break",
+   "label": "Publish Snapshot"
+  },
+  {
+   "description": "Survey title frozen at publish time.",
+   "fieldname": "title_snapshot",
+   "fieldtype": "Data",
+   "label": "Title Snapshot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "description_snapshot",
+   "fieldtype": "Small Text",
+   "label": "Description Snapshot",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "UCC Survey Version",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
