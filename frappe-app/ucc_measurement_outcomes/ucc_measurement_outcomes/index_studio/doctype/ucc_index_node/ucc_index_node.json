@@ -69,17 +69,19 @@
   {
    "default": "Likert 1-5 to 0-100",
    "depends_on": "eval:doc.node_type=='Metric'",
+   "description": "Informational only. Normalisation is applied once at the metric mapping (UCC Metric Source); the index calculation applies weights only and does not re-normalise.",
    "fieldname": "normalisation",
    "fieldtype": "Select",
-   "label": "Normalisation",
+   "label": "Normalisation (metric-level)",
    "options": "Likert 1-5 to 0-100\nYes/No to 100/0\nReverse 0-100\nRatio to Percentage\nCount\nHours\nCategory Only (No Score)"
   },
   {
    "default": "0",
    "depends_on": "eval:doc.node_type=='Metric'",
+   "description": "Informational only; reverse scoring is applied at the metric mapping.",
    "fieldname": "reverse_scored",
    "fieldtype": "Check",
-   "label": "Reverse Scored"
+   "label": "Reverse Scored (metric-level)"
   },
   {
    "collapsible": 1,

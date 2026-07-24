@@ -10,6 +10,30 @@ grep -rn "TODO: bench-verify" frappe-app/
 
 The bench-connected (OrbStack) session must resolve each before install/migrate.
 
+## Step 1 integration audit (post-merge) — findings + fixes
+
+Field-name cross-check across all cross-module references: **0 mismatches**.
+Three semantic gaps in already-merged code were found and fixed:
+
+| Finding | Fix |
+|---|---|
+| Nothing computed `UCC Metric Result` from answers (index only *read* them) | Added `metric_calc.py` + pure `metric_engine.py` (answers → normalised → Metric Result) |
+| `answer_numeric` was read by Explorer but never written | `metric_calc` backfills it from the normalised answer |
+| `compute_index` re-normalised metric values → double-normalisation with real 0-100 Metric Results | Index now applies **weights only**; normalisation happens once at the metric layer (decision log 2026-07-24) |
+
+Chain proven end-to-end two ways: `test_chain_contract.py` (bench-free, runs
+now) and `test_integration_chain.py` (DB-level, **bench-run**:
+`bench --site <site> run-tests --module ucc_measurement_outcomes.test_integration_chain`).
+
+New bench-verify items from this step:
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 33 | Metric result aggregates across all answers (no entity/period split) | `metric_calc.calculate_metric_result` | Add programme/intake/term breakdown once Student/Programme DocTypes confirmed |
+| 34 | Operational-field metric sources are skipped in metric calc | `metric_calc` | Wire once external DocTypes (Assessment Result, etc.) confirmed |
+| 35 | Worded Likert choices need numeric `choice_value` to score | `metric_engine` (non-numeric → unscored) | Ensure survey choices carry numeric values, or add a label→score map |
+| 36 | Index node `normalisation`/`reverse_scored` are now informational only | `ucc_index_node` | Consider removing these fields in a later cleanup; calc ignores them |
+
 ## Global
 
 | # | Assumption | Where | Action on bench |
@@ -167,8 +191,66 @@ Manual smoke test once installed: open a campaign, visit
 Submission + one Answer per question; check that a closed campaign shows the
 unavailable message.
 
+## Mapping Studio coverage analysis (checkpoint 9)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 37 | Duplicate detection is exact-text (normalised whitespace/case), version-scoped | `coverage.find_duplicate_questions` | Add fuzzy / cross-version dedup if UCC needs it |
+| 38 | "Unmapped objectives" = every defined UCC Objective not used by this version | `api/mapping.mapping_coverage` | Confirm scope (per-version vs per-programme) once real objective sets are imported |
+
+Coverage/gap analysis is a computed view over existing Mapping/Objective/Question
+data (pure `coverage.py`, unit-tested). Unmapped questions render as red "gap"
+nodes on the shared canvas.
+
+## Index Studio templates (checkpoint 10)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 39 | 7 index templates (SEQI, SAPI, ESI, TEI, FSI, QIPI, API) with placeholder metric codes | `index_templates.py` | Confirm the real dimension/metric breakdown + targets with UCC quality owners |
+| 40 | Aggregated Performance Index consumes tactical indices as "metrics" | `index_templates` API template | Feeding an Index Result into another index needs a wiring mechanism — confirm/build later |
+
+Templates are structure-only starters (weights total 100 per parent,
+unit-tested). "New from template" in Index Studio creates a Draft Index
+Definition + Version + node graph; the user then attaches real metrics/data.
+
+## Dashboard filters + Criterion 7 view (checkpoint 11)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 41 | Named dimensions (Programme/Intake/Module/Teacher/Department/Student Type) map onto the single generic `entity_type`/`entity` | `api/dashboard.NAMED_DIMENSIONS`, `filter_bar.js` | True simultaneous multi-dimensional filtering needs results dimensioned by real Student/Programme/Module/Instructor DocTypes |
+| 42 | Weak-area component threshold is 60/100 | `api/dashboard.WEAK_THRESHOLD` | Confirm the threshold(s) with UCC quality owners; may differ per index |
+
+Shared `UCCFilterBar` (loaded via `app_include_js`) drives both the Overview and
+Criterion 7 layouts, which are composed from the same widgets (KPIs, trend,
+contribution, comparison) plus a weak-areas widget. Filters wired to real result
+fields (index, index_version, period, entity_type, entity).
+
+## Survey Studio editorial conveniences (checkpoint 12)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 43 | QR generation needs the `qrcode` package | `pyproject.toml` (dep added), `api/builder.campaign_qr` | Confirm `qrcode` installs in the bench env (SVG factory, no Pillow needed) |
+| 44 | Undo/redo is id-based; a deleted item's undo re-creates it with a new id | `survey_builder.js` `_record`/`_delete` | Fine for linear edit/undo/redo; deep interleaved undo across recreated items can desync |
+
+Built: bulk-paste (pure parser `bulk_parse.py`, unit-tested), multi-select +
+bulk delete / copy-to-version, structural undo/redo (reorder, delete, paste),
+desktop/mobile preview, and a public-link QR button on the Campaign form.
+Duplicate-question already existed from checkpoint 2. Copy/paste section is
+available via `duplicate_section` (API).
+
+## Data Explorer remaining datasets (checkpoint 13)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 45 | Two new active datasets (Survey Campaigns, Submissions) over existing DocTypes | `api/explorer.DATASETS` | None — bench-safe (this app's own DocTypes) |
+| 46 | Four pending datasets (Student Records, Programme Records, Assessment Results, Graduate Outcomes) read external DocTypes | `api/explorer.PENDING_DATASETS` | Confirm each real DocType/field, then move from PENDING_DATASETS into DATASETS |
+
+Pending datasets are listed in the UI (disabled, with a note) but rejected by
+`run_analysis`/`export_analysis` until wired — no arbitrary SQL, no guessed
+external field names.
+
 ## Not yet built (future phases, not assumptions)
 
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
-- QR / secure per-respondent invitation links
+- Secure per-respondent invitation links
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

@@ -53,24 +53,61 @@ DATASETS = {
 		"measures": {"Row Count": ("count", None)},
 		"filters": ["objective", "standard", "survey_version"],
 	},
+	"Survey Campaigns": {
+		"doctype": "UCC Survey Campaign",
+		"dimensions": ["survey_version", "status", "access_mode"],
+		"measures": {
+			"Row Count": ("count", None),
+			"Target Responses": ("sum", "target_responses"),
+		},
+		"filters": ["survey_version", "status", "access_mode"],
+	},
+	"Submissions": {
+		"doctype": "UCC Survey Submission",
+		"dimensions": ["campaign", "survey_version", "status", "source"],
+		"measures": {"Row Count": ("count", None)},
+		"filters": ["campaign", "survey_version", "status", "source"],
+	},
+}
+
+# Datasets from the brief that would read EXTERNAL DocTypes not yet confirmed on
+# the bench. Listed so the UI shows them, but NOT queryable until wired.
+# TODO: bench-verify - confirm each real DocType/field, then move into DATASETS.
+PENDING_DATASETS = {
+	"Student Records": {"doctype": "Student",
+						"note": "Needs the real Student DocType (name + fields) confirmed on the bench."},
+	"Programme Records": {"doctype": "Programme",
+						  "note": "Needs the real Programme/Program DocType confirmed on the bench."},
+	"Assessment Results": {"doctype": "Assessment Result",
+						   "note": "Needs Assessment Result + grade/status fields confirmed."},
+	"Graduate Outcomes": {"doctype": "(unconfirmed)",
+						  "note": "No confirmed source yet; likely graduate/alumni answers plus an outcomes record."},
 }
 
 
 @frappe.whitelist()
 def list_datasets():
 	"""Catalogue metadata for the Explorer UI. Exposes only field names of our
-	own DocTypes — safe."""
+	own DocTypes — safe. Pending datasets are listed but not queryable."""
 	return {
-		name: {
-			"dimensions": spec["dimensions"],
-			"measures": list(spec["measures"].keys()),
-			"filters": spec["filters"],
-		}
-		for name, spec in DATASETS.items()
+		"datasets": {
+			name: {
+				"dimensions": spec["dimensions"],
+				"measures": list(spec["measures"].keys()),
+				"filters": spec["filters"],
+			}
+			for name, spec in DATASETS.items()
+		},
+		"pending": [
+			{"name": n, "doctype": d["doctype"], "note": d["note"]}
+			for n, d in PENDING_DATASETS.items()
+		],
 	}
 
 
 def _compute(dataset, measure, row=None, column=None, filters=None):
+	if dataset in PENDING_DATASETS:
+		frappe.throw(_("Dataset '{0}' needs its external DocType confirmed on the bench first.").format(dataset))
 	spec = DATASETS.get(dataset)
 	if not spec:
 		frappe.throw(_("Unknown dataset."))

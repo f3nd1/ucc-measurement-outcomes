@@ -38,6 +38,7 @@ class MappingStudio {
 			},
 			render_input: true,
 		});
+		this.$coverage = $('<div class="ucc-map-coverage" style="margin-top:12px"></div>').appendTo($main);
 		const $grid = $('<div style="display:grid;grid-template-columns:1.4fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		const $left = $('<div></div>').appendTo($grid);
 		this.$table = $('<div class="ucc-map-table"></div>').appendTo($left);
@@ -60,8 +61,46 @@ class MappingStudio {
 				this.canvas.setGraph([], []);
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
+				this._loadCoverage();
 			},
 		});
+	}
+
+	_loadCoverage() {
+		frappe.call({
+			method: MAPI + "mapping_coverage",
+			args: { survey_version: this.version },
+			callback: (r) => { if (r.message) { this.coverage = r.message; this._renderCoverage(); } },
+		});
+	}
+
+	_renderCoverage() {
+		const c = this.coverage;
+		const cnt = c.counts;
+		const gapList = (title, names, cls) => {
+			if (!names.length) return `<div style="flex:1"><b>${title}</b><div class="text-muted" style="font-size:11px">${__("None")}</div></div>`;
+			const chips = names.map((n) => `<span class="indicator-pill ${cls}" data-gap="${frappe.utils.escape_html(n)}" style="cursor:pointer;margin:2px">${frappe.utils.escape_html((c.question_text && c.question_text[n]) ? c.question_text[n].slice(0, 24) : n)}</span>`).join("");
+			return `<div style="flex:1"><b>${title} (${names.length})</b><div style="margin-top:4px">${chips}</div></div>`;
+		};
+		const dupCount = c.duplicate_questions.length;
+		this.$coverage.html(`
+			<div class="panel" style="border:1px solid var(--border-color,#e2e6ea);border-radius:8px;padding:12px">
+				<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+					<span class="indicator-pill blue">${__("Questions")}: ${cnt.questions_mapped}/${cnt.questions} ${__("mapped")}</span>
+					<span class="indicator-pill ${cnt.objectives_used < cnt.objectives ? "orange" : "green"}">${__("Objectives used")}: ${cnt.objectives_used}/${cnt.objectives}</span>
+					<span class="indicator-pill ${dupCount ? "red" : "green"}">${__("Duplicate questions")}: ${dupCount}</span>
+				</div>
+				<div style="display:flex;gap:16px;flex-wrap:wrap">
+					${gapList(__("No objective"), c.questions_without_objective, "red")}
+					${gapList(__("No clause"), c.questions_without_clause, "orange")}
+					<div style="flex:1"><b>${__("Unmapped objectives")} (${c.unmapped_objectives.length})</b><div style="margin-top:4px">${c.unmapped_objectives.map((o) => `<span class="indicator-pill gray" style="margin:2px">${frappe.utils.escape_html(o)}</span>`).join("") || '<span class="text-muted" style="font-size:11px">' + __("None") + "</span>"}</div></div>
+				</div>
+			</div>`);
+		this.$coverage.find("[data-gap]").on("click", (e) => this._select($(e.currentTarget).data("gap")));
+	}
+
+	_isUnmapped(name) {
+		return this.coverage && this.coverage.questions_without_objective.indexOf(name) !== -1;
 	}
 
 	_renderTable() {
@@ -91,8 +130,11 @@ class MappingStudio {
 	}
 
 	_renderLineage(q) {
-		// question -> objective, question -> clause, question -> metric(s)
-		const nodes = [{ id: "q", type: "question", title: (q.question_text || "").slice(0, 40), sub: q.question_type, x: 40, y: 150 }];
+		// question -> objective, question -> clause, question -> metric(s).
+		// Unmapped questions (no objective) render as a red "gap" node.
+		const qType = this._isUnmapped(q.name) ? "gap" : "question";
+		const qSub = this._isUnmapped(q.name) ? __("Unmapped — no objective") : q.question_type;
+		const nodes = [{ id: "q", type: qType, title: (q.question_text || "").slice(0, 40), sub: qSub, x: 40, y: 150 }];
 		const edges = [];
 		if (q.objective) { nodes.push({ id: "obj", type: "objective", title: q.objective, sub: __("Objective"), x: 300, y: 40 }); edges.push(["q", "obj"]); }
 		if (q.primary_clause) { nodes.push({ id: "cl", type: "clause", title: q.primary_clause, sub: q.standard || "", x: 300, y: 150 }); edges.push(["q", "cl"]); }

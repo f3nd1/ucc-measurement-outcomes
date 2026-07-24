@@ -14,8 +14,12 @@ import json
 import frappe
 from frappe import _
 
+from ucc_measurement_outcomes.bulk_parse import parse_bulk_questions
+
 QUESTION = "UCC Survey Question"
 VERSION = "UCC Survey Version"
+SECTION = "UCC Survey Section"
+CAMPAIGN = "UCC Survey Campaign"
 
 # Types that carry a choice list, and the defaults to seed when one is added.
 CHOICE_DEFAULTS = {
@@ -142,3 +146,121 @@ def duplicate_question(question):
 def delete_question(question):
 	frappe.delete_doc(QUESTION, question)
 	return True
+
+
+# --- editorial conveniences (checkpoint 12) ---
+
+def _choices_from_options(options):
+	return [
+		{"choice_label": c.strip(), "sequence": i}
+		for i, c in enumerate((options or "").split(",")) if c.strip()
+	]
+
+
+@frappe.whitelist()
+def bulk_paste_questions(survey_version, text):
+	"""Create many questions from `question | type | options` lines."""
+	_require(survey_version, "write")
+	start = frappe.db.count(QUESTION, {"survey_version": survey_version})
+	created = []
+	for i, q in enumerate(parse_bulk_questions(text)):
+		doc = frappe.new_doc(QUESTION)
+		doc.survey_version = survey_version
+		doc.question_type = q["question_type"]
+		doc.question_text = q["question_text"]
+		doc.sequence = start + i
+		for ch in _choices_from_options(q["options"]):
+			doc.append("choices", ch)
+		doc.insert()
+		created.append(doc.name)
+	return created
+
+
+@frappe.whitelist()
+def create_question(survey_version, payload):
+	"""Create one question from a full field payload (used by undo-of-delete)."""
+	_require(survey_version, "write")
+	data = _loads(payload)
+	doc = frappe.new_doc(QUESTION)
+	doc.survey_version = survey_version
+	for field in ("question_text", "question_type", "help_text", "is_required",
+				  "display_logic", "display_logic_config", "section", "sequence"):
+		if field in data:
+			doc.set(field, data[field])
+	for c in data.get("choices", []):
+		doc.append("choices", {
+			"choice_label": c.get("choice_label", ""),
+			"choice_value": c.get("choice_value"),
+			"sequence": c.get("sequence", 0),
+		})
+	doc.insert()
+	return doc.name
+
+
+@frappe.whitelist()
+def bulk_delete_questions(names):
+	for name in _loads(names):
+		frappe.delete_doc(QUESTION, name)
+	return True
+
+
+@frappe.whitelist()
+def copy_questions_to_version(names, target_version):
+	"""Copy selected questions (with choices) into another version — the basis
+	for copying content between surveys."""
+	_require(target_version, "write")
+	base = frappe.db.count(QUESTION, {"survey_version": target_version})
+	created = []
+	for i, name in enumerate(_loads(names)):
+		dup = frappe.copy_doc(frappe.get_doc(QUESTION, name))
+		dup.survey_version = target_version
+		dup.section = None  # sections belong to the source version
+		dup.sequence = base + i
+		dup.insert()
+		created.append(dup.name)
+	return created
+
+
+@frappe.whitelist()
+def duplicate_section(section, target_version=None):
+	"""Copy a section and its questions, within the same version (with a (Copy)
+	title) or into another version."""
+	src = frappe.get_doc(SECTION, section)
+	target_version = target_version or src.survey_version
+	_require(target_version, "write")
+	new_section = frappe.copy_doc(src)
+	new_section.survey_version = target_version
+	if target_version == src.survey_version:
+		new_section.section_title = (src.section_title or "Section") + " (Copy)"
+	new_section.insert()
+
+	base = frappe.db.count(QUESTION, {"survey_version": target_version})
+	for i, q in enumerate(frappe.get_all(QUESTION, filters={"section": section}, order_by="sequence asc")):
+		dup = frappe.copy_doc(frappe.get_doc(QUESTION, q.name))
+		dup.survey_version = target_version
+		dup.section = new_section.name
+		dup.sequence = base + i
+		dup.insert()
+	return new_section.name
+
+
+@frappe.whitelist()
+def campaign_qr(campaign):
+	"""SVG QR code for a campaign's public survey link."""
+	if not frappe.has_permission(CAMPAIGN, "read", doc=campaign):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	token = frappe.db.get_value(CAMPAIGN, campaign, "public_token")
+	if not token:
+		frappe.throw(_("Campaign has no public token."))
+	url = frappe.utils.get_url("/survey?token=" + token)
+	# TODO: bench-verify - needs the `qrcode` package (added to pyproject
+	# dependencies); confirm it is installed in the bench environment.
+	import io
+
+	import qrcode
+	import qrcode.image.svg
+
+	img = qrcode.make(url, image_factory=qrcode.image.svg.SvgImage)
+	buf = io.BytesIO()
+	img.save(buf)
+	return {"url": url, "svg": buf.getvalue().decode("utf-8")}

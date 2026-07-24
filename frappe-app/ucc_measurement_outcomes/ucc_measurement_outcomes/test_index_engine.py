@@ -34,22 +34,23 @@ def test_weights_valid():
 
 def test_compute_index():
 	# metric -> dimension -> index tree (3 levels), with known expected score.
+	# Metric values are ALREADY normalised to 0-100 (index weights only).
 	nodes = [
 		{"key": "seqi", "type": "Index", "label": "SEQI", "parent_key": None},
 		{"key": "rel", "type": "Dimension", "label": "Reliability", "parent_key": "seqi", "weight": 60},
 		{"key": "ass", "type": "Dimension", "label": "Assurance", "parent_key": "seqi", "weight": 40},
-		{"key": "m1", "type": "Metric", "parent_key": "rel", "weight": 50, "source_metric": "M1", "normalisation": "Likert 1-5 to 0-100"},
-		{"key": "m2", "type": "Metric", "parent_key": "rel", "weight": 50, "source_metric": "M2", "normalisation": "Likert 1-5 to 0-100"},
-		{"key": "m3", "type": "Metric", "parent_key": "ass", "weight": 100, "source_metric": "M3", "normalisation": "Yes/No to 100/0"},
+		{"key": "m1", "type": "Metric", "parent_key": "rel", "weight": 50, "source_metric": "M1"},
+		{"key": "m2", "type": "Metric", "parent_key": "rel", "weight": 50, "source_metric": "M2"},
+		{"key": "m3", "type": "Metric", "parent_key": "ass", "weight": 100, "source_metric": "M3"},
 	]
-	# M1=5->100, M2=3->50  => rel = (100*50 + 50*50)/100 = 75
-	# M3=1->100            => ass = 100
+	# M1=100, M2=50  => rel = (100*50 + 50*50)/100 = 75
+	# M3=100         => ass = 100
 	# seqi = (75*60 + 100*40)/100 = 85
-	out = compute_index(nodes, {"M1": 5, "M2": 3, "M3": 1})
+	out = compute_index(nodes, {"M1": 100, "M2": 50, "M3": 100})
 	assert out["value"] == 85, out["value"]
 
 	by_key = {b["key"]: b for b in out["breakdown"]}
-	assert by_key["m1"]["raw_value"] == 5 and by_key["m1"]["value"] == 100
+	assert by_key["m1"]["raw_value"] == 100 and by_key["m1"]["value"] == 100
 	assert by_key["rel"]["value"] == 75
 	# rel contributes 75 * 60/100 = 45 toward SEQI
 	assert abs(by_key["rel"]["contribution"] - 45) < 1e-9
@@ -59,10 +60,10 @@ def test_partial_coverage():
 	# One metric missing: dimension still scores on the present one.
 	nodes = [
 		{"key": "idx", "type": "Index", "parent_key": None},
-		{"key": "m1", "type": "Metric", "parent_key": "idx", "weight": 50, "source_metric": "A", "normalisation": "Likert 1-5 to 0-100"},
-		{"key": "m2", "type": "Metric", "parent_key": "idx", "weight": 50, "source_metric": "B", "normalisation": "Likert 1-5 to 0-100"},
+		{"key": "m1", "type": "Metric", "parent_key": "idx", "weight": 50, "source_metric": "A"},
+		{"key": "m2", "type": "Metric", "parent_key": "idx", "weight": 50, "source_metric": "B"},
 	]
-	out = compute_index(nodes, {"A": 5})  # B missing
+	out = compute_index(nodes, {"A": 100})  # B missing
 	assert out["value"] == 100  # only A present -> 100
 
 

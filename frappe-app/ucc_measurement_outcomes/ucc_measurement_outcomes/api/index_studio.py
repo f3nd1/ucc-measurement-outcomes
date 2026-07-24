@@ -9,13 +9,48 @@ import frappe
 from frappe import _
 
 from ucc_measurement_outcomes.index_engine import weights_valid
+from ucc_measurement_outcomes import index_templates
 
 INDEX_VERSION = "UCC Index Version"
+INDEX_DEF = "UCC Index Definition"
 
 
 def _require(index_version, ptype):
 	if not frappe.has_permission(INDEX_VERSION, ptype, doc=index_version):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def list_index_templates():
+	return index_templates.template_meta()
+
+
+@frappe.whitelist()
+def create_index_from_template(template_code):
+	"""Instantiate a starter index: ensure the Index Definition exists, then
+	create a new Draft Version populated with the template's node graph."""
+	if not frappe.has_permission(INDEX_VERSION, "create"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if template_code not in index_templates.template_codes():
+		frappe.throw(_("Unknown template."))
+
+	meta = {m["code"]: m["name"] for m in index_templates.template_meta()}
+	if not frappe.db.exists(INDEX_DEF, template_code):
+		frappe.get_doc({
+			"doctype": INDEX_DEF, "index_code": template_code,
+			"index_name": meta[template_code], "target": index_templates.template_target(template_code),
+		}).insert()
+
+	# Next version number for this index (zero-padded).
+	existing = frappe.db.count(INDEX_VERSION, {"index": template_code})
+	version = frappe.get_doc({
+		"doctype": INDEX_VERSION, "index": template_code,
+		"version_number": f"{existing + 1:02d}", "status": "Draft",
+	})
+	for n in index_templates.build_nodes(template_code):
+		version.append("nodes", n)
+	version.insert()
+	return version.name
 
 
 @frappe.whitelist()
