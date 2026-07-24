@@ -202,6 +202,17 @@ Coverage/gap analysis is a computed view over existing Mapping/Objective/Questio
 data (pure `coverage.py`, unit-tested). Unmapped questions render as red "gap"
 nodes on the shared canvas.
 
+## Index Studio templates (checkpoint 10)
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 39 | 7 index templates (SEQI, SAPI, ESI, TEI, FSI, QIPI, API) with placeholder metric codes | `index_templates.py` | Confirm the real dimension/metric breakdown + targets with UCC quality owners |
+| 40 | Aggregated Performance Index consumes tactical indices as "metrics" | `index_templates` API template | Feeding an Index Result into another index needs a wiring mechanism — confirm/build later |
+
+Templates are structure-only starters (weights total 100 per parent,
+unit-tested). "New from template" in Index Studio creates a Draft Index
+Definition + Version + node graph; the user then attaches real metrics/data.
+
 ## Not yet built (future phases, not assumptions)
 
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

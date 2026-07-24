@@ -38,16 +38,41 @@ class IndexStudio {
 			},
 			render_input: true,
 		});
-		const $bar = $('<div style="display:flex;gap:8px;margin-top:8px;align-items:center"></div>').appendTo($main);
+		const $bar = $('<div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap"></div>').appendTo($main);
+		this.$template = $('<select class="form-control input-sm" style="width:auto"><option value="">' + __("New from template…") + "</option></select>").appendTo($bar);
+		$(`<button class="btn btn-default btn-sm">${__("Create")}</button>`).appendTo($bar).on("click", () => this._createFromTemplate());
+		$('<span style="width:10px"></span>').appendTo($bar);
 		this.$validate = $(`<button class="btn btn-default btn-sm">${__("Validate")}</button>`).appendTo($bar).on("click", () => this._validate());
 		this.$publish = $(`<button class="btn btn-primary btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
 		this.$badge = $('<span style="margin-left:6px;font-size:12px"></span>').appendTo($bar);
+		frappe.call({
+			method: IAPI + "list_index_templates",
+			callback: (r) => {
+				(r.message || []).forEach((t) => {
+					this.$template.append(`<option value="${t.code}">${frappe.utils.escape_html(t.name)} (${t.code})</option>`);
+				});
+			},
+		});
 		const $grid = $('<div style="display:grid;grid-template-columns:1fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		this.$canvas = $('<div style="height:560px"></div>').appendTo($grid);
 		this.$inspector = $('<div><p class="text-muted" style="font-size:12px">' + __("Click a node to edit its weight, metric and normalisation.") + "</p></div>").appendTo($grid);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {
 			onSelect: (n) => this._select(n.id),
 			onMove: (n) => this._onMove(n),
+		});
+	}
+
+	_createFromTemplate() {
+		const code = this.$template.val();
+		if (!code) return;
+		frappe.call({
+			method: IAPI + "create_index_from_template",
+			args: { template_code: code },
+			callback: (r) => {
+				if (!r.message) return;
+				frappe.show_alert({ message: __("Created {0}", [r.message]), indicator: "green" });
+				this.versionField.set_value(r.message);   // loads the new draft version
+			},
 		});
 	}
 
