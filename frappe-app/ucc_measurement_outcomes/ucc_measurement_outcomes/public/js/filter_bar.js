@@ -48,6 +48,10 @@ window.UCCFilterBar = class UCCFilterBar {
 				.map((o) => '<option value="' + frappe.utils.escape_html(String(o)) + '">' + frappe.utils.escape_html(String(o)) + "</option>")
 				.join("");
 		if (options && options.indexOf(current) !== -1) sel.value = current;
+		// Keep the tracked value in sync: if the selected option no longer
+		// exists, the <select> silently resets but this.values kept the stale
+		// value, so get() filtered on an option that was gone (Pass 2 finding).
+		this.values[name] = sel.value;
 	}
 
 	get() {
