@@ -36,6 +36,44 @@ unreachable nodes — that silence is why publish must block it).
 | 47 | `frappe.get_doc(..., for_update=True)` row-locks on the target version | `api/public._get_open_campaign` | Confirm locking semantics; without it the one-response race (F4) reopens |
 | 48 | Layout-only edits (`pos_x`/`pos_y`) on a *published* index version stay allowed | `ucc_index_version._formula_signature` | Confirm this interpretation with Felix (canvas layout ≠ formula content) |
 
+## Pass 2 fresh bug hunt (deep review session)
+
+Fixed (each with its reproducing test):
+
+| Finding | Fix |
+|---|---|
+| **F10** Unknown/missing normalisation rule silently clamped the raw value into 0-100 (Likert 4 with a lost rule became 4/100 and poisoned every index above it) | `normalise()` now returns None (unscoreable) for unknown rules; pure tests |
+| **F11** Negative weights were publishable — `weights_valid` only checks the sum, so 120 + (-20) passed as 100 | `structural_issues()` flags negative weights; runs at validate/publish |
+| **F12** Question sequences drifted sparse after deletions, breaking every position==sequence assumption: drop-at-position landed one slot late, duplicate landed after the wrong row, append could land mid-list | One `_resequence()` helper (dense 0..n-1, optional insert gap) used by add/delete/bulk-delete/bulk-paste/copy/duplicate-section; bench-run ordering tests |
+| **F13** `create_index_from_template` numbered versions by count() — deleting V01 of V01+V02 made the "next" number V02 → DuplicateEntry crash | Probe for the next free number; bench-run test |
+| **F14** Filter bar kept a stale tracked value when `setOptions` removed the selected option — `get()` then filtered on an option that no longer existed | `setOptions` re-syncs the tracked value; no JS harness exists in the repo (see report), fix documented inline |
+
+**#44 undo/redo — precise characterisation (documented, NOT fixed; fix is not small):**
+the desync boundary is exactly: *any history action whose payload embeds question
+names (reorder lists, bulk-delete name lists), undone or redone after a
+delete+undo pair has recreated one of those names under a new id.* The replayed
+action then references the dead name and the server rejects it ("Question X is
+not part of this version"). Compounding it, the JS `_call` wrapper only resolves
+on success, so a failed undo leaves the action popped from history but never
+pushed to future — the entry is silently lost and the stacks are inconsistent
+until reload. A proper fix is an id-remapping table consulted by every action
+constructor (touches all six action types) — deferred as beyond a surgical
+change. Linear undo/redo without interleaved deletes remains correct.
+
+Reported, deliberately not changed (working or latent-only):
+- `explorer_agg.aggregate` row/column sort would TypeError on mixed str/int
+  dimension values — unreachable with today's all-string catalogue dimensions;
+  becomes real if a numeric dimension is ever catalogued.
+- `bulk_parse` drops anything after a third `|` on a line (options containing
+  pipes); prototype-inherited contract.
+- `data_explorer.js` disables pending datasets via a quote-fragile
+  `option:contains` selector — harmless: the server independently rejects
+  pending datasets.
+- `survey_builder.js` appends its modal to `document.body` once per page load;
+  single instance per Desk session, acceptable.
+- Unused-import sweep across all `.py`: **clean**.
+- Removed tracked `.DS_Store` (junk predating the `.gitignore` that excludes it).
+
 ## Step 1 integration audit (post-merge) — findings + fixes
 
 Field-name cross-check across all cross-module references: **0 mismatches**.
