@@ -74,11 +74,21 @@ Reported, deliberately not changed (working or latent-only):
 - Unused-import sweep across all `.py`: **clean**.
 - Removed tracked `.DS_Store` (junk predating the `.gitignore` that excludes it).
 
-## Pass 3 vague-spec interpretations (deep review session) — decisions needed
+## Pass 3 vague-spec interpretations — DECIDED (Felix, 2026-07-24)
 
-Each entry states the interpretation the code currently embodies, verified by
-grep/trace. None were changed: these are design decisions for Felix, not
-defects against a settled spec.
+Outcomes, applied where code-able in this environment:
+
+| # | Decision | Status |
+|---|---|---|
+| V1 | **Hide** display-logic UI until a logic engine exists (engine must ship with a server-side logic-aware required check) | ✅ Applied — controls removed from builder inspector; fields hidden in the DocType, schema kept |
+| V2 | **Both gates**: public submission requires version **Published** (blocks Draft/In Review/Closed — the Draft case was a lurking only-published-content violation) and survey not Archived | ✅ Applied in `_get_open_campaign` + 2 bench tests |
+| V3 | **Target-based** response rate (`completed / target_responses`); invitation-based later | 📋 Bench work item |
+| V4 | **Nightly scheduler job + manual recalculate button** | 📋 Bench work item (worker/queue confirm) |
+| V5 | **Consolidate on "Section Heading"** question type | ✅ Applied — `UCC Survey Section` doctype, `duplicate_section` API and the question `section` Link removed (zero migration cost: never installed anywhere) |
+| V6 | 1:1 vs multi-objective: **decide from the real mapping PDF** — unreadable in this container (image-based; no poppler) | ⛔ **HARD GATE before data import**: check `reference-documents/02-…mapping-v02.pdf` on the bench; if any question maps to >1 objective, drop the `unique` constraint BEFORE importing |
+| V7 | Multi-select stored as **JSON array** | ✅ Applied in `to_text` + pure test (comma-in-label round-trip) |
+
+Original analysis (what the code did before these decisions):
 
 | # | Area | What the code actually does | Decision needed |
 |---|---|---|---|
@@ -315,8 +325,10 @@ fields (index, index_version, period, entity_type, entity).
 Built: bulk-paste (pure parser `bulk_parse.py`, unit-tested), multi-select +
 bulk delete / copy-to-version, structural undo/redo (reorder, delete, paste),
 desktop/mobile preview, and a public-link QR button on the Campaign form.
-Duplicate-question already existed from checkpoint 2. Copy/paste section is
-available via `duplicate_section` (API).
+Duplicate-question already existed from checkpoint 2. (Historical note: the
+`duplicate_section` API built here was removed by decision V5 — sectioning is
+consolidated on the "Section Heading" question type; `copy_questions_to_version`
+carries Section Heading rows like any other question.)
 
 ## Data Explorer remaining datasets (checkpoint 13)
 
