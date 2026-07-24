@@ -26,14 +26,20 @@ VERSION = "UCC Survey Version"
 RATE_LIMIT = {"limit": 20, "seconds": 3600}
 
 
-def _get_open_campaign(token):
+def _get_open_campaign(token, for_update=False):
 	if not token:
 		frappe.throw(_("Survey not found."), frappe.DoesNotExistError)
 	name = frappe.db.get_value(CAMPAIGN, {"public_token": token}, "name")
 	if not name:
 		# Generic message: never confirm/deny a token to an anonymous caller.
 		frappe.throw(_("Survey not found."), frappe.DoesNotExistError)
-	campaign = frappe.get_doc(CAMPAIGN, name)
+	# for_update: the submit path locks the campaign row so the one-response
+	# check-then-insert cannot race with a concurrent submit for this campaign.
+	# ponytail: serialises submissions per campaign; per-respondent locking if
+	# a single campaign ever needs high submit throughput.
+	# TODO: bench-verify - confirm frappe.get_doc(..., for_update=True) row
+	# locking on the target Frappe version.
+	campaign = frappe.get_doc(CAMPAIGN, name, for_update=for_update)
 	if not campaign.is_open():
 		frappe.throw(_("This survey is not currently open."))
 	return campaign
@@ -91,10 +97,10 @@ def submit_survey(token, answers, respondent_key=None):
 	Any exception rolls back the whole request transaction, so a Submission is
 	never left without its Answers.
 	"""
-	campaign = _get_open_campaign(token)
+	campaign = _get_open_campaign(token, for_update=True)
 	version = campaign.survey_version
 	answers = json.loads(answers) if isinstance(answers, str) else answers
-	if not isinstance(answers, list):
+	if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
 		frappe.throw(_("Invalid submission."))
 
 	# One response per respondent, unless the campaign explicitly allows more.
