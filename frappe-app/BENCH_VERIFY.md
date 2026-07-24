@@ -86,6 +86,34 @@ Manual smoke test once installed: open Mapping Studio for a version, map a
 question to an objective + clause, add it as a metric source, and confirm the
 lineage renders on the shared canvas.
 
-## Not yet built (later checkpoints, not assumptions)
+## Index shell + calculation engine (checkpoint 5)
 
-- Index DocTypes, scoring/normalisation, results (checkpoint 5)
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 19 | Metric values read as latest `UCC Metric Result` by metric/period/entity | `index_calc._load_metric_values` | Confirm entity resolution once real DocTypes are known |
+| 20 | Calculation runs on the `short` queue | `api/index_studio.calculate` | Confirm worker/queue availability on the bench |
+| 21 | `Count`/`Hours` normalisations pass through raw (not 0-100) | `index_engine.normalise` | Agree a scaling rule with UCC if counts/hours must feed a 0-100 index |
+| 22 | Circular-reference detection not yet implemented | `api/index_studio.validate_index` | Add a cycle check before production (weights-total check is done) |
+
+Immutability chain (satisfies "a formula edit must never silently change a
+published score"): `UCC Index Version` freezes on publish (same rule as survey
+versions, shared `versioning.py`); `UCC Index Result` rejects any post-insert
+edit; results Link to the exact `index_version` used. Editing a formula ⇒ new
+version ⇒ new results.
+
+The scoring/normalisation math lives in the pure `index_engine.py` and is
+unit-tested with fixture data (`test_index_engine.py`): a 3-level SEQI-shaped
+tree with known inputs produces exactly 85, partial coverage re-bases weights,
+and every normalisation rule is checked. `index_calc.py` only wires Frappe data
+into it — no arithmetic in the DB layer.
+
+Manual smoke test once installed: build an index version (index → dimensions →
+metric nodes), validate weights=100, publish, seed a few `UCC Metric Result`
+rows (or pass `metric_values`), calculate, and open the result's breakdown to
+trace the score to each metric.
+
+## Not yet built (future phases, not assumptions)
+
+- Dashboard Studio + Data Explorer (native Frappe charts first)
+- Public survey web page (portal route rendering `get_public_survey`)
+- Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)

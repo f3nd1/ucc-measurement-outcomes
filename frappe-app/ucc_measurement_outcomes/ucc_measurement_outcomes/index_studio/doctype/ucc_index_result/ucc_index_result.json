@@ -1,0 +1,132 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-07-24 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "index",
+  "index_version",
+  "period",
+  "entity_type",
+  "entity",
+  "column_break_val",
+  "value",
+  "target",
+  "coverage",
+  "calculation_date",
+  "section_break_breakdown",
+  "breakdown"
+ ],
+ "fields": [
+  {
+   "fieldname": "index",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Index",
+   "options": "UCC Index Definition",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "description": "The immutable published formula this result was computed from.",
+   "fieldname": "index_version",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Index Version",
+   "options": "UCC Index Version",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "period",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Period"
+  },
+  {
+   "fieldname": "entity_type",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Entity Type"
+  },
+  {
+   "fieldname": "entity",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Entity"
+  },
+  {
+   "fieldname": "column_break_val",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Float",
+   "label": "Target",
+   "read_only": 1
+  },
+  {
+   "fieldname": "coverage",
+   "fieldtype": "Percent",
+   "label": "Coverage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calculation_date",
+   "fieldtype": "Datetime",
+   "label": "Calculation Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_breakdown",
+   "fieldtype": "Section Break",
+   "label": "Score Breakdown"
+  },
+  {
+   "fieldname": "breakdown",
+   "fieldtype": "Table",
+   "label": "Breakdown",
+   "options": "UCC Score Breakdown",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Index Studio",
+ "name": "UCC Index Result",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
