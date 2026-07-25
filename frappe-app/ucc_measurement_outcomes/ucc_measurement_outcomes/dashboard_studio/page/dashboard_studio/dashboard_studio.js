@@ -67,8 +67,10 @@ class DashboardStudio {
 			onChange: (v) => { this.filters = v; this.load(); },
 		});
 		const $tabs = $('<div class="ucc-db-tabs"></div>').appendTo($m);
-		this.$tabOverview = $(`<button class="btn btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
-		this.$tabC7 = $(`<button class="btn btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
+		// Finding 6: these were the only buttons with no variant class, so they
+		// rendered unstyled next to the app's btn-default/btn-primary set.
+		this.$tabOverview = $(`<button class="btn btn-default btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
+		this.$tabC7 = $(`<button class="btn btn-default btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
 		this.$body = $('<div></div>').appendTo($m);
 	}
 
@@ -100,11 +102,20 @@ class DashboardStudio {
 		this.$body.empty();
 		if (this.view === "criterion7") this._renderCriterion7();
 		else this._renderOverview();
+		// Finding 4: dead end — give the user the page that creates this data.
+		if (!this.data.kpis.length) {
+			window.UCCEmptyState.render(this.$body.find(".ucc-db-empty-slot").get(0), {
+				message: __("No index results yet. Calculate an index in Index Studio to populate this dashboard."),
+				actionLabel: __("Open Index Studio"),
+				onAction: () => frappe.set_route("index-studio"),
+			});
+		}
 	}
 
 	// ---- shared widgets ----
 	_kpiCards(kpis) {
-		if (!kpis.length) return `<div class="ucc-db-empty">${__("No index results yet. Calculate an index in Index Studio first.")}</div>`;
+		// Finding 4: empty slot filled by _render() with a message + a way out.
+		if (!kpis.length) return '<div class="ucc-db-empty ucc-db-empty-slot"></div>';
 		return '<div class="ucc-db-kpis">' + kpis.map((k) => {
 			const val = k.value === null ? "—" : Number(k.value).toFixed(2);
 			let note = k.target != null ? __("Target {0}", [k.target]) : "";
