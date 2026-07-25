@@ -146,15 +146,18 @@ class SurveyBuilder {
 		// Finding 1: before a version is picked, load() never runs, so the list
 		// had no drop handlers and no message — dragging silently did nothing.
 		// Say why instead of looking broken.
-		window.UCCEmptyState.render(this.$list.get(0), {
-			message: __("Select a Survey Version above to start building."),
-		});
+		if (window.UCCEmptyState) {
+			window.UCCEmptyState.render(this.$list.get(0), {
+				message: __("Select a Survey Version above to start building."),
+			});
+		}
 		this._renderTrail();
 		this._modal = $('<div class="ucc-sb-modal"><div class="ucc-sb-sheet"></div></div>').appendTo(document.body);
 	}
 
 	// Finding 1: show where this page sits in the chain.
 	_renderTrail() {
+		if (!window.UCCTrail) return;   // missing asset must not abort _buildLayout()
 		const segs = [{ label: __("Survey Studio") }];
 		if (this.version) {
 			segs.push({
@@ -233,11 +236,15 @@ class SurveyBuilder {
 			// Finding 1: drag-to-insert is wired here, but it isn't discoverable and
 			// gives no feedback if it fails. Offer an explicit button as well.
 			const $drop = $(`<div class="ucc-sb-empty"></div>`).appendTo(this.$list);
-			window.UCCEmptyState.render($drop.get(0), {
-				message: __("Drag a question type here, or:"),
-				actionLabel: this.editable ? __("+ Add your first question") : null,
-				onAction: this.editable ? () => this._addQuestion("Short Text", 0) : null,
-			});
+			if (window.UCCEmptyState) {
+				window.UCCEmptyState.render($drop.get(0), {
+					message: __("Drag a question type here, or:"),
+					actionLabel: this.editable ? __("+ Add your first question") : null,
+					onAction: this.editable ? () => this._addQuestion("Short Text", 0) : null,
+				});
+			} else {
+				$drop.text(__("Drag a question type here"));
+			}
 			return;
 		}
 		this.questions.forEach((q, i) => {

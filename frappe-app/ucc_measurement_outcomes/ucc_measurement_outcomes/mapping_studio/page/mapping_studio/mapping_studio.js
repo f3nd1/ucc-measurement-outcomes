@@ -79,6 +79,7 @@ class MappingStudio {
 
 	// Finding 1: Survey Studio is upstream of this page — make that clickable.
 	_renderTrail() {
+		if (!window.UCCTrail) return;   // missing asset must not abort _build()
 		const segs = [];
 		if (this.version) {
 			segs.push({

@@ -72,6 +72,7 @@ class DataExplorer {
 
 	// Finding 1: show which approved dataset is being queried.
 	_renderTrail() {
+		if (!window.UCCTrail) return;   // missing asset must not abort _build()
 		window.UCCTrail.render(this.$trail.get(0), [{
 			label: __("Data Explorer") + (this.sel.dataset ? " · " + this.sel.dataset : ""),
 		}]);

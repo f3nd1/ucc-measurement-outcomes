@@ -76,7 +76,14 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 	// Finding 2: an empty canvas said only "No nodes to show" with no way in.
 	// Callers set a message (and optionally an action) for their empty state.
 	setEmpty(opts) {
-		window.UCCEmptyState.render(this.emptyEl, opts || {});
+		opts = opts || {};
+		// Degrade to plain text if the shared component didn't load: a missing
+		// enhancement must not throw and abort the caller's page setup.
+		if (!window.UCCEmptyState) {
+			this.emptyEl.textContent = opts.message || "";
+			return;
+		}
+		window.UCCEmptyState.render(this.emptyEl, opts);
 	}
 
 	zoom(delta) {

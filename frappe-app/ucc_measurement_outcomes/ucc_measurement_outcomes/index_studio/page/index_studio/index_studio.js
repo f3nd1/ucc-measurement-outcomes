@@ -108,6 +108,7 @@ class IndexStudio {
 
 	// Finding 1: show which index version this canvas belongs to.
 	_renderTrail() {
+		if (!window.UCCTrail) return;   // missing asset must not abort _build()
 		const segs = [{ label: __("Index Studio") }];
 		if (this.version) segs.push({ label: this.version });
 		window.UCCTrail.render(this.$trail.get(0), segs);

@@ -99,6 +99,7 @@ class DashboardStudio {
 
 	// Finding 1: the dashboard reads results produced upstream in Index Studio.
 	_renderTrail() {
+		if (!window.UCCTrail) return;   // missing asset must not abort _build()
 		// Finding 2: Index Studio now reads route_options, so this hop is live.
 		const segs = [];
 		if (this.filters.index_version) {
@@ -152,7 +153,7 @@ class DashboardStudio {
 			frappe.set_route("index-studio");
 		});
 		// Finding 4: dead end — give the user the page that creates this data.
-		if (!this.data.kpis.length) {
+		if (!this.data.kpis.length && window.UCCEmptyState) {
 			window.UCCEmptyState.render(this.$body.find(".ucc-db-empty-slot").get(0), {
 				message: __("No index results yet. Calculate an index in Index Studio to populate this dashboard."),
 				actionLabel: __("Open Index Studio"),
