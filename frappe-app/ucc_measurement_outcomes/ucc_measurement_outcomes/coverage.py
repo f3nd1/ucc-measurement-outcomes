@@ -5,6 +5,18 @@ Mapping Studio API feeds it questions/mappings/objectives and renders the result
 """
 
 
+# Layout-only question types carry no answer, so they can never hold an
+# objective and must not be reported as coverage gaps. Callers that don't supply
+# question_type (older ones) are treated as mappable, so behaviour is unchanged
+# for them.
+NON_MAPPABLE_TYPES = {"Section Heading"}
+
+
+def is_mappable(question):
+	"""True if this question can meaningfully carry an objective/clause."""
+	return question.get("question_type") not in NON_MAPPABLE_TYPES
+
+
 def normalize_text(s):
 	"""Collapse whitespace + lowercase, for duplicate-question comparison."""
 	return " ".join((s or "").lower().split())
@@ -28,7 +40,10 @@ def coverage_summary(questions, mappings, objectives):
 	mappings:   [{question, objective, primary_clause}]
 	objectives: [objective_code, ...]  (the objectives in scope)
 	"""
-	all_q = {q["name"] for q in questions}
+	# Section Headings are layout, not questions — counting them as gaps produced
+	# phantom "unmapped" flags a user could never clear.
+	mappable = [q for q in questions if is_mappable(q)]
+	all_q = {q["name"] for q in mappable}
 	mapped_q = {m["question"] for m in mappings if m.get("question")}
 	obj_used = {m["objective"] for m in mappings if m.get("objective")}
 	q_with_clause = {m["question"] for m in mappings if m.get("primary_clause")}
@@ -37,7 +52,7 @@ def coverage_summary(questions, mappings, objectives):
 		"questions_without_objective": sorted(all_q - mapped_q),
 		"questions_without_clause": sorted(all_q - q_with_clause),
 		"unmapped_objectives": sorted(set(objectives) - obj_used),
-		"duplicate_questions": find_duplicate_questions(questions),
+		"duplicate_questions": find_duplicate_questions(mappable),
 		"counts": {
 			"questions": len(all_q),
 			"questions_mapped": len(all_q & mapped_q),

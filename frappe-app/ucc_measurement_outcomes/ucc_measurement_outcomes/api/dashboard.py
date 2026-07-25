@@ -1,7 +1,7 @@
 # Copyright (c) 2026, United Ceres College and contributors
 # For license information, please see license.txt
 
-"""Read-only whitelisted endpoints for Dashboard Studio.
+"""Read-only whitelisted endpoints for UCC Dashboard Studio.
 
 Reads only this app's own result DocTypes (UCC Index Result + Score Breakdown),
 so it is bench-safe. Simple KPI tiles could later move to native Frappe Number
@@ -30,6 +30,9 @@ def _latest_per_index(results):
 		seen[r["index"]] = {
 			"index": r["index"], "value": r["value"], "target": r["target"],
 			"delta": delta, "period": r["period"], "entity": r["entity"],
+			# Finding 4: the exact published formula behind this number, so the
+			# UI can trace back to it instead of guessing a link.
+			"index_version": r["index_version"],
 		}
 	return list(seen.values())
 
@@ -45,13 +48,18 @@ def _trend(results, index):
 def _contribution(results):
 	if not results:
 		return []
-	latest = results[0]["name"]
-	return frappe.get_all(
+	latest = results[0]
+	rows = frappe.get_all(
 		"UCC Score Breakdown",
-		filters={"parent": latest, "parenttype": RESULT},
+		filters={"parent": latest["name"], "parenttype": RESULT},
 		fields=["component_key", "component_label", "normalised_value", "weight", "contribution"],
 		order_by="idx asc",
 	)
+	# Finding 4: component_key is the index node key; pair it with the version it
+	# was calculated from so a trace link points at a real node, not a guess.
+	for r in rows:
+		r["index_version"] = latest["index_version"]
+	return rows
 
 
 def _comparison(results, index):

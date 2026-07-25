@@ -9,7 +9,12 @@ frappe.pages["mapping-studio"].on_page_load = function (wrapper) {
 		title: __("Mapping Studio"),
 		single_column: true,
 	});
-	new MappingStudio(page);
+	wrapper.ucc = new MappingStudio(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["mapping-studio"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const MAPI = "ucc_measurement_outcomes.api.mapping.";
@@ -22,18 +27,39 @@ class MappingStudio {
 		this.selected = null;
 		this._build();
 		frappe.call({ method: MAPI + "mapping_masters", callback: (r) => { if (r.message) this.masters = r.message; } });
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.question) this._pendingQuestion = opts.question;
+		if (opts.survey_version) {
+			this.versionField.set_value(opts.survey_version);   // triggers load()
+		} else {
+			this._applyPendingQuestion();
+		}
+	}
+
+	_applyPendingQuestion() {
+		if (!this._pendingQuestion) return;
+		const name = this._pendingQuestion;
+		this._pendingQuestion = null;
+		if (this.rows.some((r) => r.name === name)) this._select(name);
 	}
 
 	_build() {
 		const $main = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($main);   // finding 1
 		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
 			df: {
 				fieldtype: "Link",
 				options: "UCC Survey Version",
+				// Finding 5: no reqd on a standalone picker (see survey_builder).
 				label: __("Survey Version"),
-				reqd: 1,
 				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
 			},
 			render_input: true,
@@ -46,6 +72,28 @@ class MappingStudio {
 		this.$inspector = $('<div class="ucc-map-inspector"><p class="text-muted" style="font-size:12px">' +
 			__("Select a question to edit its objective and metric mapping.") + "</p></div>").appendTo($grid);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
+		// Finding 2: say what to do instead of a bare "No nodes to show".
+		this.canvas.setEmpty({ message: __("Select a Survey Version above to begin.") });
+		this._renderTrail();
+	}
+
+	// Finding 1: Survey Studio is upstream of this page — make that clickable.
+	_renderTrail() {
+		const segs = [];
+		if (this.version) {
+			segs.push({
+				label: __("Survey Studio") + " · " + this.version,
+				page: "survey-builder",
+				routeOptions: { survey_version: this.version },
+			});
+		}
+		segs.push({ label: __("Mapping Studio") });
+		// Finding 5: same live count as the coverage panel below — one source.
+		const aside = this.coverage ? {
+			label: __("Unmapped"),
+			badge: this.coverage.questions_without_objective.length,
+		} : null;
+		window.UCCTrail.render(this.$trail.get(0), segs, aside);
 	}
 
 	load(version) {
@@ -59,9 +107,14 @@ class MappingStudio {
 				this.selected = null;
 				this._renderTable();
 				this.canvas.setGraph([], []);
+				this.canvas.setEmpty({
+					message: __("Select a question in the table to see its objective, clause and metric lineage."),
+				});
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
 				this._loadCoverage();
+				this._renderTrail();
+				this._applyPendingQuestion();   // finding 2: arrived via deep link
 			},
 		});
 	}
@@ -70,7 +123,13 @@ class MappingStudio {
 		frappe.call({
 			method: MAPI + "mapping_coverage",
 			args: { survey_version: this.version },
-			callback: (r) => { if (r.message) { this.coverage = r.message; this._renderCoverage(); } },
+			callback: (r) => {
+				if (!r.message) return;
+				this.coverage = r.message;
+				this._renderCoverage();
+				this._renderTable();   // finding 3: table flags depend on coverage
+				this._renderTrail();   // finding 5: badge reflects the same count
+			},
 		});
 	}
 
@@ -109,16 +168,38 @@ class MappingStudio {
 			<th>${__("Clause")}</th><th>${__("Metrics")}</th></tr></thead>`;
 		const body = this.rows.map((q, i) => {
 			const metrics = (q.metrics || []).join(", ");
-			return `<tr data-name="${q.name}" style="cursor:pointer">
+			// Finding 2: the metric cell is the hop into Index Studio; the question
+			// text is the hop back to Survey Builder.
+			const metricCell = metrics
+				? (q.metrics || []).map((m) => `<span class="indicator-pill green ucc-map-metric-link" data-metric="${frappe.utils.escape_html(m)}" style="cursor:pointer" title="${__("Open in Index Studio")}">${frappe.utils.escape_html(m)} →</span>`).join(" ")
+				: '<span class="text-muted">—</span>';
+			// Finding 3: the table used to decide "unmapped" from q.objective while
+			// the canvas used the coverage method — two sources for one fact. Both
+			// now read _isUnmapped(), i.e. api.mapping.mapping_coverage.
+			const isGap = this._isUnmapped(q.name);
+			return `<tr data-name="${q.name}" class="${isGap ? "ucc-map-gap" : ""}" style="cursor:pointer">
 				<td>${i + 1}</td>
-				<td>${frappe.utils.escape_html((q.question_text || "").slice(0, 70))}</td>
-				<td>${q.objective ? `<span class="indicator-pill blue">${frappe.utils.escape_html(q.objective)}</span>` : '<span class="text-muted">—</span>'}</td>
+				<td><span class="ucc-map-q-link" style="cursor:pointer;text-decoration:underline dotted" title="${__("Open in Survey Builder")}">${frappe.utils.escape_html((q.question_text || "").slice(0, 70))}</span></td>
+				<td>${isGap ? `<span class="indicator-pill red">${__("unmapped")}</span>` : `<span class="indicator-pill blue">${frappe.utils.escape_html(q.objective || "")}</span>`}</td>
 				<td>${frappe.utils.escape_html(q.primary_clause || "—")}</td>
-				<td>${metrics ? `<span class="indicator-pill green">${frappe.utils.escape_html(metrics)}</span>` : '<span class="text-muted">—</span>'}</td>
+				<td>${metricCell}</td>
 			</tr>`;
 		}).join("");
 		this.$table.html(`<table class="table table-bordered" style="font-size:12px">${head}<tbody>${body}</tbody></table>`);
 		this.$table.find("tbody tr").on("click", (e) => this._select($(e.currentTarget).data("name")));
+		this.$table.find(".ucc-map-metric-link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.route_options = { metric: $(e.currentTarget).data("metric") };
+			frappe.set_route("index-studio");
+		});
+		this.$table.find(".ucc-map-q-link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.route_options = {
+				survey_version: this.version,
+				question: $(e.currentTarget).closest("tr").data("name"),
+			};
+			frappe.set_route("survey-builder");
+		});
 	}
 
 	_select(name) {

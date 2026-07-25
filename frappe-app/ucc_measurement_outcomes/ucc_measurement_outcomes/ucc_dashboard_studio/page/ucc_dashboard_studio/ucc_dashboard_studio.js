@@ -1,14 +1,19 @@
 // Copyright (c) 2026, United Ceres College and contributors
-// Dashboard Studio: shared filter bar + two layouts (Overview, Criterion 7)
+// UCC Dashboard Studio: shared filter bar + two layouts (Overview, Criterion 7)
 // composed from the same widgets, reading this app's Index Results.
 
-frappe.pages["dashboard-studio"].on_page_load = function (wrapper) {
+frappe.pages["ucc-dashboard-studio"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Dashboard Studio"),
+		title: __("UCC Dashboard Studio"),
 		single_column: true,
 	});
-	new DashboardStudio(page);
+	wrapper.ucc = new DashboardStudio(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["ucc-dashboard-studio"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const DAPI = "ucc_measurement_outcomes.api.dashboard.";
@@ -22,7 +27,18 @@ class DashboardStudio {
 		this._injectStyle();
 		this._build();
 		frappe.call({ method: DAPI + "dashboard_filters", callback: (r) => { if (r.message) this._fillFilters(r.message); } });
+		this.applyRouteOptions();
 		this.load();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		["index", "index_version", "period", "entity_type", "entity"].forEach((f) => {
+			if (opts[f]) this.filters[f] = opts[f];
+		});
+		if (Object.keys(opts).length) this.load();
 	}
 
 	_injectStyle() {
@@ -44,6 +60,11 @@ class DashboardStudio {
 		.ucc-db-track span{display:block;height:100%;background:linear-gradient(90deg,#223a6b,#b58a45);border-radius:99px}
 		.ucc-db-weak{border:1px solid #ecd6aa;background:#fff8ea;border-radius:8px;padding:6px 10px;margin:5px 0;font-size:12px;color:#715824}
 		.ucc-db-empty{color:var(--text-muted,#8b95a5);font-size:12px;padding:22px;text-align:center}
+		/* finding 4: trace-back affordance on every number */
+		.ucc-db-trace{font-size:10px;color:var(--text-muted,#8b95a5);cursor:pointer;margin-top:6px;
+			text-decoration:underline dotted}
+		.ucc-db-trace:hover{color:var(--primary,#4a63e7)}
+		.ucc-db-bar .ucc-db-trace{margin-left:5px;margin-top:0;text-decoration:none}
 		.ucc-db-tabs{display:flex;gap:4px;margin:12px 0 0}
 		.ucc-db-tabs button.active{background:var(--navy,#17294d);color:#fff}
 		`;
@@ -55,6 +76,7 @@ class DashboardStudio {
 
 	_build() {
 		const $m = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($m);   // finding 1
 		this.$filter = $('<div></div>').appendTo($m).get(0);
 		this.filterBar = new window.UCCFilterBar(this.$filter, {
 			fields: [
@@ -67,9 +89,29 @@ class DashboardStudio {
 			onChange: (v) => { this.filters = v; this.load(); },
 		});
 		const $tabs = $('<div class="ucc-db-tabs"></div>').appendTo($m);
-		this.$tabOverview = $(`<button class="btn btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
-		this.$tabC7 = $(`<button class="btn btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
+		// Finding 6: these were the only buttons with no variant class, so they
+		// rendered unstyled next to the app's btn-default/btn-primary set.
+		this.$tabOverview = $(`<button class="btn btn-default btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
+		this.$tabC7 = $(`<button class="btn btn-default btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
 		this.$body = $('<div></div>').appendTo($m);
+		this._renderTrail();
+	}
+
+	// Finding 1: the dashboard reads results produced upstream in Index Studio.
+	_renderTrail() {
+		// Finding 2: Index Studio now reads route_options, so this hop is live.
+		const segs = [];
+		if (this.filters.index_version) {
+			segs.push({
+				label: __("Index Studio") + " · " + this.filters.index_version,
+				page: "index-studio",
+				routeOptions: { index_version: this.filters.index_version },
+			});
+		}
+		segs.push({
+			label: __("UCC Dashboard Studio") + (this.filters.index ? " · " + this.filters.index : ""),
+		});
+		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	_fillFilters(d) {
@@ -98,13 +140,31 @@ class DashboardStudio {
 	_render() {
 		if (!this.data) return;
 		this.$body.empty();
+		this._renderTrail();
 		if (this.view === "criterion7") this._renderCriterion7();
 		else this._renderOverview();
+		// Finding 4: widgets render as HTML strings, so bind trace clicks after.
+		this.$body.find(".ucc-db-trace").on("click", (e) => {
+			e.stopPropagation();
+			const $t = $(e.currentTarget);
+			frappe.route_options = { index_version: $t.data("version") };
+			if ($t.data("node")) frappe.route_options.node_key = $t.data("node");
+			frappe.set_route("index-studio");
+		});
+		// Finding 4: dead end — give the user the page that creates this data.
+		if (!this.data.kpis.length) {
+			window.UCCEmptyState.render(this.$body.find(".ucc-db-empty-slot").get(0), {
+				message: __("No index results yet. Calculate an index in Index Studio to populate this dashboard."),
+				actionLabel: __("Open Index Studio"),
+				onAction: () => frappe.set_route("index-studio"),
+			});
+		}
 	}
 
 	// ---- shared widgets ----
 	_kpiCards(kpis) {
-		if (!kpis.length) return `<div class="ucc-db-empty">${__("No index results yet. Calculate an index in Index Studio first.")}</div>`;
+		// Finding 4: empty slot filled by _render() with a message + a way out.
+		if (!kpis.length) return '<div class="ucc-db-empty ucc-db-empty-slot"></div>';
 		return '<div class="ucc-db-kpis">' + kpis.map((k) => {
 			const val = k.value === null ? "—" : Number(k.value).toFixed(2);
 			let note = k.target != null ? __("Target {0}", [k.target]) : "";
@@ -112,7 +172,11 @@ class DashboardStudio {
 				const cls = k.delta >= 0 ? "ucc-db-up" : "ucc-db-down";
 				note += ` <span class="${cls}">${k.delta >= 0 ? "+" : ""}${k.delta}</span>`;
 			}
-			return `<div class="ucc-db-kpi"><div class="l">${frappe.utils.escape_html(k.index)}</div><div class="v">${val}</div><div class="n">${note}</div></div>`;
+			// Finding 4: trace to the exact published formula this number came from.
+			const trace = k.index_version
+				? `<div class="ucc-db-trace" data-version="${frappe.utils.escape_html(k.index_version)}">${__("trace to Index Studio")} →</div>`
+				: "";
+			return `<div class="ucc-db-kpi"><div class="l">${frappe.utils.escape_html(k.index)}</div><div class="v">${val}</div><div class="n">${note}</div>${trace}</div>`;
 		}).join("") + "</div>";
 	}
 
@@ -135,12 +199,22 @@ class DashboardStudio {
 		if (!usable.length) return `<div class="ucc-db-empty">${__("No data")}</div>`;
 		return usable.map((r) => {
 			const pct = Math.max(0, Math.min(100, (r.value / (r.max || 100)) * 100));
-			return `<div class="ucc-db-bar"><span>${frappe.utils.escape_html(String(r.label))}</span><div class="ucc-db-track"><span style="width:${pct}%"></span></div><b>${Number(r.value).toFixed(1)}</b></div>`;
+			// Finding 4: component rows carry the real node key + version.
+			const trace = r.nodeKey && r.indexVersion
+				? `<span class="ucc-db-trace" data-version="${frappe.utils.escape_html(r.indexVersion)}" data-node="${frappe.utils.escape_html(r.nodeKey)}" title="${__("Trace to this node in Index Studio")}">→</span>`
+				: "";
+			return `<div class="ucc-db-bar"><span>${frappe.utils.escape_html(String(r.label))}</span><div class="ucc-db-track"><span style="width:${pct}%"></span></div><b>${Number(r.value).toFixed(1)}${trace}</b></div>`;
 		}).join("");
 	}
 
 	_contribRows() {
-		return (this.data.contribution || []).map((c) => ({ label: c.component_label || c.component_key, value: c.normalised_value, max: 100 }));
+		return (this.data.contribution || []).map((c) => ({
+			label: c.component_label || c.component_key,
+			value: c.normalised_value,
+			max: 100,
+			nodeKey: c.component_key,        // finding 4: real index node key
+			indexVersion: c.index_version,   // finding 4: the version it came from
+		}));
 	}
 	_comparisonRows() {
 		return (this.data.comparison || []).map((c) => ({ label: c.entity, value: c.value, max: 100 }));

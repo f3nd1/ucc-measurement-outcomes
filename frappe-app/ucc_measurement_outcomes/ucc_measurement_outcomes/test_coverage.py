@@ -2,7 +2,12 @@
 Run: `python test_coverage.py`
 """
 
-from coverage import coverage_summary, find_duplicate_questions, normalize_text
+from coverage import (
+	coverage_summary,
+	find_duplicate_questions,
+	is_mappable,
+	normalize_text,
+)
 
 QUESTIONS = [
 	{"name": "Q1", "question_text": "The teacher explained clearly"},
@@ -36,8 +41,36 @@ def test_coverage_summary():
 	assert s["counts"] == {"questions": 4, "questions_mapped": 2, "objectives": 3, "objectives_used": 1}
 
 
+def test_section_headings_are_not_gaps():
+	# A Section Heading is layout: it can never carry an objective, so counting
+	# it as unmapped produced a phantom gap no user could ever clear.
+	assert is_mappable({"name": "Q1", "question_type": "Rating"})
+	assert not is_mappable({"name": "S1", "question_type": "Section Heading"})
+	# A question dict with no type at all stays mappable (older callers).
+	assert is_mappable({"name": "Q9"})
+
+	questions = [
+		{"name": "S1", "question_text": "Your experience", "question_type": "Section Heading"},
+		{"name": "Q1", "question_text": "The teacher explained clearly", "question_type": "Rating"},
+	]
+	s = coverage_summary(questions, [], ["OBJ-A"])
+	assert s["questions_without_objective"] == ["Q1"]   # not S1
+	assert s["questions_without_clause"] == ["Q1"]
+	assert s["counts"]["questions"] == 1                # headings excluded
+
+	# Two identical section headings are not "duplicate questions" either.
+	dupes = coverage_summary(
+		[
+			{"name": "S1", "question_text": "Part A", "question_type": "Section Heading"},
+			{"name": "S2", "question_text": "Part A", "question_type": "Section Heading"},
+		], [], [],
+	)
+	assert dupes["duplicate_questions"] == []
+
+
 if __name__ == "__main__":
 	test_normalize()
 	test_duplicates()
 	test_coverage_summary()
+	test_section_headings_are_not_gaps()
 	print("coverage: all checks passed")

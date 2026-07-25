@@ -15,6 +15,8 @@ app_license = "mit"
 app_include_js = [
 	"/assets/ucc_measurement_outcomes/js/node_canvas.js",
 	"/assets/ucc_measurement_outcomes/js/filter_bar.js",
+	"/assets/ucc_measurement_outcomes/js/empty_state.js",
+	"/assets/ucc_measurement_outcomes/js/trail.js",
 ]
 
 # Later phases register: fixtures (roles/workspaces), scheduler events for index

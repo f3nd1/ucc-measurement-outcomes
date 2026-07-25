@@ -9,7 +9,12 @@ frappe.pages["index-studio"].on_page_load = function (wrapper) {
 		title: __("Index Studio"),
 		single_column: true,
 	});
-	new IndexStudio(page);
+	wrapper.ucc = new IndexStudio(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["index-studio"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const IAPI = "ucc_measurement_outcomes.api.index_studio.";
@@ -25,15 +30,49 @@ class IndexStudio {
 		this.editable = false;
 		this.selectedKey = null;
 		this._build();
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.node_key) this._pendingNodeKey = opts.node_key;
+		// ponytail: a metric arriving from Mapping Studio is held until a version
+		// is loaded, then its node is selected. Resolving metric -> version
+		// server-side would make this one click instead of two; see the note in
+		// the session report before adding a lookup method for it.
+		if (opts.metric) this._pendingMetric = opts.metric;
+		if (opts.index_version) {
+			this.versionField.set_value(opts.index_version);   // triggers load()
+		} else {
+			this._applyPendingSelection();
+		}
+	}
+
+	_applyPendingSelection() {
+		if (!this.nodes || !this.nodes.length) return;
+		let node = null;
+		if (this._pendingNodeKey) {
+			node = this.nodes.find((n) => n.node_key === this._pendingNodeKey);
+			this._pendingNodeKey = null;
+		}
+		if (!node && this._pendingMetric) {
+			node = this.nodes.find((n) => n.source_metric === this._pendingMetric);
+			if (node) this._pendingMetric = null;   // keep it until a version matches
+		}
+		if (node) this._select(node.node_key);
 	}
 
 	_build() {
 		const $main = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($main);   // finding 1
 		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
 			df: {
-				fieldtype: "Link", options: "UCC Index Version", label: __("Index Version"), reqd: 1,
+				// Finding 5: no reqd on a standalone picker (see survey_builder).
+				fieldtype: "Link", options: "UCC Index Version", label: __("Index Version"),
 				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
 			},
 			render_input: true,
@@ -60,6 +99,18 @@ class IndexStudio {
 			onSelect: (n) => this._select(n.id),
 			onMove: (n) => this._onMove(n),
 		});
+		// Finding 2: say what to do instead of a bare "No nodes to show".
+		this.canvas.setEmpty({
+			message: __("Select an Index Version above, or create one from a template."),
+		});
+		this._renderTrail();
+	}
+
+	// Finding 1: show which index version this canvas belongs to.
+	_renderTrail() {
+		const segs = [{ label: __("Index Studio") }];
+		if (this.version) segs.push({ label: this.version });
+		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	_createFromTemplate() {
@@ -83,6 +134,7 @@ class IndexStudio {
 			callback: (r) => {
 				if (!r.message) return;
 				this.version = version;
+				this.indexCode = r.message.index;
 				this.nodes = r.message.nodes || [];
 				this.editable = !!r.message.editable;
 				this.selectedKey = null;
@@ -90,6 +142,8 @@ class IndexStudio {
 				this.$badge.text(this.editable ? "" : __("Published (read-only)"));
 				this._renderCanvas();
 				this._renderInspector();
+				this._renderTrail();
+				this._applyPendingSelection();   // finding 2: arrived via deep link
 			},
 		});
 	}
@@ -106,6 +160,29 @@ class IndexStudio {
 		}));
 		const edges = this.nodes.filter((n) => n.parent_key).map((n) => [n.node_key, n.parent_key]);
 		this.canvas.setGraph(cnodes, edges);
+		// Finding 2: a blank draft had no way to create a first node.
+		if (!cnodes.length) {
+			this.canvas.setEmpty({
+				message: this.editable
+					? __("This index version has no nodes yet.")
+					: __("This published version has no nodes."),
+				actionLabel: this.editable ? __("+ Add root node") : null,
+				onAction: this.editable ? () => this._addRootNode() : null,
+			});
+		}
+	}
+
+	_addRootNode() {
+		// The root is the index node itself; dimensions/metrics hang off it.
+		this.nodes.push({
+			node_key: "root", node_type: "Index",
+			label: this.indexCode || __("Index"),
+			parent_key: null, weight: 0, pos_x: 60, pos_y: 60,
+		});
+		this._save(() => {
+			this._renderCanvas();
+			frappe.show_alert({ message: __("Root node added"), indicator: "green" });
+		});
 	}
 
 	_onMove(cnode) {

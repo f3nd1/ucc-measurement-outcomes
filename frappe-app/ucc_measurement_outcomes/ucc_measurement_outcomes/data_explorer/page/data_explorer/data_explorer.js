@@ -9,7 +9,12 @@ frappe.pages["data-explorer"].on_page_load = function (wrapper) {
 		title: __("Data Explorer"),
 		single_column: true,
 	});
-	new DataExplorer(page);
+	wrapper.ucc = new DataExplorer(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["data-explorer"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const XAPI = "ucc_measurement_outcomes.api.explorer.";
@@ -27,12 +32,34 @@ class DataExplorer {
 				this.catalogue = (r.message && r.message.datasets) || {};
 				this.pending = (r.message && r.message.pending) || [];
 				this._initControls();
+				this._applyPendingDataset();   // finding 2: arrived via deep link
 			},
 		});
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.dataset) {
+			this._pendingDataset = opts.dataset;
+			this._applyPendingDataset();
+		}
+	}
+
+	_applyPendingDataset() {
+		if (!this._pendingDataset || !this.dsField) return;
+		const name = this._pendingDataset;
+		if (!Object.keys(this.catalogue).includes(name)) return;   // not an approved dataset
+		this._pendingDataset = null;
+		this.dsField.val(name).trigger("change");
+		this.run();
 	}
 
 	_build() {
 		const $m = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($m);   // finding 1
 		this.$controls = $('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>').appendTo($m);
 		const $bar = $('<div style="display:flex;gap:8px;margin-top:10px"></div>').appendTo($m);
 		$(`<button class="btn btn-primary btn-sm">${__("Run")}</button>`).appendTo($bar).on("click", () => this.run());
@@ -40,6 +67,14 @@ class DataExplorer {
 		$(`<button class="btn btn-default btn-sm">${__("Export JSON")}</button>`).appendTo($bar).on("click", () => this.exportAs("json"));
 		this.$note = $('<div class="text-muted" style="font-size:11px;margin-top:8px"></div>').appendTo($m);
 		this.$out = $('<div style="margin-top:14px"></div>').appendTo($m);
+		this._renderTrail();
+	}
+
+	// Finding 1: show which approved dataset is being queried.
+	_renderTrail() {
+		window.UCCTrail.render(this.$trail.get(0), [{
+			label: __("Data Explorer") + (this.sel.dataset ? " · " + this.sel.dataset : ""),
+		}]);
 	}
 
 	_initControls() {
@@ -76,6 +111,7 @@ class DataExplorer {
 
 	_onDataset(name) {
 		this.sel.dataset = name;
+		this._renderTrail();
 		const spec = this.catalogue[name] || { dimensions: [], measures: [] };
 		this._fill(this.measureField, spec.measures, false);
 		this._fill(this.rowField, spec.dimensions, true);

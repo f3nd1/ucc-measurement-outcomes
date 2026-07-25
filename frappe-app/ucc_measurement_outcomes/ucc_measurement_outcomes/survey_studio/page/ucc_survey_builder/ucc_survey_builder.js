@@ -3,13 +3,20 @@
 // editorial conveniences: bulk paste, multi-select bulk actions, undo/redo of
 // structural actions, and desktop/mobile preview. Persists via whitelisted API.
 
-frappe.pages["survey-builder"].on_page_load = function (wrapper) {
+frappe.pages["ucc-survey-builder"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Survey Builder"),
+		title: __("UCC Survey Builder"),
 		single_column: true,
 	});
-	new SurveyBuilder(page);
+	wrapper.ucc = new SurveyBuilder(page);
+};
+
+// Finding 2: Desk pages are constructed once, so a deep link arriving on a
+// second visit would be ignored if route_options were only read in the
+// constructor. on_page_show runs on every visit.
+frappe.pages["ucc-survey-builder"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const QUESTION_TYPES = [
@@ -39,9 +46,27 @@ class SurveyBuilder {
 		this.future = [];
 		this._injectStyle();
 		this._buildLayout();
-		const preset = (frappe.route_options && frappe.route_options.survey_version) || null;
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: single entry point for deep links. Idempotent — it clears
+	// route_options, so the extra call from on_page_show is a harmless no-op.
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
 		frappe.route_options = {};
-		if (preset) this.versionField.set_value(preset);
+		if (opts.question) this._pendingQuestion = opts.question;
+		if (opts.survey_version) {
+			this.versionField.set_value(opts.survey_version);   // triggers load()
+		} else {
+			this._applyPendingQuestion();
+		}
+	}
+
+	_applyPendingQuestion() {
+		if (!this._pendingQuestion) return;
+		const q = this.questions.find((x) => x.name === this._pendingQuestion);
+		this._pendingQuestion = null;
+		if (q) this._select(q.name);
 	}
 
 	_injectStyle() {
@@ -68,6 +93,11 @@ class SurveyBuilder {
 		.ucc-sb-tag{display:inline-block;border:1px solid var(--border-color,#e2e6ea);border-radius:20px;padding:1px 7px;margin-right:5px;font-size:10px}
 		.ucc-sb-banner{background:#fff4df;border:1px solid #ecd6aa;color:#715824;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:10px}
 		.ucc-sb-req{color:var(--red,#b94848)}
+		/* finding 3: same red-flag language the Mapping canvas uses for a gap */
+		.ucc-sb-q.gap{border-color:#e0b4b4;background:#fdf6f6}
+		.ucc-sb-maplink{margin-left:6px;font-size:10px;cursor:pointer;color:var(--text-muted,#8b95a5);text-decoration:underline dotted}
+		.ucc-sb-maplink:hover{color:var(--primary,#4a63e7)}
+		.ucc-sb-maplink.gap{color:var(--red,#b94848)}
 		.ucc-sb-iconbtn{border:0;background:transparent;cursor:pointer;color:var(--text-muted,#8b95a5);padding:3px 5px;border-radius:6px}
 		.ucc-sb-iconbtn:hover{background:var(--bg-light-gray,#eef2f7)}
 		.ucc-sb-modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-start;justify-content:center;z-index:1050;padding:24px;overflow:auto}
@@ -87,11 +117,15 @@ class SurveyBuilder {
 
 	_buildLayout() {
 		const $main = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($main);   // finding 1
 		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
 			df: {
-				fieldtype: "Link", options: "UCC Survey Version", label: __("Survey Version"), reqd: 1,
+				// Finding 5: no reqd here — this is a standalone picker, not a form
+				// field in a save cycle, and reqd paints an error border on an
+				// untouched empty page. The change handler already guards on `v`.
+				fieldtype: "Link", options: "UCC Survey Version", label: __("Survey Version"),
 				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
 			},
 			render_input: true,
@@ -109,7 +143,33 @@ class SurveyBuilder {
 		this.$inspector = $(`<div class="ucc-sb-panel"><h5>${__("Inspector")}</h5><div class="ucc-sb-body"></div></div>`).appendTo($grid).find(".ucc-sb-body");
 		this._renderPalette();
 		this._renderInspector();
+		// Finding 1: before a version is picked, load() never runs, so the list
+		// had no drop handlers and no message — dragging silently did nothing.
+		// Say why instead of looking broken.
+		window.UCCEmptyState.render(this.$list.get(0), {
+			message: __("Select a Survey Version above to start building."),
+		});
+		this._renderTrail();
 		this._modal = $('<div class="ucc-sb-modal"><div class="ucc-sb-sheet"></div></div>').appendTo(document.body);
+	}
+
+	// Finding 1: show where this page sits in the chain.
+	_renderTrail() {
+		const segs = [{ label: __("Survey Studio") }];
+		if (this.version) {
+			segs.push({
+				label: `${this.version.survey_title || this.version.survey} · V${this.version.version_number}`,
+			});
+		}
+		// Finding 5: live unmapped count, reusing the coverage data already
+		// loaded for the question flags — not a second count.
+		const aside = this.unmapped && this.version ? {
+			label: __("Unmapped"),
+			badge: this.unmapped.size,
+			page: "mapping-studio",
+			routeOptions: { survey_version: this.version.name },
+		} : null;
+		window.UCCTrail.render(this.$trail.get(0), segs, aside);
 	}
 
 	_renderPalette() {
@@ -137,11 +197,30 @@ class SurveyBuilder {
 			this.history = [];
 			this.future = [];
 			this._updateUndo();
-			this.page.set_title(`${__("Survey Builder")} — ${frappe.utils.escape_html(this.version.survey_title || "")} v${frappe.utils.escape_html(this.version.version_number || "")}`);
+			this.page.set_title(`${__("UCC Survey Builder")} — ${frappe.utils.escape_html(this.version.survey_title || "")} v${frappe.utils.escape_html(this.version.version_number || "")}`);
 			this.$banner.toggle(!this.editable).text(__("This version is {0} and cannot be edited.", [this.version.status]));
 			this._renderQuestions();
 			this._renderInspector();
 			this._renderBulkBar();
+			this._renderTrail();
+			this._applyPendingQuestion();   // finding 2: arrived via deep link
+			this._loadCoverage();           // finding 3: mapping status
+		});
+	}
+
+	// Finding 3: mapping status comes from the SAME whitelisted method Mapping
+	// Studio uses (api.mapping.mapping_coverage) — one source of truth, not a
+	// second implementation of "is this question mapped".
+	_loadCoverage() {
+		frappe.call({
+			method: "ucc_measurement_outcomes.api.mapping.mapping_coverage",
+			args: { survey_version: this.version.name },
+			callback: (r) => {
+				if (!r.message) return;
+				this.unmapped = new Set(r.message.questions_without_objective || []);
+				this._renderQuestions();
+				this._renderTrail();   // finding 5: badge reflects the same count
+			},
 		});
 	}
 
@@ -151,25 +230,44 @@ class SurveyBuilder {
 		this.$list.empty();
 		this._wireListDrop();
 		if (!this.questions.length) {
-			this.$list.append(`<div class="ucc-sb-empty">${__("Drag a question type here")}</div>`);
+			// Finding 1: drag-to-insert is wired here, but it isn't discoverable and
+			// gives no feedback if it fails. Offer an explicit button as well.
+			const $drop = $(`<div class="ucc-sb-empty"></div>`).appendTo(this.$list);
+			window.UCCEmptyState.render($drop.get(0), {
+				message: __("Drag a question type here, or:"),
+				actionLabel: this.editable ? __("+ Add your first question") : null,
+				onAction: this.editable ? () => this._addQuestion("Short Text", 0) : null,
+			});
 			return;
 		}
 		this.questions.forEach((q, i) => {
 			const tags = [q.question_type, q.is_required ? __("Required") : null].filter(Boolean)
 				.map((t) => `<span class="ucc-sb-tag">${frappe.utils.escape_html(t)}</span>`).join("");
+			// Finding 3: same fact, same flag as Mapping Studio's table and canvas.
+			// Also finding 2: this label is the hop into Mapping Studio.
+			const isGap = this.unmapped && this.unmapped.has(q.name);
+			const mapLink = !this.unmapped ? ""
+				: isGap
+					? `<span class="ucc-sb-maplink gap" data-q="${q.name}">${__("unmapped — fix in Mapping Studio")} →</span>`
+					: `<span class="ucc-sb-maplink" data-q="${q.name}">${__("mapped")} →</span>`;
 			const $q = $(`
-				<div class="ucc-sb-q ${this.selected === q.name ? "selected" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
+				<div class="ucc-sb-q ${this.selected === q.name ? "selected" : ""} ${isGap ? "gap" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
 					<input type="checkbox" class="ucc-sb-check" ${this.selection.has(q.name) ? "checked" : ""}>
 					<div class="ucc-sb-handle">⋮⋮</div>
 					<div class="ucc-sb-main">
 						<div class="ucc-sb-qtitle">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</div>
-						<div class="ucc-sb-qmeta">${tags}</div>
+						<div class="ucc-sb-qmeta">${tags}${mapLink}</div>
 					</div>
 					<div class="ucc-sb-actions">
 						<button class="ucc-sb-iconbtn" data-act="dup" title="${__("Duplicate")}">⧉</button>
 						<button class="ucc-sb-iconbtn" data-act="del" title="${__("Delete")}">⌫</button>
 					</div>
 				</div>`);
+			$q.find(".ucc-sb-maplink").on("click", (e) => {
+				e.stopPropagation();
+				frappe.route_options = { survey_version: this.version.name, question: q.name };
+				frappe.set_route("mapping-studio");
+			});
 			$q.find(".ucc-sb-check").on("change", (e) => { e.target.checked ? this.selection.add(q.name) : this.selection.delete(q.name); this._renderBulkBar(); });
 			$q.find(".ucc-sb-main").on("click", () => this._select(q.name));
 			$q.find('[data-act="dup"]').on("click", (e) => { e.stopPropagation(); this._duplicate(q.name); });
@@ -208,7 +306,12 @@ class SurveyBuilder {
 		this.$list.off("dragover drop");
 		this.$list.on("dragover", (e) => e.preventDefault());
 		this.$list.on("drop", (e) => {
-			if (e.target !== this.$list.get(0)) return;
+			// Finding 1 (root cause): the strict target check swallowed drops onto
+			// the empty-state placeholder — i.e. exactly when the list is empty and
+			// the user most needs drag-to-insert to work. Accept those too.
+			const onList = e.target === this.$list.get(0);
+			const onPlaceholder = !this.questions.length && $(e.target).closest(".ucc-sb-empty").length > 0;
+			if (!onList && !onPlaceholder) return;
 			const newType = e.originalEvent.dataTransfer.getData("newType");
 			if (newType) this._addQuestion(newType, this.questions.length);
 		});
@@ -367,7 +470,7 @@ class SurveyBuilder {
 
 	_sheet(mobile, html) {
 		const $s = this._modal.find(".ucc-sb-sheet").toggleClass("mobile", !!mobile);
-		$s.html(`<div class="ucc-sb-sheet-head"><b>${__("Survey Builder")}</b><button class="ucc-sb-iconbtn ucc-sb-close">✕</button></div><div class="ucc-sb-sheet-body">${html}</div>`);
+		$s.html(`<div class="ucc-sb-sheet-head"><b>${__("UCC Survey Builder")}</b><button class="ucc-sb-iconbtn ucc-sb-close">✕</button></div><div class="ucc-sb-sheet-body">${html}</div>`);
 		this._modal.addClass("show");
 		this._modal.find(".ucc-sb-close").on("click", () => this._closeSheet());
 	}

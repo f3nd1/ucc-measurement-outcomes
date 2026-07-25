@@ -1,5 +1,5 @@
 Survey Studio
 Mapping Studio
 Index Studio
-Dashboard Studio
+UCC Dashboard Studio
 Data Explorer

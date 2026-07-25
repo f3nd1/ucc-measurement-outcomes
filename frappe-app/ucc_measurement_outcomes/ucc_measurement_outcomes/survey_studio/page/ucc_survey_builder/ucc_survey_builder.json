@@ -7,9 +7,9 @@
  "modified": "2026-07-24 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Survey Studio",
- "name": "survey-builder",
+ "name": "ucc-survey-builder",
  "owner": "Administrator",
- "page_name": "survey-builder",
+ "page_name": "ucc-survey-builder",
  "roles": [
   {
    "role": "System Manager"
@@ -18,5 +18,5 @@
  "script": null,
  "standard": "Yes",
  "system_page": 0,
- "title": "Survey Builder"
+ "title": "UCC Survey Builder"
 }

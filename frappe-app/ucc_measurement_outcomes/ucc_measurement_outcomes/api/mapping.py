@@ -113,7 +113,8 @@ def mapping_coverage(survey_version):
 	_require(survey_version, "read")
 	questions = frappe.get_all(
 		QUESTION, filters={"survey_version": survey_version},
-		fields=["name", "question_text"],
+		# question_type lets coverage skip layout-only rows (Section Heading).
+		fields=["name", "question_text", "question_type"],
 	)
 	mappings = frappe.get_all(
 		MAPPING, filters={"survey_version": survey_version},
