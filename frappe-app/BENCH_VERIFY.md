@@ -10,6 +10,31 @@ grep -rn "TODO: bench-verify" frappe-app/
 
 The bench-connected (OrbStack) session must resolve each before install/migrate.
 
+## Asset caching — resolved, but know the rule
+
+`/assets/<app>/` is served with `Cache-Control: max-age=31536000` (one year).
+That is **correct Frappe behaviour**, not a misconfiguration to "fix" in nginx:
+core assets are safe to cache that hard because esbuild gives them
+content-hashed filenames, so any change yields a new URL.
+
+Referencing plain files in `app_include_js` opts out of that hashing and pins
+them at fixed URLs for a year. This caused a real, repeating bug: a browser
+holding a pre-`setEmpty()` copy of `node_canvas.js` made `canvas.setEmpty()` a
+TypeError, killing Mapping Studio and Index Studio mid-construction, while
+pages whose filenames had changed worked fine — and no amount of `bench build`,
+`clear-cache` or `restart` could shift it, because the server was never the
+problem.
+
+**Rule:** shared front-end components go in
+`public/js/ucc_measurement_outcomes.bundle.js` (esbuild only bundles
+`*.bundle.js`). Never add another absolute `/assets/...` path to
+`app_include_js`. A `bench build` whose `File | Size` table is **empty** means
+nothing was bundled — treat that as a red flag, not a normal result.
+
+Page JS (`<module>/page/<page>/<page>.js`) is unaffected: Frappe reads it
+server-side and ships it in the `getpage` response, so `bench --site … clear-cache`
+is enough for those.
+
 ## Pass 1 self-review (deep review session) — claim verification
 
 Independent re-verification of the prior sessions' claims. Outcome per claim:

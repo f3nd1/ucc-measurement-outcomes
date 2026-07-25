@@ -12,12 +12,11 @@ app_license = "mit"
 # keys and controller hooks below follow v15 conventions.
 
 # Shared front-end components reused across Studio pages.
-app_include_js = [
-	"/assets/ucc_measurement_outcomes/js/node_canvas.js",
-	"/assets/ucc_measurement_outcomes/js/filter_bar.js",
-	"/assets/ucc_measurement_outcomes/js/empty_state.js",
-	"/assets/ucc_measurement_outcomes/js/trail.js",
-]
+# Shared front-end components, loaded as ONE esbuild bundle so the filename
+# carries a content hash (…bundle.<hash>.js) and the one-year asset cache can
+# never serve a stale copy. Listing the raw files here instead pinned them at
+# fixed urls for a year — see public/js/ucc_measurement_outcomes.bundle.js.
+app_include_js = ["ucc_measurement_outcomes.bundle.js"]
 
 # Later phases register: fixtures (roles/workspaces), scheduler events for index
 # calculation jobs, and website routes for the public survey endpoint.
