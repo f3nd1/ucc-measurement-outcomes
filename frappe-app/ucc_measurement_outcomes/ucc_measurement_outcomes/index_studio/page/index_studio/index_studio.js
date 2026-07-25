@@ -103,11 +103,11 @@ class IndexStudio {
 		// time, so the button cannot depend on the select's state at that instant.
 		this.templateCode = "";
 		this.$template.on("change", (e) => { this.templateCode = e.target.value || ""; });
-		this.$create = $(`<button class="btn btn-default btn-sm">${__("Create")}</button>`).appendTo($bar);
+		this.$create = $(`<button class="btn btn-primary btn-sm">${__("Create")}</button>`).appendTo($bar);
 		this.$create.on("click", () => this._createFromTemplate());
 		$('<span style="width:10px"></span>').appendTo($bar);
 		this.$validate = $(`<button class="btn btn-default btn-sm">${__("Validate")}</button>`).appendTo($bar).on("click", () => this._validate());
-		this.$publish = $(`<button class="btn btn-primary btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
+		this.$publish = $(`<button class="btn btn-danger btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
 		this.$badge = $('<span style="margin-left:6px;font-size:12px"></span>').appendTo($bar);
 		frappe.call({
 			method: IAPI + "list_index_templates",
@@ -136,7 +136,7 @@ class IndexStudio {
 		});
 		// Finding 2: say what to do instead of a bare "No nodes to show".
 		this.canvas.setEmpty({
-			message: __("Select an Index Version above, or create one from a template."),
+			message: __("Start from a template — SEQI is the usual starting point for student experience."),
 		});
 		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
