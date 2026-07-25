@@ -88,7 +88,12 @@ class MappingStudio {
 			});
 		}
 		segs.push({ label: __("Mapping Studio") });
-		window.UCCTrail.render(this.$trail.get(0), segs);
+		// Finding 5: same live count as the coverage panel below — one source.
+		const aside = this.coverage ? {
+			label: __("Unmapped"),
+			badge: this.coverage.questions_without_objective.length,
+		} : null;
+		window.UCCTrail.render(this.$trail.get(0), segs, aside);
 	}
 
 	load(version) {
@@ -123,6 +128,7 @@ class MappingStudio {
 				this.coverage = r.message;
 				this._renderCoverage();
 				this._renderTable();   // finding 3: table flags depend on coverage
+				this._renderTrail();   // finding 5: badge reflects the same count
 			},
 		});
 	}

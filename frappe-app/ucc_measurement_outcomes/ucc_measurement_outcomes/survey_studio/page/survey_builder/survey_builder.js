@@ -161,7 +161,15 @@ class SurveyBuilder {
 				label: `${this.version.survey_title || this.version.survey} · V${this.version.version_number}`,
 			});
 		}
-		window.UCCTrail.render(this.$trail.get(0), segs);
+		// Finding 5: live unmapped count, reusing the coverage data already
+		// loaded for the question flags — not a second count.
+		const aside = this.unmapped && this.version ? {
+			label: __("Unmapped"),
+			badge: this.unmapped.size,
+			page: "mapping-studio",
+			routeOptions: { survey_version: this.version.name },
+		} : null;
+		window.UCCTrail.render(this.$trail.get(0), segs, aside);
 	}
 
 	_renderPalette() {
@@ -211,6 +219,7 @@ class SurveyBuilder {
 				if (!r.message) return;
 				this.unmapped = new Set(r.message.questions_without_objective || []);
 				this._renderQuestions();
+				this._renderTrail();   // finding 5: badge reflects the same count
 			},
 		});
 	}
