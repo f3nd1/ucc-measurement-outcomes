@@ -83,13 +83,13 @@ class TestChainIntegration(FrappeTestCase):
 
 		# 6) Index definition + version + nodes, published.
 		frappe.get_doc({
-			"doctype": "UCC Index Definition", "index_code": "SEQI",
-			"index_name": "Student Experience Quality Index", "target": 75,
+			"doctype": "UCC Index Definition", "index_code": "CHAIN_TEST_IDX",
+			"index_name": "Chain Test Index", "target": 75,
 		}).insert()
 		iv = frappe.get_doc({
-			"doctype": "UCC Index Version", "index": "SEQI", "version_number": "01", "status": "Draft",
+			"doctype": "UCC Index Version", "index": "CHAIN_TEST_IDX", "version_number": "01", "status": "Draft",
 			"nodes": [
-				{"node_key": "seqi", "node_type": "Index", "label": "SEQI"},
+				{"node_key": "seqi", "node_type": "Index", "label": "Chain Test Index"},
 				{"node_key": "tc", "node_type": "Metric", "label": "Teaching Clarity",
 				 "parent_key": "seqi", "weight": 100, "source_metric": "TEACHING_CLARITY"},
 			],
@@ -106,13 +106,13 @@ class TestChainIntegration(FrappeTestCase):
 		self.assertEqual(leaf.normalised_value, 75)
 
 		# 8) Dashboard sees the KPI.
-		dash = get_dashboard_data(index="SEQI")
+		dash = get_dashboard_data(index="CHAIN_TEST_IDX")
 		self.assertTrue(any(k["value"] == 75 for k in dash["kpis"]))
 
 		# 9) Data Explorer pivots the same result (approved catalogue, no SQL).
 		report = run_analysis("Index Results", "Average Value", "index", None, None)
 		cells = {r["row"]: r["cells"] for r in report["table"]["rows"]}
-		self.assertEqual(cells["SEQI"]["Total"], 75)
+		self.assertEqual(cells["CHAIN_TEST_IDX"]["Total"], 75)
 
 
 class TestFrozenVersionAdversarial(FrappeTestCase):
@@ -159,12 +159,19 @@ class TestFrozenVersionAdversarial(FrappeTestCase):
 		frappe.get_doc({
 			"doctype": "UCC Index Definition", "index_code": "ADVIDX", "index_name": "Adv",
 		}).insert()
+		# source_metric is a Link — the placeholder "X" never existed, so this
+		# failed on link validation before it could test anything. Create it.
+		if not frappe.db.exists("UCC Metric Definition", "ADV_METRIC"):
+			frappe.get_doc({
+				"doctype": "UCC Metric Definition", "metric_code": "ADV_METRIC",
+				"metric_name": "Adversarial Metric",
+			}).insert()
 		iv = frappe.get_doc({
 			"doctype": "UCC Index Version", "index": "ADVIDX", "version_number": "01",
 			"status": "Draft", "nodes": [
 				{"node_key": "root", "node_type": "Index", "label": "Adv"},
 				{"node_key": "m", "node_type": "Metric", "label": "M",
-				 "parent_key": "root", "weight": 100, "source_metric": "X"},
+				 "parent_key": "root", "weight": 100, "source_metric": "ADV_METRIC"},
 			],
 		}).insert()
 		iv.status = "Published"
@@ -194,6 +201,24 @@ class TestGuestAndExplorerGuards(FrappeTestCase):
 			"doctype": "UCC Survey Campaign", "campaign_name": "Guard",
 			"survey_version": version.name, "status": "Open",
 		}).insert()
+
+	def test_public_endpoints_are_rate_limited(self):
+		"""Both guest endpoints must carry the rate_limit decorator.
+
+		This is a STRUCTURAL check only. It cannot prove the limit fires:
+		frappe's rate_limit wrapper opens with `if not frappe.request: return
+		fun(...)`, so it is a no-op for in-process calls like this one. The
+		behavioural check is the curl loop in BENCH_VERIFY.md ("Rate limiting").
+		What this does catch is the decorator being dropped or renamed again —
+		which is exactly how it went missing on v15.83.0.
+		"""
+		from ucc_measurement_outcomes.api import public
+
+		for fn in (public.submit_survey, public.get_public_survey):
+			self.assertTrue(
+				hasattr(fn, "__wrapped__"),
+				f"{fn.__name__} is not wrapped — the rate_limit decorator is missing",
+			)
 
 	def test_double_submit_same_respondent_rejected(self):
 		from ucc_measurement_outcomes.api.public import submit_survey
@@ -294,9 +319,18 @@ class TestBuilderOrdering(FrappeTestCase):
 		self.assertEqual(self._ordered_texts(version), ["Q0", "Q0 (Copy)", "Q1", "Q2"])
 
 	def test_template_version_number_survives_deletion(self):
+		"""Creating after a deletion must not collide with an existing version.
+
+		Asserts the invariant, not an absolute name: the old `endswith("-V03")`
+		check silently assumed the site had zero SEQI versions, so it failed on
+		any site where one had been created by hand — reporting a test-data
+		collision as an app bug.
+		"""
 		from ucc_measurement_outcomes.api.index_studio import create_index_from_template
 		v1 = create_index_from_template("SEQI")
-		create_index_from_template("SEQI")           # V02
-		frappe.delete_doc("UCC Index Version", v1)   # delete V01, count now 1
-		v3 = create_index_from_template("SEQI")      # used to crash: DuplicateEntry on V02
-		self.assertTrue(v3.endswith("-V03"))
+		v2 = create_index_from_template("SEQI")
+		frappe.delete_doc("UCC Index Version", v1)   # the case that used to crash
+		v3 = create_index_from_template("SEQI")
+		self.assertNotIn(v3, {v1, v2})               # a genuinely new name
+		self.assertTrue(frappe.db.exists("UCC Index Version", v3))
+		self.assertTrue(v3.startswith("SEQI-V"))

@@ -10,6 +10,38 @@ grep -rn "TODO: bench-verify" frappe-app/
 
 The bench-connected (OrbStack) session must resolve each before install/migrate.
 
+## Rate limiting on the guest endpoint — MUST be verified over HTTP
+
+The first real bench test run (Frappe **v15.83.0**) found `api/public.py`
+decorated with `@frappe.rate_limit(...)`. **That function does not exist** —
+the decorator lives at `frappe.rate_limiter.rate_limit`. The module raised
+`AttributeError` at import, which took four tests with it. Now fixed:
+`from frappe.rate_limiter import rate_limit`, imported directly with **no
+try/except fallback** — a module that imports cleanly while silently dropping
+the protection on the only guest-writable endpoint is worse than one that
+refuses to load.
+
+**Unit tests cannot prove this works.** Frappe's wrapper begins with
+`if not frappe.request: return fun(*args, **kwargs)`, so it no-ops for
+in-process calls (bench console, `run-tests`). `test_public_endpoints_are_rate_limited`
+only asserts the decorator is *attached*.
+
+Prove it behaviourally, logged out, against a real campaign token:
+
+```bash
+TOKEN=<a campaign public_token>
+for i in $(seq 1 25); do
+  printf "%2d -> " "$i"
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    "http://ucc.local/api/method/ucc_measurement_outcomes.api.public.get_public_survey?token=$TOKEN"
+done
+```
+
+Expect `200` for the first 20, then **`429`**. If it stays `200` for all 25,
+rate limiting is NOT active — do not expose the public form until it is.
+Note the limit keys on `token`, so each campaign gets its own budget; confirm
+20/hour suits real respondent traffic before go-live.
+
 ## Asset caching — resolved, but know the rule
 
 `/assets/<app>/` is served with `Cache-Control: max-age=31536000` (one year).

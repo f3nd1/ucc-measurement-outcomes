@@ -14,16 +14,31 @@ import json
 import frappe
 from frappe import _
 
+# Frappe exposes the decorator at frappe.rate_limiter.rate_limit, NOT as
+# frappe.rate_limit — the latter never existed and raised AttributeError at
+# import time on v15.83.0, taking the whole module (and its tests) with it.
+#
+# Deliberately imported directly, with no try/except fallback: this is the rate
+# limit on the only guest-reachable write path, and a module that imports
+# cleanly while silently dropping its protection is far worse than one that
+# refuses to load.
+from frappe.rate_limiter import rate_limit
+
 from ucc_measurement_outcomes.submission_utils import has_value, to_text
 
 CAMPAIGN = "UCC Survey Campaign"
 QUESTION = "UCC Survey Question"
 VERSION = "UCC Survey Version"
 
-# TODO: bench-verify - rate-limit values are a guess. Confirm acceptable limits
-# with UCC (per-token and per-IP) against real traffic + the Frappe version's
-# frappe.rate_limit signature.
+# Decorator location/signature now confirmed against Frappe v15.83.0.
+# TODO: bench-verify - the VALUES remain a guess: agree acceptable limits with
+# UCC (20 submissions per token per hour) against expected real traffic.
 RATE_LIMIT = {"limit": 20, "seconds": 3600}
+
+# IMPORTANT for verification: frappe's rate_limit wrapper begins with
+# `if not frappe.request: return fun(...)`, so it is a no-op when called
+# in-process (bench console, unit tests). It can only be proven over real HTTP.
+# See BENCH_VERIFY.md "Rate limiting" for the curl check that actually exercises it.
 
 
 def _get_open_campaign(token, for_update=False):
@@ -93,14 +108,14 @@ def public_survey_payload(token):
 
 
 @frappe.whitelist(allow_guest=True)
-@frappe.rate_limit(key="token", **RATE_LIMIT)
+@rate_limit(key="token", **RATE_LIMIT)
 def get_public_survey(token):
 	"""Return published questions for rendering the public form. Read-only."""
 	return public_survey_payload(token)
 
 
 @frappe.whitelist(allow_guest=True)
-@frappe.rate_limit(key="token", **RATE_LIMIT)
+@rate_limit(key="token", **RATE_LIMIT)
 def submit_survey(token, answers, respondent_key=None):
 	"""Validate and atomically persist one Submission + one Answer per question.
 
