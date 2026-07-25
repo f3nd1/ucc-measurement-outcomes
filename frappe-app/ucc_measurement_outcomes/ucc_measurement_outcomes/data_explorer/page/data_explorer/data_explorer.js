@@ -9,7 +9,16 @@ frappe.pages["data-explorer"].on_page_load = function (wrapper) {
 		title: __("Data Explorer"),
 		single_column: true,
 	});
-	wrapper.ucc = new DataExplorer(page);
+	// Frappe can swallow exceptions thrown from on_page_load, which hides a
+	// half-built page behind a clean console. Surface it loudly instead.
+	try {
+		wrapper.ucc = new DataExplorer(page);
+	} catch (e) {
+		console.error("[UCC] data-explorer failed to initialise:", e);
+		frappe.msgprint({title: __("Page failed to load"), indicator: "red",
+			message: __("data-explorer could not initialise: ") + (e && e.message ? e.message : e)});
+		throw e;
+	}
 };
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.

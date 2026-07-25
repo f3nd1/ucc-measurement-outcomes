@@ -9,7 +9,16 @@ frappe.pages["mapping-studio"].on_page_load = function (wrapper) {
 		title: __("Mapping Studio"),
 		single_column: true,
 	});
-	wrapper.ucc = new MappingStudio(page);
+	// Frappe can swallow exceptions thrown from on_page_load, which hides a
+	// half-built page behind a clean console. Surface it loudly instead.
+	try {
+		wrapper.ucc = new MappingStudio(page);
+	} catch (e) {
+		console.error("[UCC] mapping-studio failed to initialise:", e);
+		frappe.msgprint({title: __("Page failed to load"), indicator: "red",
+			message: __("mapping-studio could not initialise: ") + (e && e.message ? e.message : e)});
+		throw e;
+	}
 };
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.

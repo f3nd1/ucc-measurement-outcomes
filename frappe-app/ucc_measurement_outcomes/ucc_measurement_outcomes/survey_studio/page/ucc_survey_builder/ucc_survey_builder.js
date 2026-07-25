@@ -9,7 +9,16 @@ frappe.pages["ucc-survey-builder"].on_page_load = function (wrapper) {
 		title: __("UCC Survey Builder"),
 		single_column: true,
 	});
-	wrapper.ucc = new SurveyBuilder(page);
+	// Frappe can swallow exceptions thrown from on_page_load, which hides a
+	// half-built page behind a clean console. Surface it loudly instead.
+	try {
+		wrapper.ucc = new SurveyBuilder(page);
+	} catch (e) {
+		console.error("[UCC] ucc-survey-builder failed to initialise:", e);
+		frappe.msgprint({title: __("Page failed to load"), indicator: "red",
+			message: __("ucc-survey-builder could not initialise: ") + (e && e.message ? e.message : e)});
+		throw e;
+	}
 };
 
 // Finding 2: Desk pages are constructed once, so a deep link arriving on a

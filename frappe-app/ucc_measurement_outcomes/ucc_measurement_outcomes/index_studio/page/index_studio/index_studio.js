@@ -9,7 +9,16 @@ frappe.pages["index-studio"].on_page_load = function (wrapper) {
 		title: __("Index Studio"),
 		single_column: true,
 	});
-	wrapper.ucc = new IndexStudio(page);
+	// Frappe can swallow exceptions thrown from on_page_load, which hides a
+	// half-built page behind a clean console. Surface it loudly instead.
+	try {
+		wrapper.ucc = new IndexStudio(page);
+	} catch (e) {
+		console.error("[UCC] index-studio failed to initialise:", e);
+		frappe.msgprint({title: __("Page failed to load"), indicator: "red",
+			message: __("index-studio could not initialise: ") + (e && e.message ? e.message : e)});
+		throw e;
+	}
 };
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
@@ -79,7 +88,12 @@ class IndexStudio {
 		});
 		const $bar = $('<div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap"></div>').appendTo($main);
 		this.$template = $('<select class="form-control input-sm" style="width:auto"><option value="">' + __("New from template…") + "</option></select>").appendTo($bar);
-		$(`<button class="btn btn-default btn-sm">${__("Create")}</button>`).appendTo($bar).on("click", () => this._createFromTemplate());
+		// Track the choice as it changes rather than only reading .val() at click
+		// time, so the button cannot depend on the select's state at that instant.
+		this.templateCode = "";
+		this.$template.on("change", (e) => { this.templateCode = e.target.value || ""; });
+		this.$create = $(`<button class="btn btn-default btn-sm">${__("Create")}</button>`).appendTo($bar);
+		this.$create.on("click", () => this._createFromTemplate());
 		$('<span style="width:10px"></span>').appendTo($bar);
 		this.$validate = $(`<button class="btn btn-default btn-sm">${__("Validate")}</button>`).appendTo($bar).on("click", () => this._validate());
 		this.$publish = $(`<button class="btn btn-primary btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
@@ -125,7 +139,11 @@ class IndexStudio {
 	}
 
 	_createFromTemplate() {
-		const code = this.$template.val();
+		// Prefer the tracked value; fall back to reading the select directly.
+		const code = this.templateCode || (this.$template && this.$template.val()) || "";
+		// Temporary diagnostic: three rounds of remote debugging could not tell
+		// "handler never ran" apart from "handler ran with an empty value".
+		console.log("[UCC] Create clicked; template code =", JSON.stringify(code));
 		// Was a silent `return`, which made a click look like a dead button when
 		// nothing was selected (or when the template list failed to load).
 		if (!code) {
