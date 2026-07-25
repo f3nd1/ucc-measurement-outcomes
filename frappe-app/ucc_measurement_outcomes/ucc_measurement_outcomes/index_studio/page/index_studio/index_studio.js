@@ -29,6 +29,7 @@ class IndexStudio {
 
 	_build() {
 		const $main = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($main);   // finding 1
 		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
@@ -65,6 +66,14 @@ class IndexStudio {
 		this.canvas.setEmpty({
 			message: __("Select an Index Version above, or create one from a template."),
 		});
+		this._renderTrail();
+	}
+
+	// Finding 1: show which index version this canvas belongs to.
+	_renderTrail() {
+		const segs = [{ label: __("Index Studio") }];
+		if (this.version) segs.push({ label: this.version });
+		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	_createFromTemplate() {
@@ -96,6 +105,7 @@ class IndexStudio {
 				this.$badge.text(this.editable ? "" : __("Published (read-only)"));
 				this._renderCanvas();
 				this._renderInspector();
+				this._renderTrail();
 			},
 		});
 	}

@@ -33,6 +33,7 @@ class DataExplorer {
 
 	_build() {
 		const $m = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($m);   // finding 1
 		this.$controls = $('<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>').appendTo($m);
 		const $bar = $('<div style="display:flex;gap:8px;margin-top:10px"></div>').appendTo($m);
 		$(`<button class="btn btn-primary btn-sm">${__("Run")}</button>`).appendTo($bar).on("click", () => this.run());
@@ -40,6 +41,14 @@ class DataExplorer {
 		$(`<button class="btn btn-default btn-sm">${__("Export JSON")}</button>`).appendTo($bar).on("click", () => this.exportAs("json"));
 		this.$note = $('<div class="text-muted" style="font-size:11px;margin-top:8px"></div>').appendTo($m);
 		this.$out = $('<div style="margin-top:14px"></div>').appendTo($m);
+		this._renderTrail();
+	}
+
+	// Finding 1: show which approved dataset is being queried.
+	_renderTrail() {
+		window.UCCTrail.render(this.$trail.get(0), [{
+			label: __("Data Explorer") + (this.sel.dataset ? " · " + this.sel.dataset : ""),
+		}]);
 	}
 
 	_initControls() {
@@ -76,6 +85,7 @@ class DataExplorer {
 
 	_onDataset(name) {
 		this.sel.dataset = name;
+		this._renderTrail();
 		const spec = this.catalogue[name] || { dimensions: [], measures: [] };
 		this._fill(this.measureField, spec.measures, false);
 		this._fill(this.rowField, spec.dimensions, true);

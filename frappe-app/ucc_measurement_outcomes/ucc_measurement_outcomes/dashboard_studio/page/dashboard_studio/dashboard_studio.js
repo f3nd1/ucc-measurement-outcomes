@@ -55,6 +55,7 @@ class DashboardStudio {
 
 	_build() {
 		const $m = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($m);   // finding 1
 		this.$filter = $('<div></div>').appendTo($m).get(0);
 		this.filterBar = new window.UCCFilterBar(this.$filter, {
 			fields: [
@@ -72,6 +73,17 @@ class DashboardStudio {
 		this.$tabOverview = $(`<button class="btn btn-default btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
 		this.$tabC7 = $(`<button class="btn btn-default btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
 		this.$body = $('<div></div>').appendTo($m);
+		this._renderTrail();
+	}
+
+	// Finding 1: the dashboard reads results produced upstream in Index Studio.
+	_renderTrail() {
+		// ponytail: context only for now — the upstream Index Studio segment
+		// becomes a link in Fix 2, once that page reads route_options.
+		const segs = [{
+			label: __("Dashboard Studio") + (this.filters.index ? " · " + this.filters.index : ""),
+		}];
+		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	_fillFilters(d) {
@@ -100,6 +112,7 @@ class DashboardStudio {
 	_render() {
 		if (!this.data) return;
 		this.$body.empty();
+		this._renderTrail();
 		if (this.view === "criterion7") this._renderCriterion7();
 		else this._renderOverview();
 		// Finding 4: dead end — give the user the page that creates this data.

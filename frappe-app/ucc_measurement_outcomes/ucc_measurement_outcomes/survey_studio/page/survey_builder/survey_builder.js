@@ -87,6 +87,7 @@ class SurveyBuilder {
 
 	_buildLayout() {
 		const $main = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($main);   // finding 1
 		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
@@ -118,7 +119,19 @@ class SurveyBuilder {
 		window.UCCEmptyState.render(this.$list.get(0), {
 			message: __("Select a Survey Version above to start building."),
 		});
+		this._renderTrail();
 		this._modal = $('<div class="ucc-sb-modal"><div class="ucc-sb-sheet"></div></div>').appendTo(document.body);
+	}
+
+	// Finding 1: show where this page sits in the chain.
+	_renderTrail() {
+		const segs = [{ label: __("Survey Studio") }];
+		if (this.version) {
+			segs.push({
+				label: `${this.version.survey_title || this.version.survey} · V${this.version.version_number}`,
+			});
+		}
+		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	_renderPalette() {
@@ -151,6 +164,7 @@ class SurveyBuilder {
 			this._renderQuestions();
 			this._renderInspector();
 			this._renderBulkBar();
+			this._renderTrail();
 		});
 	}
 

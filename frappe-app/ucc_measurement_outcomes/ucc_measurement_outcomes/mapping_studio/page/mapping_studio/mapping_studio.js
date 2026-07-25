@@ -26,6 +26,7 @@ class MappingStudio {
 
 	_build() {
 		const $main = $(this.page.main).empty();
+		this.$trail = $('<div></div>').appendTo($main);   // finding 1
 		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
@@ -48,6 +49,21 @@ class MappingStudio {
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
 		// Finding 2: say what to do instead of a bare "No nodes to show".
 		this.canvas.setEmpty({ message: __("Select a Survey Version above to begin.") });
+		this._renderTrail();
+	}
+
+	// Finding 1: Survey Studio is upstream of this page — make that clickable.
+	_renderTrail() {
+		const segs = [];
+		if (this.version) {
+			segs.push({
+				label: __("Survey Studio") + " · " + this.version,
+				page: "survey-builder",
+				routeOptions: { survey_version: this.version },
+			});
+		}
+		segs.push({ label: __("Mapping Studio") });
+		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	load(version) {
@@ -67,6 +83,7 @@ class MappingStudio {
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
 				this._loadCoverage();
+				this._renderTrail();
 			},
 		});
 	}
