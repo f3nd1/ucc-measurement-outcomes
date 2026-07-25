@@ -57,7 +57,7 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 				<button data-z="in">+</button><button data-z="out">−</button><button data-z="reset">↺</button>
 			</div>
 			<div class="ucc-nc-stage"><svg class="ucc-nc-edges"></svg></div>
-			<div class="ucc-nc-empty">${frappe.utils.escape_html(__("No nodes to show"))}</div>`;
+			<div class="ucc-nc-empty">${frappe.utils.escape_html(__("Nothing here yet."))}</div>`;
 		this.stage = this.container.querySelector(".ucc-nc-stage");
 		this.svg = this.container.querySelector(".ucc-nc-edges");
 		this.emptyEl = this.container.querySelector(".ucc-nc-empty");

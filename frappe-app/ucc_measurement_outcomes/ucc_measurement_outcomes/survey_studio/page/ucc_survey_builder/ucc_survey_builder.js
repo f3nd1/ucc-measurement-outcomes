@@ -157,7 +157,7 @@ class SurveyBuilder {
 		// Say why instead of looking broken.
 		if (window.UCCEmptyState) {
 			window.UCCEmptyState.render(this.$list.get(0), {
-				message: __("Select a Survey Version above to start building."),
+				message: __("Pick a survey to start building questions."),
 			});
 		}
 		this.$next = $('<div></div>').appendTo($main);   // item 2
@@ -292,8 +292,8 @@ class SurveyBuilder {
 			const isGap = this.unmapped && this.unmapped.has(q.name);
 			const mapLink = !this.unmapped ? ""
 				: isGap
-					? `<span class="ucc-sb-maplink gap" data-q="${q.name}">${__("unmapped — fix in Mapping Studio")} →</span>`
-					: `<span class="ucc-sb-maplink" data-q="${q.name}">${__("mapped")} →</span>`;
+					? `<span class="ucc-sb-maplink gap" data-q="${q.name}">${__("Not linked to an objective — link it")} →</span>`
+					: `<span class="ucc-sb-maplink" data-q="${q.name}">${__("Linked to an objective")} →</span>`;
 			const $q = $(`
 				<div class="ucc-sb-q ${this.selected === q.name ? "selected" : ""} ${isGap ? "gap" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
 					<input type="checkbox" class="ucc-sb-check" ${this.selection.has(q.name) ? "checked" : ""}>

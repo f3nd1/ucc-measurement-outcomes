@@ -187,7 +187,7 @@ class DashboardStudio {
 		// Finding 4: dead end — give the user the page that creates this data.
 		if (!this.data.kpis.length && window.UCCEmptyState) {
 			window.UCCEmptyState.render(this.$body.find(".ucc-db-empty-slot").get(0), {
-				message: __("No index results yet. Calculate an index in Index Studio to populate this dashboard."),
+				message: __("No results yet — calculate an index to see them here."),
 				actionLabel: __("Open Index Studio"),
 				onAction: () => frappe.set_route("index-studio"),
 			});

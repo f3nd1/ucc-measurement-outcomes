@@ -82,7 +82,7 @@ class MappingStudio {
 			__("Select a question to edit its objective and metric mapping.") + "</p></div>").appendTo($grid);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
 		// Finding 2: say what to do instead of a bare "No nodes to show".
-		this.canvas.setEmpty({ message: __("Select a Survey Version above to begin.") });
+		this.canvas.setEmpty({ message: __("Pick a survey to see how its questions map to objectives.") });
 		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
 	}
@@ -148,7 +148,7 @@ class MappingStudio {
 				this._renderTable();
 				this.canvas.setGraph([], []);
 				this.canvas.setEmpty({
-					message: __("Select a question in the table to see its objective, clause and metric lineage."),
+					message: __("Pick a question to see what it feeds."),
 				});
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
@@ -276,7 +276,7 @@ class MappingStudio {
 		// question -> objective, question -> clause, question -> metric(s).
 		// Unmapped questions (no objective) render as a red "gap" node.
 		const qType = this._isUnmapped(q.name) ? "gap" : "question";
-		const qSub = this._isUnmapped(q.name) ? __("Unmapped — no objective") : q.question_type;
+		const qSub = this._isUnmapped(q.name) ? __("Not linked to an objective") : q.question_type;
 		const nodes = [{ id: "q", type: qType, title: (q.question_text || "").slice(0, 40), sub: qSub, x: 40, y: 150 }];
 		const edges = [];
 		if (q.objective) { nodes.push({ id: "obj", type: "objective", title: q.objective, sub: __("Objective"), x: 300, y: 40 }); edges.push(["q", "obj"]); }
