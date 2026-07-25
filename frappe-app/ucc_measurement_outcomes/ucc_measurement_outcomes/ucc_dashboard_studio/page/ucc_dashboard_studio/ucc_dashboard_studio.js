@@ -120,6 +120,8 @@ class DashboardStudio {
 			stages[4] = hasResults
 				? { done: true }
 				: { blocked: __("no results yet — calculate an index") };
+		} else {
+			stages[4] = { note: __("loading results…") };
 		}
 		stages[5] = { blocked: __("not built yet") };
 		window.UCCTrail.render(this.$trail.get(0), {

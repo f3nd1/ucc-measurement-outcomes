@@ -170,8 +170,14 @@ class SurveyBuilder {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
 		// Item 1: this page is stage 1. It knows its own question count, and the
 		// unmapped count it already loaded for the question flags (no new call).
+		// Every signal below is gated on loaded state, so before a version is
+		// picked the map was empty and the stepper rendered five neutral stages —
+		// no state at all, which is the one thing a stepper exists to show. An
+		// unpicked page states what it is waiting for instead.
 		const stages = {};
-		if (this.version) stages[1] = { done: this.questions.length > 0 };
+		stages[1] = this.version
+			? { done: this.questions.length > 0, note: this.questions.length ? null : __("no questions yet") }
+			: { note: __("pick a survey version to start") };
 		if (this.unmapped) {
 			const n = this.unmapped.size;
 			stages[2] = n === 0

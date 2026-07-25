@@ -92,8 +92,11 @@ class MappingStudio {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
 		// Item 1: stage 2. Knows the question count and the coverage numbers it
 		// already loaded, plus how many distinct metrics exist for stage 3.
+		// Same gate as Survey Builder: with nothing picked the map was empty and
+		// the stepper showed no state. Say what it is waiting for.
 		const stages = {};
 		if (this.version) stages[1] = { done: this.rows.length > 0 };
+		else stages[2] = { note: __("pick a survey version to see its coverage") };
 		if (this.coverage) {
 			const n = this.coverage.questions_without_objective.length;
 			stages[2] = n === 0

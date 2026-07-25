@@ -103,11 +103,15 @@ class IndexStudio {
 		// time, so the button cannot depend on the select's state at that instant.
 		this.templateCode = "";
 		this.$template.on("change", (e) => { this.templateCode = e.target.value || ""; });
-		this.$create = $(`<button class="btn btn-primary btn-sm">${__("Create")}</button>`).appendTo($bar);
+		this.$create = $(`<button class="btn btn-default btn-sm">${__("Create")}</button>`).appendTo($bar);
 		this.$create.on("click", () => this._createFromTemplate());
 		$('<span style="width:10px"></span>').appendTo($bar);
 		this.$validate = $(`<button class="btn btn-default btn-sm">${__("Validate")}</button>`).appendTo($bar).on("click", () => this._validate());
-		this.$publish = $(`<button class="btn btn-danger btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
+		// Item 4: Publish is the page's consequential action, but it is not
+		// destructive — btn-danger read as "this deletes something". btn-primary
+		// gives it the weight; irreversibility is carried by _publish()'s confirm.
+		// Create drops to btn-default so the primary slot is not contested.
+		this.$publish = $(`<button class="btn btn-primary btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
 		this.$badge = $('<span style="margin-left:6px;font-size:12px"></span>').appendTo($bar);
 		frappe.call({
 			method: IAPI + "list_index_templates",
@@ -148,11 +152,15 @@ class IndexStudio {
 		// Item 1: stage 3. Knows only the selected version — a published one
 		// (editable === false) means the formula is frozen and stage 3 is done.
 		// Nothing here can see survey/mapping state, so those stay neutral.
+		// Same gate as the other stages: with no version picked the map was empty
+		// and the stepper showed no state. Say what it is waiting for.
 		const stages = {};
 		if (this.version) {
 			stages[3] = this.editable
 				? { note: __("draft — publish it to calculate results") }
 				: { done: true };
+		} else {
+			stages[3] = { note: __("pick or create an index version") };
 		}
 		// Decision (b): stages 1-2 only when Mapping Studio handed them over.
 		const ctx = this.surveyContext;

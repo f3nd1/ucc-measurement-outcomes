@@ -100,28 +100,34 @@ window.UCCTrail = {
 		if (document.getElementById("ucc-step-style")) return;
 		const el = document.createElement("style");
 		el.id = "ucc-step-style";
+		// Colours are literal, not var(--primary): in this Frappe build --primary
+		// resolves to rgb(23,23,23), so the "you are here" badge was painting the
+		// same near-black as ordinary text and read as no state at all.
+		// Rule order matters: .current is last so that a stage which is both
+		// current and done still shows the accent badge (you are here) rather than
+		// the quieter done badge winning on source order.
 		el.textContent = `
 		.ucc-step{display:flex;align-items:flex-start;flex-wrap:wrap;gap:4px;
-			margin:0 0 14px;padding:10px 12px;border:1px solid var(--border-color,#e2e6ea);
-			border-radius:8px;background:var(--fg-color,#fff);font-size:12px}
-		.ucc-step-item{display:flex;align-items:flex-start;gap:6px;padding:4px 8px;
-			border-radius:6px;color:var(--text-muted,#8b95a5);max-width:210px}
+			margin:0 0 16px;padding:12px 14px;border:1px solid #d9e0ea;
+			border-radius:10px;background:#f7f9fc;font-size:12px}
+		.ucc-step-item{display:flex;align-items:flex-start;gap:7px;padding:5px 9px;
+			border-radius:7px;color:#97a1b0;max-width:210px}
 		.ucc-step-item.link{cursor:pointer}
-		.ucc-step-item.link:hover{background:var(--bg-light-gray,#eef2f7)}
+		.ucc-step-item.link:hover{background:#e7edf6}
 		.ucc-step-n{display:inline-flex;align-items:center;justify-content:center;
-			width:18px;height:18px;border-radius:50%;flex:0 0 18px;font-size:10px;
-			font-weight:700;background:var(--bg-light-gray,#eef2f7);
-			color:var(--text-muted,#8b95a5)}
+			width:20px;height:20px;border-radius:50%;flex:0 0 20px;font-size:10px;
+			font-weight:700;background:#e4e9f1;color:#97a1b0}
 		.ucc-step-body{display:flex;flex-direction:column;line-height:1.35}
 		.ucc-step-label{white-space:nowrap}
-		.ucc-step-note{font-size:10px;opacity:.85;white-space:normal}
-		.ucc-step-item.current{background:var(--bg-light-gray,#eef2f7);
-			color:var(--text-color,#1f272e);font-weight:600}
-		.ucc-step-item.current .ucc-step-n{background:var(--primary,#4a63e7);color:#fff}
-		.ucc-step-item.done{color:var(--text-color,#1f272e)}
-		.ucc-step-item.done .ucc-step-n{background:#e8f5ef;color:#237a57}
-		.ucc-step-item.blocked .ucc-step-note{color:#b94848}
-		.ucc-step-arrow{color:var(--text-muted,#c3c9cf);padding-top:6px}
+		.ucc-step-note{font-size:11px;white-space:normal;margin-top:2px;color:#8a6d1f}
+		.ucc-step-item.done{color:#1f272e}
+		.ucc-step-item.done .ucc-step-n{background:#237a57;color:#fff}
+		.ucc-step-item.blocked .ucc-step-n{background:#f6dede;color:#b94848}
+		.ucc-step-item.blocked .ucc-step-note{color:#b94848;font-weight:600}
+		.ucc-step-item.current{background:#fff;color:#1f272e;font-weight:600;
+			box-shadow:0 0 0 1px #c3cfe4,0 1px 3px rgba(23,41,77,.08)}
+		.ucc-step-item.current .ucc-step-n{background:#3d55d4;color:#fff}
+		.ucc-step-arrow{color:#c3c9cf;padding-top:7px}
 		.ucc-next{display:flex;align-items:center;gap:8px;margin-top:14px;
 			padding-top:12px;border-top:1px solid var(--border-color,#e2e6ea)}
 		.ucc-next-note{font-size:12px;color:var(--text-muted,#8b95a5)}
