@@ -91,7 +91,10 @@ class SurveyBuilder {
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
 			df: {
-				fieldtype: "Link", options: "UCC Survey Version", label: __("Survey Version"), reqd: 1,
+				// Finding 5: no reqd here — this is a standalone picker, not a form
+				// field in a save cycle, and reqd paints an error border on an
+				// untouched empty page. The change handler already guards on `v`.
+				fieldtype: "Link", options: "UCC Survey Version", label: __("Survey Version"),
 				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
 			},
 			render_input: true,
@@ -109,6 +112,12 @@ class SurveyBuilder {
 		this.$inspector = $(`<div class="ucc-sb-panel"><h5>${__("Inspector")}</h5><div class="ucc-sb-body"></div></div>`).appendTo($grid).find(".ucc-sb-body");
 		this._renderPalette();
 		this._renderInspector();
+		// Finding 1: before a version is picked, load() never runs, so the list
+		// had no drop handlers and no message — dragging silently did nothing.
+		// Say why instead of looking broken.
+		window.UCCEmptyState.render(this.$list.get(0), {
+			message: __("Select a Survey Version above to start building."),
+		});
 		this._modal = $('<div class="ucc-sb-modal"><div class="ucc-sb-sheet"></div></div>').appendTo(document.body);
 	}
 
@@ -151,7 +160,14 @@ class SurveyBuilder {
 		this.$list.empty();
 		this._wireListDrop();
 		if (!this.questions.length) {
-			this.$list.append(`<div class="ucc-sb-empty">${__("Drag a question type here")}</div>`);
+			// Finding 1: drag-to-insert is wired here, but it isn't discoverable and
+			// gives no feedback if it fails. Offer an explicit button as well.
+			const $drop = $(`<div class="ucc-sb-empty"></div>`).appendTo(this.$list);
+			window.UCCEmptyState.render($drop.get(0), {
+				message: __("Drag a question type here, or:"),
+				actionLabel: this.editable ? __("+ Add your first question") : null,
+				onAction: this.editable ? () => this._addQuestion("Short Text", 0) : null,
+			});
 			return;
 		}
 		this.questions.forEach((q, i) => {
@@ -208,7 +224,12 @@ class SurveyBuilder {
 		this.$list.off("dragover drop");
 		this.$list.on("dragover", (e) => e.preventDefault());
 		this.$list.on("drop", (e) => {
-			if (e.target !== this.$list.get(0)) return;
+			// Finding 1 (root cause): the strict target check swallowed drops onto
+			// the empty-state placeholder — i.e. exactly when the list is empty and
+			// the user most needs drag-to-insert to work. Accept those too.
+			const onList = e.target === this.$list.get(0);
+			const onPlaceholder = !this.questions.length && $(e.target).closest(".ucc-sb-empty").length > 0;
+			if (!onList && !onPlaceholder) return;
 			const newType = e.originalEvent.dataTransfer.getData("newType");
 			if (newType) this._addQuestion(newType, this.questions.length);
 		});

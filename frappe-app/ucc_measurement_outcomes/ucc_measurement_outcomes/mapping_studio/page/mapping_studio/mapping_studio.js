@@ -32,8 +32,8 @@ class MappingStudio {
 			df: {
 				fieldtype: "Link",
 				options: "UCC Survey Version",
+				// Finding 5: no reqd on a standalone picker (see survey_builder).
 				label: __("Survey Version"),
-				reqd: 1,
 				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
 			},
 			render_input: true,
@@ -46,6 +46,8 @@ class MappingStudio {
 		this.$inspector = $('<div class="ucc-map-inspector"><p class="text-muted" style="font-size:12px">' +
 			__("Select a question to edit its objective and metric mapping.") + "</p></div>").appendTo($grid);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
+		// Finding 2: say what to do instead of a bare "No nodes to show".
+		this.canvas.setEmpty({ message: __("Select a Survey Version above to begin.") });
 	}
 
 	load(version) {
@@ -59,6 +61,9 @@ class MappingStudio {
 				this.selected = null;
 				this._renderTable();
 				this.canvas.setGraph([], []);
+				this.canvas.setEmpty({
+					message: __("Select a question in the table to see its objective, clause and metric lineage."),
+				});
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
 				this._loadCoverage();

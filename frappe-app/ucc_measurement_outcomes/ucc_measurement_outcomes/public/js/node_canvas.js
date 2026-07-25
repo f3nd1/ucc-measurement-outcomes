@@ -73,6 +73,12 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		this.render();
 	}
 
+	// Finding 2: an empty canvas said only "No nodes to show" with no way in.
+	// Callers set a message (and optionally an action) for their empty state.
+	setEmpty(opts) {
+		window.UCCEmptyState.render(this.emptyEl, opts || {});
+	}
+
 	zoom(delta) {
 		this.scale = Math.max(0.6, Math.min(1.6, this.scale + delta));
 		this.render();

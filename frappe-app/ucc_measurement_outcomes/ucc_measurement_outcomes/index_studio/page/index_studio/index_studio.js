@@ -33,7 +33,8 @@ class IndexStudio {
 		this.versionField = frappe.ui.form.make_control({
 			parent: $picker.get(0),
 			df: {
-				fieldtype: "Link", options: "UCC Index Version", label: __("Index Version"), reqd: 1,
+				// Finding 5: no reqd on a standalone picker (see survey_builder).
+				fieldtype: "Link", options: "UCC Index Version", label: __("Index Version"),
 				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
 			},
 			render_input: true,
@@ -60,6 +61,10 @@ class IndexStudio {
 			onSelect: (n) => this._select(n.id),
 			onMove: (n) => this._onMove(n),
 		});
+		// Finding 2: say what to do instead of a bare "No nodes to show".
+		this.canvas.setEmpty({
+			message: __("Select an Index Version above, or create one from a template."),
+		});
 	}
 
 	_createFromTemplate() {
@@ -83,6 +88,7 @@ class IndexStudio {
 			callback: (r) => {
 				if (!r.message) return;
 				this.version = version;
+				this.indexCode = r.message.index;
 				this.nodes = r.message.nodes || [];
 				this.editable = !!r.message.editable;
 				this.selectedKey = null;
@@ -106,6 +112,29 @@ class IndexStudio {
 		}));
 		const edges = this.nodes.filter((n) => n.parent_key).map((n) => [n.node_key, n.parent_key]);
 		this.canvas.setGraph(cnodes, edges);
+		// Finding 2: a blank draft had no way to create a first node.
+		if (!cnodes.length) {
+			this.canvas.setEmpty({
+				message: this.editable
+					? __("This index version has no nodes yet.")
+					: __("This published version has no nodes."),
+				actionLabel: this.editable ? __("+ Add root node") : null,
+				onAction: this.editable ? () => this._addRootNode() : null,
+			});
+		}
+	}
+
+	_addRootNode() {
+		// The root is the index node itself; dimensions/metrics hang off it.
+		this.nodes.push({
+			node_key: "root", node_type: "Index",
+			label: this.indexCode || __("Index"),
+			parent_key: null, weight: 0, pos_x: 60, pos_y: 60,
+		});
+		this._save(() => {
+			this._renderCanvas();
+			frappe.show_alert({ message: __("Root node added"), indicator: "green" });
+		});
 	}
 
 	_onMove(cnode) {
