@@ -3,10 +3,10 @@
 // editorial conveniences: bulk paste, multi-select bulk actions, undo/redo of
 // structural actions, and desktop/mobile preview. Persists via whitelisted API.
 
-frappe.pages["survey-builder"].on_page_load = function (wrapper) {
+frappe.pages["ucc-survey-builder"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Survey Builder"),
+		title: __("UCC Survey Builder"),
 		single_column: true,
 	});
 	wrapper.ucc = new SurveyBuilder(page);
@@ -15,7 +15,7 @@ frappe.pages["survey-builder"].on_page_load = function (wrapper) {
 // Finding 2: Desk pages are constructed once, so a deep link arriving on a
 // second visit would be ignored if route_options were only read in the
 // constructor. on_page_show runs on every visit.
-frappe.pages["survey-builder"].on_page_show = function (wrapper) {
+frappe.pages["ucc-survey-builder"].on_page_show = function (wrapper) {
 	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
@@ -200,7 +200,7 @@ class SurveyBuilder {
 			this.history = [];
 			this.future = [];
 			this._updateUndo();
-			this.page.set_title(`${__("Survey Builder")} — ${frappe.utils.escape_html(this.version.survey_title || "")} v${frappe.utils.escape_html(this.version.version_number || "")}`);
+			this.page.set_title(`${__("UCC Survey Builder")} — ${frappe.utils.escape_html(this.version.survey_title || "")} v${frappe.utils.escape_html(this.version.version_number || "")}`);
 			this.$banner.toggle(!this.editable).text(__("This version is {0} and cannot be edited.", [this.version.status]));
 			this._renderQuestions();
 			this._renderInspector();
@@ -477,7 +477,7 @@ class SurveyBuilder {
 
 	_sheet(mobile, html) {
 		const $s = this._modal.find(".ucc-sb-sheet").toggleClass("mobile", !!mobile);
-		$s.html(`<div class="ucc-sb-sheet-head"><b>${__("Survey Builder")}</b><button class="ucc-sb-iconbtn ucc-sb-close">✕</button></div><div class="ucc-sb-sheet-body">${html}</div>`);
+		$s.html(`<div class="ucc-sb-sheet-head"><b>${__("UCC Survey Builder")}</b><button class="ucc-sb-iconbtn ucc-sb-close">✕</button></div><div class="ucc-sb-sheet-body">${html}</div>`);
 		this._modal.addClass("show");
 		this._modal.find(".ucc-sb-close").on("click", () => this._closeSheet());
 	}

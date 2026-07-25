@@ -6,10 +6,10 @@
  "idx": 0,
  "modified": "2026-07-24 00:00:00.000000",
  "modified_by": "Administrator",
- "module": "Dashboard Studio",
- "name": "dashboard-studio",
+ "module": "UCC Dashboard Studio",
+ "name": "ucc-dashboard-studio",
  "owner": "Administrator",
- "page_name": "dashboard-studio",
+ "page_name": "ucc-dashboard-studio",
  "roles": [
   {
    "role": "System Manager"
@@ -18,5 +18,5 @@
  "script": null,
  "standard": "Yes",
  "system_page": 0,
- "title": "Dashboard Studio"
+ "title": "UCC Dashboard Studio"
 }

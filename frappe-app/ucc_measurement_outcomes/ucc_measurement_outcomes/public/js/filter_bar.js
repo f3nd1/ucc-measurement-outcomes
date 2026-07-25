@@ -1,7 +1,7 @@
 // Copyright (c) 2026, United Ceres College and contributors
 // Reusable dashboard filter bar. Renders a row of labelled selects, populated
 // via setOptions(), and fires onChange with the current values. Shared across
-// Dashboard Studio views (and available to other pages).
+// UCC Dashboard Studio views (and available to other pages).
 
 window.UCCFilterBar = class UCCFilterBar {
 	// container: DOM element. fields: [{name, label}]. onChange(values): callback.

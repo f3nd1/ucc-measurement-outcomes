@@ -1,7 +1,7 @@
 # Copyright (c) 2026, United Ceres College and contributors
 # For license information, please see license.txt
 
-"""Read-only whitelisted endpoints for Dashboard Studio.
+"""Read-only whitelisted endpoints for UCC Dashboard Studio.
 
 Reads only this app's own result DocTypes (UCC Index Result + Score Breakdown),
 so it is bench-safe. Simple KPI tiles could later move to native Frappe Number

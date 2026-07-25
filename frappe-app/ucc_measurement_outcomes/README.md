@@ -28,4 +28,4 @@ bench --site <dev-site> migrate
 ## Modules
 
 - **Survey Studio** — surveys, versions, sections, questions, choices (Phase 1)
-- Mapping Studio, Index Studio, Dashboard Studio, Data Explorer — later phases
+- Mapping Studio, Index Studio, UCC Dashboard Studio, Data Explorer — later phases

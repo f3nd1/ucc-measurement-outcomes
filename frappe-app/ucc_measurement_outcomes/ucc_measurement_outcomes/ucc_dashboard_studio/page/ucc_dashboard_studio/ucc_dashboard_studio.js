@@ -1,18 +1,18 @@
 // Copyright (c) 2026, United Ceres College and contributors
-// Dashboard Studio: shared filter bar + two layouts (Overview, Criterion 7)
+// UCC Dashboard Studio: shared filter bar + two layouts (Overview, Criterion 7)
 // composed from the same widgets, reading this app's Index Results.
 
-frappe.pages["dashboard-studio"].on_page_load = function (wrapper) {
+frappe.pages["ucc-dashboard-studio"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Dashboard Studio"),
+		title: __("UCC Dashboard Studio"),
 		single_column: true,
 	});
 	wrapper.ucc = new DashboardStudio(page);
 };
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
-frappe.pages["dashboard-studio"].on_page_show = function (wrapper) {
+frappe.pages["ucc-dashboard-studio"].on_page_show = function (wrapper) {
 	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
@@ -110,7 +110,7 @@ class DashboardStudio {
 			});
 		}
 		segs.push({
-			label: __("Dashboard Studio") + (this.filters.index ? " · " + this.filters.index : ""),
+			label: __("UCC Dashboard Studio") + (this.filters.index ? " · " + this.filters.index : ""),
 		});
 		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
