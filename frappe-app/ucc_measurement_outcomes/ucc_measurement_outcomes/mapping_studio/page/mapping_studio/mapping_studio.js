@@ -83,6 +83,7 @@ class MappingStudio {
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
 		// Finding 2: say what to do instead of a bare "No nodes to show".
 		this.canvas.setEmpty({ message: __("Select a Survey Version above to begin.") });
+		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
 	}
 
@@ -109,6 +110,29 @@ class MappingStudio {
 			context: this.version,
 			routeOptions: this.version ? { survey_version: this.version } : {},
 			stages: stages,
+		});
+		this._renderNext();
+	}
+
+	// Item 2: forward action — an index is built from mapped metrics, so the
+	// button states that blocker rather than navigating to an empty canvas.
+	_renderNext() {
+		if (!window.UCCTrail || !this.$next) return;
+		if (!this.version) {
+			return window.UCCTrail.renderNext(this.$next.get(0), {
+				blocked: __("Pick a survey first"),
+			});
+		}
+		const metrics = this._metricCount();
+		if (!metrics) {
+			return window.UCCTrail.renderNext(this.$next.get(0), {
+				blocked: __("Link at least one question to a metric first"),
+			});
+		}
+		window.UCCTrail.renderNext(this.$next.get(0), {
+			label: __("Next: build an index from these {0} metrics →", [metrics]),
+			page: "index-studio",
+			routeOptions: this._surveyContext(),
 		});
 	}
 
@@ -174,6 +198,25 @@ class MappingStudio {
 		this.$coverage.find("[data-gap]").on("click", (e) => this._select($(e.currentTarget).data("gap")));
 	}
 
+	// Decision (b): hand the downstream stage the survey context AND the counts
+	// this page has already computed, so Index Studio can show stages 1-2
+	// without a second mapping_coverage call. It is a snapshot taken at
+	// navigation time, which is exactly what it claims to be.
+	_surveyContext() {
+		if (!this.version || !this.coverage) return {};
+		return {
+			survey_version: this.version,
+			question_count: this.rows.length,
+			unmapped_count: this.coverage.questions_without_objective.length,
+		};
+	}
+
+	_metricCount() {
+		const metrics = new Set();
+		this.rows.forEach((q) => (q.metrics || []).forEach((m) => metrics.add(m)));
+		return metrics.size;
+	}
+
 	_isUnmapped(name) {
 		return this.coverage && this.coverage.questions_without_objective.indexOf(name) !== -1;
 	}
@@ -205,7 +248,10 @@ class MappingStudio {
 		this.$table.find("tbody tr").on("click", (e) => this._select($(e.currentTarget).data("name")));
 		this.$table.find(".ucc-map-metric-link").on("click", (e) => {
 			e.stopPropagation();
-			frappe.route_options = { metric: $(e.currentTarget).data("metric") };
+			frappe.route_options = Object.assign(
+				{ metric: $(e.currentTarget).data("metric") },
+				this._surveyContext(),
+			);
 			frappe.set_route("index-studio");
 		});
 		this.$table.find(".ucc-map-q-link").on("click", (e) => {

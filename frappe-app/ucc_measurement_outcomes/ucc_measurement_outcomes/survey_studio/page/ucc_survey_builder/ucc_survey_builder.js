@@ -160,6 +160,7 @@ class SurveyBuilder {
 				message: __("Select a Survey Version above to start building."),
 			});
 		}
+		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
 		this._modal = $('<div class="ucc-sb-modal"><div class="ucc-sb-sheet"></div></div>').appendTo(document.body);
 	}
@@ -184,6 +185,30 @@ class SurveyBuilder {
 				: null,
 			routeOptions: this.version ? { survey_version: this.version.name } : {},
 			stages: stages,
+		});
+		this._renderNext();
+	}
+
+	// Item 2: forward action — the next stage is mapping those questions.
+	_renderNext() {
+		if (!window.UCCTrail || !this.$next) return;
+		if (!this.version) {
+			return window.UCCTrail.renderNext(this.$next.get(0), {
+				blocked: __("Pick a survey first"),
+			});
+		}
+		if (!this.questions.length) {
+			return window.UCCTrail.renderNext(this.$next.get(0), {
+				blocked: __("Add at least one question before mapping"),
+			});
+		}
+		const n = this.unmapped ? this.unmapped.size : 0;
+		window.UCCTrail.renderNext(this.$next.get(0), {
+			label: n
+				? __("Next: map these {0} questions →", [n])
+				: __("Next: build an index from these metrics →"),
+			page: n ? "mapping-studio" : "index-studio",
+			routeOptions: { survey_version: this.version.name },
 		});
 	}
 

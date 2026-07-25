@@ -52,6 +52,17 @@ class IndexStudio {
 		// server-side would make this one click instead of two; see the note in
 		// the session report before adding a lookup method for it.
 		if (opts.metric) this._pendingMetric = opts.metric;
+		// Decision (b): Mapping Studio hands over the survey context and its
+		// already-computed counts, so the stepper can show stages 1-2 when the
+		// user arrives through the pipeline. On a cold load they stay neutral —
+		// this page has no way to know which survey is in play.
+		if (opts.survey_version) {
+			this.surveyContext = {
+				version: opts.survey_version,
+				questions: opts.question_count,
+				unmapped: opts.unmapped_count,
+			};
+		}
 		if (opts.index_version) {
 			this.versionField.set_value(opts.index_version);   // triggers load()
 		} else {
@@ -127,6 +138,7 @@ class IndexStudio {
 		this.canvas.setEmpty({
 			message: __("Select an Index Version above, or create one from a template."),
 		});
+		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
 	}
 
@@ -142,11 +154,41 @@ class IndexStudio {
 				? { note: __("draft — publish it to calculate results") }
 				: { done: true };
 		}
+		// Decision (b): stages 1-2 only when Mapping Studio handed them over.
+		const ctx = this.surveyContext;
+		if (ctx) {
+			stages[1] = { done: (ctx.questions || 0) > 0 };
+			stages[2] = ctx.unmapped
+				? { note: __("{0} questions still need objectives", [ctx.unmapped]) }
+				: { done: true };
+		}
 		window.UCCTrail.render(this.$trail.get(0), {
 			current: 3,
 			context: this.version,
 			routeOptions: this.version ? { index_version: this.version } : {},
 			stages: stages,
+		});
+		this._renderNext();
+	}
+
+	// Item 2: forward action — results live on the dashboard, but only a
+	// published version can produce them.
+	_renderNext() {
+		if (!window.UCCTrail || !this.$next) return;
+		if (!this.version) {
+			return window.UCCTrail.renderNext(this.$next.get(0), {
+				blocked: __("Pick or create an index version first"),
+			});
+		}
+		if (this.editable) {
+			return window.UCCTrail.renderNext(this.$next.get(0), {
+				blocked: __("Publish this version before results can be calculated"),
+			});
+		}
+		window.UCCTrail.renderNext(this.$next.get(0), {
+			label: __("Next: view results on the dashboard →"),
+			page: "ucc-dashboard-studio",
+			routeOptions: { index_version: this.version },
 		});
 	}
 

@@ -103,6 +103,7 @@ class DashboardStudio {
 		this.$tabOverview = $(`<button class="btn btn-default btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
 		this.$tabC7 = $(`<button class="btn btn-default btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
 		this.$body = $('<div></div>').appendTo($m);
+		this.$next = $('<div></div>').appendTo($m);   // item 2
 		this._renderTrail();
 	}
 
@@ -128,6 +129,21 @@ class DashboardStudio {
 				? { index_version: this.filters.index_version }
 				: {},
 			stages: stages,
+		});
+		this._renderNext();
+	}
+
+	// Item 2: the next stage is acting on weak results via Quality Actions —
+	// which is bench-blocked and genuinely not built. Say that, rather than
+	// offering a button that goes nowhere.
+	_renderNext() {
+		if (!window.UCCTrail || !this.$next) return;
+		const weak = (this.data && this.data.weak_areas) || {};
+		const count = (weak.indices || []).length + (weak.components || []).length;
+		window.UCCTrail.renderNext(this.$next.get(0), {
+			blocked: count
+				? __("Quality Actions aren't built yet — {0} weak areas are waiting for them", [count])
+				: __("Quality Actions aren't built yet"),
 		});
 	}
 

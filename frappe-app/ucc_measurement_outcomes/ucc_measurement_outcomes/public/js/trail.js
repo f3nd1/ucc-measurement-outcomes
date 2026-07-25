@@ -70,6 +70,32 @@ window.UCCTrail = {
 		}
 	},
 
+	// Item 2: the one forward action at the end of a stage. Same navigation
+	// mechanism as the stepper. When the next stage has an unmet prerequisite
+	// the button states the blocker and does not navigate.
+	// opts: {label, page, routeOptions, blocked, note}
+	renderNext(el, opts) {
+		if (!el) return;
+		this._injectStyle();
+		opts = opts || {};
+		const $el = $(el).empty().addClass("ucc-next");
+		if (opts.note) {
+			// A page that is not a pipeline stage says so, rather than being
+			// given a fake next step.
+			$('<span class="ucc-next-note"></span>').text(opts.note).appendTo($el);
+			return;
+		}
+		const $btn = $('<button class="btn btn-sm"></button>').appendTo($el);
+		if (opts.blocked) {
+			$btn.addClass("btn-default").prop("disabled", true).text(opts.blocked);
+			return;
+		}
+		$btn.addClass("btn-primary").text(opts.label).on("click", () => {
+			frappe.route_options = opts.routeOptions || {};
+			frappe.set_route(opts.page);
+		});
+	},
+
 	_injectStyle() {
 		if (document.getElementById("ucc-step-style")) return;
 		const el = document.createElement("style");
@@ -96,6 +122,9 @@ window.UCCTrail = {
 		.ucc-step-item.done .ucc-step-n{background:#e8f5ef;color:#237a57}
 		.ucc-step-item.blocked .ucc-step-note{color:#b94848}
 		.ucc-step-arrow{color:var(--text-muted,#c3c9cf);padding-top:6px}
+		.ucc-next{display:flex;align-items:center;gap:8px;margin-top:14px;
+			padding-top:12px;border-top:1px solid var(--border-color,#e2e6ea)}
+		.ucc-next-note{font-size:12px;color:var(--text-muted,#8b95a5)}
 		.ucc-step-context{margin-left:auto;align-self:center;padding:3px 9px;
 			border-radius:12px;background:var(--bg-light-gray,#eef2f7);
 			color:var(--text-color,#1f272e);font-weight:600}

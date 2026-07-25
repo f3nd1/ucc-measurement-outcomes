@@ -76,6 +76,7 @@ class DataExplorer {
 		$(`<button class="btn btn-default btn-sm">${__("Export JSON")}</button>`).appendTo($bar).on("click", () => this.exportAs("json"));
 		this.$note = $('<div class="text-muted" style="font-size:11px;margin-top:8px"></div>').appendTo($m);
 		this.$out = $('<div style="margin-top:14px"></div>').appendTo($m);
+		this.$next = $('<div></div>').appendTo($m);   // item 2
 		this._renderTrail();
 	}
 
@@ -89,6 +90,13 @@ class DataExplorer {
 			context: this.sel.dataset || null,
 			stages: { 5: { blocked: __("not built yet") } },
 		});
+		// Item 2: no forward action — this is a side branch off the pipeline,
+		// not a stage in it. Say so instead of inventing a next step.
+		if (this.$next) {
+			window.UCCTrail.renderNext(this.$next.get(0), {
+				note: __("Data Explorer is a side branch — query anything the pipeline has produced. There's no next step from here."),
+			});
+		}
 	}
 
 	_initControls() {
