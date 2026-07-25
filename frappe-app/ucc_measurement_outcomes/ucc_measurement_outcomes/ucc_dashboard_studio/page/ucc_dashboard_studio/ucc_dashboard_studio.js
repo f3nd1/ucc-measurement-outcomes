@@ -99,7 +99,7 @@ class DashboardStudio {
 
 	// Finding 1: the dashboard reads results produced upstream in Index Studio.
 	_renderTrail() {
-		if (!window.UCCTrail) return;   // missing asset must not abort _build()
+		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
 		// Finding 2: Index Studio now reads route_options, so this hop is live.
 		const segs = [];
 		if (this.filters.index_version) {

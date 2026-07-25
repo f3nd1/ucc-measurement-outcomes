@@ -87,9 +87,19 @@ class IndexStudio {
 		frappe.call({
 			method: IAPI + "list_index_templates",
 			callback: (r) => {
-				(r.message || []).forEach((t) => {
+				const templates = r.message || [];
+				templates.forEach((t) => {
 					this.$template.append(`<option value="${t.code}">${frappe.utils.escape_html(t.name)} (${t.code})</option>`);
 				});
+				// If the list never arrives the dropdown holds only its placeholder,
+				// so Create has nothing to act on. Say so instead of looking idle.
+				if (!templates.length) {
+					this.$template.append(`<option value="" disabled>${__("(no templates returned)")}</option>`);
+					frappe.show_alert({
+						message: __("No index templates were returned — is the app fully migrated on this site?"),
+						indicator: "orange",
+					});
+				}
 			},
 		});
 		const $grid = $('<div style="display:grid;grid-template-columns:1fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
@@ -108,7 +118,7 @@ class IndexStudio {
 
 	// Finding 1: show which index version this canvas belongs to.
 	_renderTrail() {
-		if (!window.UCCTrail) return;   // missing asset must not abort _build()
+		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
 		const segs = [{ label: __("Index Studio") }];
 		if (this.version) segs.push({ label: this.version });
 		window.UCCTrail.render(this.$trail.get(0), segs);
@@ -116,7 +126,15 @@ class IndexStudio {
 
 	_createFromTemplate() {
 		const code = this.$template.val();
-		if (!code) return;
+		// Was a silent `return`, which made a click look like a dead button when
+		// nothing was selected (or when the template list failed to load).
+		if (!code) {
+			frappe.show_alert({
+				message: __("Choose a template from the dropdown first."),
+				indicator: "orange",
+			});
+			return;
+		}
 		frappe.call({
 			method: IAPI + "create_index_from_template",
 			args: { template_code: code },

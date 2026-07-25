@@ -157,7 +157,7 @@ class SurveyBuilder {
 
 	// Finding 1: show where this page sits in the chain.
 	_renderTrail() {
-		if (!window.UCCTrail) return;   // missing asset must not abort _buildLayout()
+		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
 		const segs = [{ label: __("Survey Studio") }];
 		if (this.version) {
 			segs.push({
