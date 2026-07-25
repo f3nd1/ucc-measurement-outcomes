@@ -60,6 +60,11 @@ class DashboardStudio {
 		.ucc-db-track span{display:block;height:100%;background:linear-gradient(90deg,#223a6b,#b58a45);border-radius:99px}
 		.ucc-db-weak{border:1px solid #ecd6aa;background:#fff8ea;border-radius:8px;padding:6px 10px;margin:5px 0;font-size:12px;color:#715824}
 		.ucc-db-empty{color:var(--text-muted,#8b95a5);font-size:12px;padding:22px;text-align:center}
+		/* finding 4: trace-back affordance on every number */
+		.ucc-db-trace{font-size:10px;color:var(--text-muted,#8b95a5);cursor:pointer;margin-top:6px;
+			text-decoration:underline dotted}
+		.ucc-db-trace:hover{color:var(--primary,#4a63e7)}
+		.ucc-db-bar .ucc-db-trace{margin-left:5px;margin-top:0;text-decoration:none}
 		.ucc-db-tabs{display:flex;gap:4px;margin:12px 0 0}
 		.ucc-db-tabs button.active{background:var(--navy,#17294d);color:#fff}
 		`;
@@ -138,6 +143,14 @@ class DashboardStudio {
 		this._renderTrail();
 		if (this.view === "criterion7") this._renderCriterion7();
 		else this._renderOverview();
+		// Finding 4: widgets render as HTML strings, so bind trace clicks after.
+		this.$body.find(".ucc-db-trace").on("click", (e) => {
+			e.stopPropagation();
+			const $t = $(e.currentTarget);
+			frappe.route_options = { index_version: $t.data("version") };
+			if ($t.data("node")) frappe.route_options.node_key = $t.data("node");
+			frappe.set_route("index-studio");
+		});
 		// Finding 4: dead end — give the user the page that creates this data.
 		if (!this.data.kpis.length) {
 			window.UCCEmptyState.render(this.$body.find(".ucc-db-empty-slot").get(0), {
@@ -159,7 +172,11 @@ class DashboardStudio {
 				const cls = k.delta >= 0 ? "ucc-db-up" : "ucc-db-down";
 				note += ` <span class="${cls}">${k.delta >= 0 ? "+" : ""}${k.delta}</span>`;
 			}
-			return `<div class="ucc-db-kpi"><div class="l">${frappe.utils.escape_html(k.index)}</div><div class="v">${val}</div><div class="n">${note}</div></div>`;
+			// Finding 4: trace to the exact published formula this number came from.
+			const trace = k.index_version
+				? `<div class="ucc-db-trace" data-version="${frappe.utils.escape_html(k.index_version)}">${__("trace to Index Studio")} →</div>`
+				: "";
+			return `<div class="ucc-db-kpi"><div class="l">${frappe.utils.escape_html(k.index)}</div><div class="v">${val}</div><div class="n">${note}</div>${trace}</div>`;
 		}).join("") + "</div>";
 	}
 
@@ -182,12 +199,22 @@ class DashboardStudio {
 		if (!usable.length) return `<div class="ucc-db-empty">${__("No data")}</div>`;
 		return usable.map((r) => {
 			const pct = Math.max(0, Math.min(100, (r.value / (r.max || 100)) * 100));
-			return `<div class="ucc-db-bar"><span>${frappe.utils.escape_html(String(r.label))}</span><div class="ucc-db-track"><span style="width:${pct}%"></span></div><b>${Number(r.value).toFixed(1)}</b></div>`;
+			// Finding 4: component rows carry the real node key + version.
+			const trace = r.nodeKey && r.indexVersion
+				? `<span class="ucc-db-trace" data-version="${frappe.utils.escape_html(r.indexVersion)}" data-node="${frappe.utils.escape_html(r.nodeKey)}" title="${__("Trace to this node in Index Studio")}">→</span>`
+				: "";
+			return `<div class="ucc-db-bar"><span>${frappe.utils.escape_html(String(r.label))}</span><div class="ucc-db-track"><span style="width:${pct}%"></span></div><b>${Number(r.value).toFixed(1)}${trace}</b></div>`;
 		}).join("");
 	}
 
 	_contribRows() {
-		return (this.data.contribution || []).map((c) => ({ label: c.component_label || c.component_key, value: c.normalised_value, max: 100 }));
+		return (this.data.contribution || []).map((c) => ({
+			label: c.component_label || c.component_key,
+			value: c.normalised_value,
+			max: 100,
+			nodeKey: c.component_key,        // finding 4: real index node key
+			indexVersion: c.index_version,   // finding 4: the version it came from
+		}));
 	}
 	_comparisonRows() {
 		return (this.data.comparison || []).map((c) => ({ label: c.entity, value: c.value, max: 100 }));
