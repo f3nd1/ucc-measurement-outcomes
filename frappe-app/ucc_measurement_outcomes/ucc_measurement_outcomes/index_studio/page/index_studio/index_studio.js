@@ -9,7 +9,12 @@ frappe.pages["index-studio"].on_page_load = function (wrapper) {
 		title: __("Index Studio"),
 		single_column: true,
 	});
-	new IndexStudio(page);
+	wrapper.ucc = new IndexStudio(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["index-studio"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const IAPI = "ucc_measurement_outcomes.api.index_studio.";
@@ -25,6 +30,38 @@ class IndexStudio {
 		this.editable = false;
 		this.selectedKey = null;
 		this._build();
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.node_key) this._pendingNodeKey = opts.node_key;
+		// ponytail: a metric arriving from Mapping Studio is held until a version
+		// is loaded, then its node is selected. Resolving metric -> version
+		// server-side would make this one click instead of two; see the note in
+		// the session report before adding a lookup method for it.
+		if (opts.metric) this._pendingMetric = opts.metric;
+		if (opts.index_version) {
+			this.versionField.set_value(opts.index_version);   // triggers load()
+		} else {
+			this._applyPendingSelection();
+		}
+	}
+
+	_applyPendingSelection() {
+		if (!this.nodes || !this.nodes.length) return;
+		let node = null;
+		if (this._pendingNodeKey) {
+			node = this.nodes.find((n) => n.node_key === this._pendingNodeKey);
+			this._pendingNodeKey = null;
+		}
+		if (!node && this._pendingMetric) {
+			node = this.nodes.find((n) => n.source_metric === this._pendingMetric);
+			if (node) this._pendingMetric = null;   // keep it until a version matches
+		}
+		if (node) this._select(node.node_key);
 	}
 
 	_build() {
@@ -106,6 +143,7 @@ class IndexStudio {
 				this._renderCanvas();
 				this._renderInspector();
 				this._renderTrail();
+				this._applyPendingSelection();   // finding 2: arrived via deep link
 			},
 		});
 	}

@@ -8,7 +8,12 @@ frappe.pages["dashboard-studio"].on_page_load = function (wrapper) {
 		title: __("Dashboard Studio"),
 		single_column: true,
 	});
-	new DashboardStudio(page);
+	wrapper.ucc = new DashboardStudio(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["dashboard-studio"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const DAPI = "ucc_measurement_outcomes.api.dashboard.";
@@ -22,7 +27,18 @@ class DashboardStudio {
 		this._injectStyle();
 		this._build();
 		frappe.call({ method: DAPI + "dashboard_filters", callback: (r) => { if (r.message) this._fillFilters(r.message); } });
+		this.applyRouteOptions();
 		this.load();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		["index", "index_version", "period", "entity_type", "entity"].forEach((f) => {
+			if (opts[f]) this.filters[f] = opts[f];
+		});
+		if (Object.keys(opts).length) this.load();
 	}
 
 	_injectStyle() {
@@ -78,11 +94,18 @@ class DashboardStudio {
 
 	// Finding 1: the dashboard reads results produced upstream in Index Studio.
 	_renderTrail() {
-		// ponytail: context only for now — the upstream Index Studio segment
-		// becomes a link in Fix 2, once that page reads route_options.
-		const segs = [{
+		// Finding 2: Index Studio now reads route_options, so this hop is live.
+		const segs = [];
+		if (this.filters.index_version) {
+			segs.push({
+				label: __("Index Studio") + " · " + this.filters.index_version,
+				page: "index-studio",
+				routeOptions: { index_version: this.filters.index_version },
+			});
+		}
+		segs.push({
 			label: __("Dashboard Studio") + (this.filters.index ? " · " + this.filters.index : ""),
-		}];
+		});
 		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 

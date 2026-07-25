@@ -9,7 +9,12 @@ frappe.pages["data-explorer"].on_page_load = function (wrapper) {
 		title: __("Data Explorer"),
 		single_column: true,
 	});
-	new DataExplorer(page);
+	wrapper.ucc = new DataExplorer(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["data-explorer"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const XAPI = "ucc_measurement_outcomes.api.explorer.";
@@ -27,8 +32,29 @@ class DataExplorer {
 				this.catalogue = (r.message && r.message.datasets) || {};
 				this.pending = (r.message && r.message.pending) || [];
 				this._initControls();
+				this._applyPendingDataset();   // finding 2: arrived via deep link
 			},
 		});
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.dataset) {
+			this._pendingDataset = opts.dataset;
+			this._applyPendingDataset();
+		}
+	}
+
+	_applyPendingDataset() {
+		if (!this._pendingDataset || !this.dsField) return;
+		const name = this._pendingDataset;
+		if (!Object.keys(this.catalogue).includes(name)) return;   // not an approved dataset
+		this._pendingDataset = null;
+		this.dsField.val(name).trigger("change");
+		this.run();
 	}
 
 	_build() {

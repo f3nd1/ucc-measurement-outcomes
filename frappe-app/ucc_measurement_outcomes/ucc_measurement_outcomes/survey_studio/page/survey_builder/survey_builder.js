@@ -9,7 +9,14 @@ frappe.pages["survey-builder"].on_page_load = function (wrapper) {
 		title: __("Survey Builder"),
 		single_column: true,
 	});
-	new SurveyBuilder(page);
+	wrapper.ucc = new SurveyBuilder(page);
+};
+
+// Finding 2: Desk pages are constructed once, so a deep link arriving on a
+// second visit would be ignored if route_options were only read in the
+// constructor. on_page_show runs on every visit.
+frappe.pages["survey-builder"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const QUESTION_TYPES = [
@@ -39,9 +46,27 @@ class SurveyBuilder {
 		this.future = [];
 		this._injectStyle();
 		this._buildLayout();
-		const preset = (frappe.route_options && frappe.route_options.survey_version) || null;
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: single entry point for deep links. Idempotent — it clears
+	// route_options, so the extra call from on_page_show is a harmless no-op.
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
 		frappe.route_options = {};
-		if (preset) this.versionField.set_value(preset);
+		if (opts.question) this._pendingQuestion = opts.question;
+		if (opts.survey_version) {
+			this.versionField.set_value(opts.survey_version);   // triggers load()
+		} else {
+			this._applyPendingQuestion();
+		}
+	}
+
+	_applyPendingQuestion() {
+		if (!this._pendingQuestion) return;
+		const q = this.questions.find((x) => x.name === this._pendingQuestion);
+		this._pendingQuestion = null;
+		if (q) this._select(q.name);
 	}
 
 	_injectStyle() {
@@ -165,6 +190,7 @@ class SurveyBuilder {
 			this._renderInspector();
 			this._renderBulkBar();
 			this._renderTrail();
+			this._applyPendingQuestion();   // finding 2: arrived via deep link
 		});
 	}
 

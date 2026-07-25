@@ -9,7 +9,12 @@ frappe.pages["mapping-studio"].on_page_load = function (wrapper) {
 		title: __("Mapping Studio"),
 		single_column: true,
 	});
-	new MappingStudio(page);
+	wrapper.ucc = new MappingStudio(page);
+};
+
+// Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
+frappe.pages["mapping-studio"].on_page_show = function (wrapper) {
+	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 
 const MAPI = "ucc_measurement_outcomes.api.mapping.";
@@ -22,6 +27,26 @@ class MappingStudio {
 		this.selected = null;
 		this._build();
 		frappe.call({ method: MAPI + "mapping_masters", callback: (r) => { if (r.message) this.masters = r.message; } });
+		this.applyRouteOptions();
+	}
+
+	// Finding 2: deep-link entry point (idempotent, clears route_options).
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.question) this._pendingQuestion = opts.question;
+		if (opts.survey_version) {
+			this.versionField.set_value(opts.survey_version);   // triggers load()
+		} else {
+			this._applyPendingQuestion();
+		}
+	}
+
+	_applyPendingQuestion() {
+		if (!this._pendingQuestion) return;
+		const name = this._pendingQuestion;
+		this._pendingQuestion = null;
+		if (this.rows.some((r) => r.name === name)) this._select(name);
 	}
 
 	_build() {
@@ -84,6 +109,7 @@ class MappingStudio {
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
 				this._loadCoverage();
 				this._renderTrail();
+				this._applyPendingQuestion();   // finding 2: arrived via deep link
 			},
 		});
 	}
@@ -131,16 +157,34 @@ class MappingStudio {
 			<th>${__("Clause")}</th><th>${__("Metrics")}</th></tr></thead>`;
 		const body = this.rows.map((q, i) => {
 			const metrics = (q.metrics || []).join(", ");
+			// Finding 2: the metric cell is the hop into Index Studio; the question
+			// text is the hop back to Survey Builder.
+			const metricCell = metrics
+				? (q.metrics || []).map((m) => `<span class="indicator-pill green ucc-map-metric-link" data-metric="${frappe.utils.escape_html(m)}" style="cursor:pointer" title="${__("Open in Index Studio")}">${frappe.utils.escape_html(m)} →</span>`).join(" ")
+				: '<span class="text-muted">—</span>';
 			return `<tr data-name="${q.name}" style="cursor:pointer">
 				<td>${i + 1}</td>
-				<td>${frappe.utils.escape_html((q.question_text || "").slice(0, 70))}</td>
+				<td><span class="ucc-map-q-link" style="cursor:pointer;text-decoration:underline dotted" title="${__("Open in Survey Builder")}">${frappe.utils.escape_html((q.question_text || "").slice(0, 70))}</span></td>
 				<td>${q.objective ? `<span class="indicator-pill blue">${frappe.utils.escape_html(q.objective)}</span>` : '<span class="text-muted">—</span>'}</td>
 				<td>${frappe.utils.escape_html(q.primary_clause || "—")}</td>
-				<td>${metrics ? `<span class="indicator-pill green">${frappe.utils.escape_html(metrics)}</span>` : '<span class="text-muted">—</span>'}</td>
+				<td>${metricCell}</td>
 			</tr>`;
 		}).join("");
 		this.$table.html(`<table class="table table-bordered" style="font-size:12px">${head}<tbody>${body}</tbody></table>`);
 		this.$table.find("tbody tr").on("click", (e) => this._select($(e.currentTarget).data("name")));
+		this.$table.find(".ucc-map-metric-link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.route_options = { metric: $(e.currentTarget).data("metric") };
+			frappe.set_route("index-studio");
+		});
+		this.$table.find(".ucc-map-q-link").on("click", (e) => {
+			e.stopPropagation();
+			frappe.route_options = {
+				survey_version: this.version,
+				question: $(e.currentTarget).closest("tr").data("name"),
+			};
+			frappe.set_route("survey-builder");
+		});
 	}
 
 	_select(name) {
