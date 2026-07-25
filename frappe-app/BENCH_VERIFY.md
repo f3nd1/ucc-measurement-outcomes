@@ -403,3 +403,20 @@ external field names.
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
 - Secure per-respondent invitation links
 - Quality Action / Quality Meeting integration (needs bench discovery of those DocTypes)
+
+## Demo data seed (`demo_data.py`)
+
+Guards are proven without a bench (`python3 test_demo_data.py`, 9 assertions).
+Everything that touches the database is compile-checked only — no part of
+`seed()` or `remove()` has been executed against a site.
+
+| # | Assumption | Where | Action on bench |
+|---|---|---|---|
+| 47 | `UCC Survey.status` accepts `"Active"` | `demo_data._build` | Run `remove --kwargs "{'dry_run':1}"`, then `seed`; a bad Select value throws on insert |
+| 48 | `default_normalisation` accepts `"Likert 1-5 to 0-100"` | `demo_data._build` | Same run — copied from `test_integration_chain`, unexecuted there too |
+| 49 | Deleting a Published survey/index version is permitted (no `on_trash` guard exists) | `demo_data.remove` | Confirm with the dry run, then a real `remove` on demo data only |
+| 50 | Clearing `UCC Survey.current_version` is enough to release the link before deleting its version | `demo_data.remove` | If the delete still trips a link check, the message names the blocking DocType |
+| 51 | `UCC Survey Campaign` inserts against a Published version without an open-campaign guard | `demo_data._build` | Relates to the existing campaign TODO in `ucc_survey_campaign.py` |
+
+Removal is designed to be run **before** the seed as a no-op proof: with nothing
+seeded, the traversal finds zero rows and exits without touching anything.
