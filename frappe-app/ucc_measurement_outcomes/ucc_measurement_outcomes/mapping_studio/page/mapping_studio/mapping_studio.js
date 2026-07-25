@@ -118,7 +118,12 @@ class MappingStudio {
 		frappe.call({
 			method: MAPI + "mapping_coverage",
 			args: { survey_version: this.version },
-			callback: (r) => { if (r.message) { this.coverage = r.message; this._renderCoverage(); } },
+			callback: (r) => {
+				if (!r.message) return;
+				this.coverage = r.message;
+				this._renderCoverage();
+				this._renderTable();   // finding 3: table flags depend on coverage
+			},
 		});
 	}
 
@@ -162,10 +167,14 @@ class MappingStudio {
 			const metricCell = metrics
 				? (q.metrics || []).map((m) => `<span class="indicator-pill green ucc-map-metric-link" data-metric="${frappe.utils.escape_html(m)}" style="cursor:pointer" title="${__("Open in Index Studio")}">${frappe.utils.escape_html(m)} →</span>`).join(" ")
 				: '<span class="text-muted">—</span>';
-			return `<tr data-name="${q.name}" style="cursor:pointer">
+			// Finding 3: the table used to decide "unmapped" from q.objective while
+			// the canvas used the coverage method — two sources for one fact. Both
+			// now read _isUnmapped(), i.e. api.mapping.mapping_coverage.
+			const isGap = this._isUnmapped(q.name);
+			return `<tr data-name="${q.name}" class="${isGap ? "ucc-map-gap" : ""}" style="cursor:pointer">
 				<td>${i + 1}</td>
 				<td><span class="ucc-map-q-link" style="cursor:pointer;text-decoration:underline dotted" title="${__("Open in Survey Builder")}">${frappe.utils.escape_html((q.question_text || "").slice(0, 70))}</span></td>
-				<td>${q.objective ? `<span class="indicator-pill blue">${frappe.utils.escape_html(q.objective)}</span>` : '<span class="text-muted">—</span>'}</td>
+				<td>${isGap ? `<span class="indicator-pill red">${__("unmapped")}</span>` : `<span class="indicator-pill blue">${frappe.utils.escape_html(q.objective || "")}</span>`}</td>
 				<td>${frappe.utils.escape_html(q.primary_clause || "—")}</td>
 				<td>${metricCell}</td>
 			</tr>`;

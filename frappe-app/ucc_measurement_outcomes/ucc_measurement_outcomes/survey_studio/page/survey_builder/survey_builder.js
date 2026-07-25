@@ -93,6 +93,11 @@ class SurveyBuilder {
 		.ucc-sb-tag{display:inline-block;border:1px solid var(--border-color,#e2e6ea);border-radius:20px;padding:1px 7px;margin-right:5px;font-size:10px}
 		.ucc-sb-banner{background:#fff4df;border:1px solid #ecd6aa;color:#715824;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:10px}
 		.ucc-sb-req{color:var(--red,#b94848)}
+		/* finding 3: same red-flag language the Mapping canvas uses for a gap */
+		.ucc-sb-q.gap{border-color:#e0b4b4;background:#fdf6f6}
+		.ucc-sb-maplink{margin-left:6px;font-size:10px;cursor:pointer;color:var(--text-muted,#8b95a5);text-decoration:underline dotted}
+		.ucc-sb-maplink:hover{color:var(--primary,#4a63e7)}
+		.ucc-sb-maplink.gap{color:var(--red,#b94848)}
 		.ucc-sb-iconbtn{border:0;background:transparent;cursor:pointer;color:var(--text-muted,#8b95a5);padding:3px 5px;border-radius:6px}
 		.ucc-sb-iconbtn:hover{background:var(--bg-light-gray,#eef2f7)}
 		.ucc-sb-modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-start;justify-content:center;z-index:1050;padding:24px;overflow:auto}
@@ -191,6 +196,22 @@ class SurveyBuilder {
 			this._renderBulkBar();
 			this._renderTrail();
 			this._applyPendingQuestion();   // finding 2: arrived via deep link
+			this._loadCoverage();           // finding 3: mapping status
+		});
+	}
+
+	// Finding 3: mapping status comes from the SAME whitelisted method Mapping
+	// Studio uses (api.mapping.mapping_coverage) — one source of truth, not a
+	// second implementation of "is this question mapped".
+	_loadCoverage() {
+		frappe.call({
+			method: "ucc_measurement_outcomes.api.mapping.mapping_coverage",
+			args: { survey_version: this.version.name },
+			callback: (r) => {
+				if (!r.message) return;
+				this.unmapped = new Set(r.message.questions_without_objective || []);
+				this._renderQuestions();
+			},
 		});
 	}
 
@@ -213,19 +234,31 @@ class SurveyBuilder {
 		this.questions.forEach((q, i) => {
 			const tags = [q.question_type, q.is_required ? __("Required") : null].filter(Boolean)
 				.map((t) => `<span class="ucc-sb-tag">${frappe.utils.escape_html(t)}</span>`).join("");
+			// Finding 3: same fact, same flag as Mapping Studio's table and canvas.
+			// Also finding 2: this label is the hop into Mapping Studio.
+			const isGap = this.unmapped && this.unmapped.has(q.name);
+			const mapLink = !this.unmapped ? ""
+				: isGap
+					? `<span class="ucc-sb-maplink gap" data-q="${q.name}">${__("unmapped — fix in Mapping Studio")} →</span>`
+					: `<span class="ucc-sb-maplink" data-q="${q.name}">${__("mapped")} →</span>`;
 			const $q = $(`
-				<div class="ucc-sb-q ${this.selected === q.name ? "selected" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
+				<div class="ucc-sb-q ${this.selected === q.name ? "selected" : ""} ${isGap ? "gap" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
 					<input type="checkbox" class="ucc-sb-check" ${this.selection.has(q.name) ? "checked" : ""}>
 					<div class="ucc-sb-handle">⋮⋮</div>
 					<div class="ucc-sb-main">
 						<div class="ucc-sb-qtitle">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</div>
-						<div class="ucc-sb-qmeta">${tags}</div>
+						<div class="ucc-sb-qmeta">${tags}${mapLink}</div>
 					</div>
 					<div class="ucc-sb-actions">
 						<button class="ucc-sb-iconbtn" data-act="dup" title="${__("Duplicate")}">⧉</button>
 						<button class="ucc-sb-iconbtn" data-act="del" title="${__("Delete")}">⌫</button>
 					</div>
 				</div>`);
+			$q.find(".ucc-sb-maplink").on("click", (e) => {
+				e.stopPropagation();
+				frappe.route_options = { survey_version: this.version.name, question: q.name };
+				frappe.set_route("mapping-studio");
+			});
 			$q.find(".ucc-sb-check").on("change", (e) => { e.target.checked ? this.selection.add(q.name) : this.selection.delete(q.name); this._renderBulkBar(); });
 			$q.find(".ucc-sb-main").on("click", () => this._select(q.name));
 			$q.find('[data-act="dup"]').on("click", (e) => { e.stopPropagation(); this._duplicate(q.name); });
