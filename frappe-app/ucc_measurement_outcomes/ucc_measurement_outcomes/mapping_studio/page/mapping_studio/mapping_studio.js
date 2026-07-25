@@ -83,7 +83,7 @@ class MappingStudio {
 		if (this.version) {
 			segs.push({
 				label: __("Survey Studio") + " · " + this.version,
-				page: "survey-builder",
+				page: "ucc-survey-builder",
 				routeOptions: { survey_version: this.version },
 			});
 		}
@@ -198,7 +198,7 @@ class MappingStudio {
 				survey_version: this.version,
 				question: $(e.currentTarget).closest("tr").data("name"),
 			};
-			frappe.set_route("survey-builder");
+			frappe.set_route("ucc-survey-builder");
 		});
 	}
 
