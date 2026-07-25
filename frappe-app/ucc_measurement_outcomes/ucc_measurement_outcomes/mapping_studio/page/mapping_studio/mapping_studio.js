@@ -89,21 +89,27 @@ class MappingStudio {
 	// Finding 1: Survey Studio is upstream of this page — make that clickable.
 	_renderTrail() {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
-		const segs = [];
-		if (this.version) {
-			segs.push({
-				label: __("Survey Studio") + " · " + this.version,
-				page: "ucc-survey-builder",
-				routeOptions: { survey_version: this.version },
-			});
+		// Item 1: stage 2. Knows the question count and the coverage numbers it
+		// already loaded, plus how many distinct metrics exist for stage 3.
+		const stages = {};
+		if (this.version) stages[1] = { done: this.rows.length > 0 };
+		if (this.coverage) {
+			const n = this.coverage.questions_without_objective.length;
+			stages[2] = n === 0
+				? { done: true }
+				: { note: __("{0} questions still need objectives", [n]) };
+			const metrics = new Set();
+			this.rows.forEach((q) => (q.metrics || []).forEach((m) => metrics.add(m)));
+			if (!metrics.size) {
+				stages[3] = { blocked: __("needs mapped metrics (none yet)") };
+			}
 		}
-		segs.push({ label: __("Mapping Studio") });
-		// Finding 5: same live count as the coverage panel below — one source.
-		const aside = this.coverage ? {
-			label: __("Unmapped"),
-			badge: this.coverage.questions_without_objective.length,
-		} : null;
-		window.UCCTrail.render(this.$trail.get(0), segs, aside);
+		window.UCCTrail.render(this.$trail.get(0), {
+			current: 2,
+			context: this.version,
+			routeOptions: this.version ? { survey_version: this.version } : {},
+			stages: stages,
+		});
 	}
 
 	load(version) {

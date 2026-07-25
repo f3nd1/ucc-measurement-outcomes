@@ -133,9 +133,21 @@ class IndexStudio {
 	// Finding 1: show which index version this canvas belongs to.
 	_renderTrail() {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
-		const segs = [{ label: __("Index Studio") }];
-		if (this.version) segs.push({ label: this.version });
-		window.UCCTrail.render(this.$trail.get(0), segs);
+		// Item 1: stage 3. Knows only the selected version — a published one
+		// (editable === false) means the formula is frozen and stage 3 is done.
+		// Nothing here can see survey/mapping state, so those stay neutral.
+		const stages = {};
+		if (this.version) {
+			stages[3] = this.editable
+				? { note: __("draft — publish it to calculate results") }
+				: { done: true };
+		}
+		window.UCCTrail.render(this.$trail.get(0), {
+			current: 3,
+			context: this.version,
+			routeOptions: this.version ? { index_version: this.version } : {},
+			stages: stages,
+		});
 	}
 
 	_createFromTemplate() {

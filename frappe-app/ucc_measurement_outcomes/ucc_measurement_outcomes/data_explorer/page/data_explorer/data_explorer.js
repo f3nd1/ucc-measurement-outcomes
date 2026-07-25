@@ -82,9 +82,13 @@ class DataExplorer {
 	// Finding 1: show which approved dataset is being queried.
 	_renderTrail() {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
-		window.UCCTrail.render(this.$trail.get(0), [{
-			label: __("Data Explorer") + (this.sel.dataset ? " · " + this.sel.dataset : ""),
-		}]);
+		// Item 1/2: Data Explorer is a side branch, not a pipeline stage — no
+		// `current`, so the stepper shows the pipeline for orientation without
+		// pretending this page sits inside it.
+		window.UCCTrail.render(this.$trail.get(0), {
+			context: this.sel.dataset || null,
+			stages: { 5: { blocked: __("not built yet") } },
+		});
 	}
 
 	_initControls() {

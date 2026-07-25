@@ -110,18 +110,25 @@ class DashboardStudio {
 	_renderTrail() {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
 		// Finding 2: Index Studio now reads route_options, so this hop is live.
-		const segs = [];
-		if (this.filters.index_version) {
-			segs.push({
-				label: __("Index Studio") + " · " + this.filters.index_version,
-				page: "index-studio",
-				routeOptions: { index_version: this.filters.index_version },
-			});
+		// Item 1: stage 4. Results existing proves a published index produced
+		// them, so stage 3 is done too. Stage 5 has no integration yet.
+		const stages = {};
+		const hasResults = !!(this.data && this.data.kpis && this.data.kpis.length);
+		if (this.data) {
+			stages[3] = hasResults ? { done: true } : {};
+			stages[4] = hasResults
+				? { done: true }
+				: { blocked: __("no results yet — calculate an index") };
 		}
-		segs.push({
-			label: __("UCC Dashboard Studio") + (this.filters.index ? " · " + this.filters.index : ""),
+		stages[5] = { blocked: __("not built yet") };
+		window.UCCTrail.render(this.$trail.get(0), {
+			current: 4,
+			context: this.filters.index || null,
+			routeOptions: this.filters.index_version
+				? { index_version: this.filters.index_version }
+				: {},
+			stages: stages,
 		});
-		window.UCCTrail.render(this.$trail.get(0), segs);
 	}
 
 	_fillFilters(d) {

@@ -167,21 +167,24 @@ class SurveyBuilder {
 	// Finding 1: show where this page sits in the chain.
 	_renderTrail() {
 		if (!window.UCCTrail) return console.warn("[UCC] trail.js not loaded - run: bench build --app ucc_measurement_outcomes && bench restart");
-		const segs = [{ label: __("Survey Studio") }];
-		if (this.version) {
-			segs.push({
-				label: `${this.version.survey_title || this.version.survey} · V${this.version.version_number}`,
-			});
+		// Item 1: this page is stage 1. It knows its own question count, and the
+		// unmapped count it already loaded for the question flags (no new call).
+		const stages = {};
+		if (this.version) stages[1] = { done: this.questions.length > 0 };
+		if (this.unmapped) {
+			const n = this.unmapped.size;
+			stages[2] = n === 0
+				? { done: true }
+				: { note: __("{0} questions still need objectives", [n]) };
 		}
-		// Finding 5: live unmapped count, reusing the coverage data already
-		// loaded for the question flags — not a second count.
-		const aside = this.unmapped && this.version ? {
-			label: __("Unmapped"),
-			badge: this.unmapped.size,
-			page: "mapping-studio",
-			routeOptions: { survey_version: this.version.name },
-		} : null;
-		window.UCCTrail.render(this.$trail.get(0), segs, aside);
+		window.UCCTrail.render(this.$trail.get(0), {
+			current: 1,
+			context: this.version
+				? `${this.version.survey_title || this.version.survey} · V${this.version.version_number}`
+				: null,
+			routeOptions: this.version ? { survey_version: this.version.name } : {},
+			stages: stages,
+		});
 	}
 
 	_renderPalette() {
