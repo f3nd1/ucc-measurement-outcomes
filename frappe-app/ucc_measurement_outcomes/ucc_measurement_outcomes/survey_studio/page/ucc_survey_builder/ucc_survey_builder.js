@@ -137,6 +137,14 @@ class SurveyBuilder {
 		.ucc-sb-sheet-body{padding:18px}
 		.ucc-sb-pq{padding:12px 0;border-bottom:1px solid #eee}
 		.ucc-sb-pq label.q{display:block;font-weight:600;margin-bottom:6px}
+		/* Item 2: same star markup/classes as the public form's, so the preview
+		   looks like what a respondent actually sees. Real radios underneath
+		   (visually hidden, not display:none) keep native label-click and
+		   keyboard behaviour; only the visual is a star, not the stored value. */
+		.ucc-stars{position:relative;display:flex;gap:2px}
+		.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+		.ucc-star{font-size:24px;line-height:1;cursor:pointer;color:#d9d9d9;user-select:none}
+		.ucc-star.filled{color:#e0a832}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-sb-style";
@@ -589,18 +597,37 @@ class SurveyBuilder {
 		const setvp = () => { this._modal.find(".ucc-sb-sheet").toggleClass("mobile", mobile); this._modal.find(".ucc-sb-vp").text(mobile ? __("Mobile") : __("Desktop")); };
 		setvp();
 		this._modal.find(".ucc-sb-toggle").on("click", () => { mobile = !mobile; setvp(); });
+		// Item 2: fill stars up to the checked one. Delegated once per preview
+		// render rather than per-star, since the sheet's HTML is rebuilt fresh
+		// each time _preview() runs.
+		this._modal.find(".ucc-sb-previewform").on("change", ".ucc-star-input", (e) => {
+			const $group = $(e.target).closest(".ucc-stars");
+			const checkedN = +$(e.target).data("n");
+			$group.find(".ucc-star").each((_, el) => $(el).toggleClass("filled", +$(el).data("n") <= checkedN));
+		});
 	}
 
 	_previewInput(q) {
-		const choices = (q.choices || []).map((c) => c.choice_label);
+		const choices = q.choices || [];
 		switch (q.question_type) {
 			case "Paragraph": return '<textarea class="form-control" rows="2"></textarea>';
-			case "Rating": case "Single Choice": case "Yes / No":
-				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="radio" name="pv_${q.name}"> ${frappe.utils.escape_html(c)}</label>`).join("") || '<input class="form-control">';
+			// Item 2: star widget, not numbered radios. Real radios underneath
+			// (visually hidden) so this stays a native, keyboard-operable form
+			// control — only the visual changed, same as the public form.
+			case "Rating":
+				return choices.length
+					? `<div class="ucc-stars">${choices.map((c, i) => {
+						const id = `pv_star_${q.name}_${i}`;
+						return `<input type="radio" class="ucc-star-input" name="pv_${q.name}" id="${id}" data-n="${i + 1}">` +
+							`<label for="${id}" class="ucc-star" data-n="${i + 1}" title="${frappe.utils.escape_html(c.choice_label || "")}">★</label>`;
+					}).join("")}</div>`
+					: '<input class="form-control" disabled placeholder="(no choices configured)">';
+			case "Single Choice": case "Yes / No":
+				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="radio" name="pv_${q.name}"> ${frappe.utils.escape_html(c.choice_label)}</label>`).join("") || '<input class="form-control">';
 			case "Multiple Choice":
-				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="checkbox"> ${frappe.utils.escape_html(c)}</label>`).join("");
+				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="checkbox"> ${frappe.utils.escape_html(c.choice_label)}</label>`).join("");
 			case "Dropdown":
-				return `<select class="form-control"><option></option>${choices.map((c) => `<option>${frappe.utils.escape_html(c)}</option>`).join("")}</select>`;
+				return `<select class="form-control"><option></option>${choices.map((c) => `<option>${frappe.utils.escape_html(c.choice_label)}</option>`).join("")}</select>`;
 			case "Date": return '<input type="date" class="form-control">';
 			case "Number": return '<input type="number" class="form-control">';
 			case "Email": return '<input type="email" class="form-control">';

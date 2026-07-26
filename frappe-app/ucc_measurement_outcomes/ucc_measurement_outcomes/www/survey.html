@@ -18,6 +18,13 @@
 	.ucc-opt{display:block;margin:4px 0;font-weight:400}
 	.ucc-req{color:#b94848}
 	.ucc-thanks{padding:30px;text-align:center}
+	/* Item 2: real radios underneath, visually hidden (not display:none, so
+	   label-click and keyboard tabbing/arrow-keys still work natively) — only
+	   the visual is a star, the stored/submitted value is unchanged. */
+	.ucc-stars{position:relative;display:flex;gap:2px}
+	.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+	.ucc-star{font-size:28px;line-height:1;cursor:pointer;color:#d9d9d9;user-select:none}
+	.ucc-star.filled{color:#e0a832}
 </style>
 
 {# Payload in a NON-executable script tag, parsed with JSON.parse. Injecting it
@@ -61,8 +68,19 @@
 		switch (q.question_type) {
 			case "Paragraph":
 				return '<textarea class="form-control" data-q="' + esc(name) + '" rows="3"></textarea>';
-			case "Single Choice":
+			// Item 2: star widget, not numbered radios. The underlying stored
+			// value is unchanged — still whichever choice_value/choice_label the
+			// checked radio carries; collect() below reads input:checked exactly
+			// as it did before, so nothing downstream of this markup changes.
 			case "Rating":
+				if (!choices.length) return '<input type="text" class="form-control" data-q="' + esc(name) + '">';
+				return '<div class="ucc-stars" data-q="' + esc(name) + '">' + choices.map(function (c, i) {
+					var v = c.choice_value != null && c.choice_value !== "" ? c.choice_value : c.choice_label;
+					var id = "star_" + esc(name) + "_" + i;
+					return '<input type="radio" class="ucc-star-input" name="q_' + esc(name) + '" value="' + esc(v) + '" id="' + id + '" data-n="' + (i + 1) + '">' +
+						'<label for="' + id + '" class="ucc-star" data-n="' + (i + 1) + '" title="' + esc(c.choice_label) + '">★</label>';
+				}).join("") + "</div>";
+			case "Single Choice":
 			case "Yes / No":
 				return '<div data-q="' + esc(name) + '" data-multi="0">' + choices.map(function (c) { return opt(c, "radio"); }).join("") + "</div>";
 			case "Multiple Choice":
@@ -106,6 +124,18 @@
 	html += '<div id="ucc-error" class="alert alert-warning" style="display:none;margin-top:14px"></div>';
 	html += '<button type="button" id="ucc-submit" class="btn btn-primary" style="margin-top:18px">Submit</button></div>';
 	root.innerHTML = html;
+
+	// Item 2: fill stars up to whichever one is checked. Delegated on root (one
+	// listener) rather than per-star, since the whole form is built once from a
+	// template string with no per-element wiring elsewhere.
+	root.addEventListener("change", function (e) {
+		if (!e.target.classList.contains("ucc-star-input")) return;
+		var group = e.target.closest(".ucc-stars");
+		var checkedN = +e.target.getAttribute("data-n");
+		Array.prototype.slice.call(group.querySelectorAll(".ucc-star")).forEach(function (label) {
+			label.classList.toggle("filled", +label.getAttribute("data-n") <= checkedN);
+		});
+	});
 
 	function collect(qEl) {
 		var type = qEl.getAttribute("data-type");
