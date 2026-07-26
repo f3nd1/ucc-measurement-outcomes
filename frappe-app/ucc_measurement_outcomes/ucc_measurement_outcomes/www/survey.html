@@ -44,6 +44,12 @@
 		border:1px solid #d9d9d9;border-radius:6px;cursor:pointer;font-size:13px}
 	.ucc-nps-btn.selected{background:#4a63e7;color:#fff;border-color:#4a63e7}
 	.ucc-nps-ends{display:flex;justify-content:space-between;font-size:11px;color:#8b95a5;margin-top:4px;max-width:400px}
+	/* Grid: Likert Matrix / Multiple Choice Grid / Checkbox Grid - plain native
+	   radios/checkboxes in table cells, no custom styling needed. */
+	.ucc-grid{border-collapse:collapse;width:100%;font-size:13px}
+	.ucc-grid th,.ucc-grid td{border:1px solid #e2e6ea;padding:8px 10px}
+	.ucc-grid th{background:#f7f9fc;font-size:12px}
+	.ucc-grid td:first-child{text-align:left}
 </style>
 
 {# Payload in a NON-executable script tag, parsed with JSON.parse. Injecting it
@@ -77,6 +83,34 @@
 		});
 	}
 
+	// Shared by Likert Matrix, Multiple Choice Grid and Checkbox Grid: rows
+	// (q.matrix_rows, one statement per line) down the side, columns (q.choices
+	// - the SAME table every simple choice type already uses) across the top.
+	// Only Checkbox Grid allows more than one selection per row.
+	var MULTI_GRID_TYPES = ["Checkbox Grid"];
+	function renderGrid(q, columns) {
+		var name = q.name;
+		var rows = (q.matrix_rows || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+		if (!rows.length || !columns.length) {
+			// Same reasoning as Rating/Ranking with no choices configured: an
+			// empty grid with a required flag would strand a respondent who has
+			// nothing to answer, so this falls back to a real, answerable field.
+			return '<textarea class="form-control" data-q="' + esc(name) + '" rows="2"></textarea>';
+		}
+		var multi = MULTI_GRID_TYPES.indexOf(q.question_type) !== -1;
+		var head = columns.map(function (c) { return "<th>" + esc(c.choice_label) + "</th>"; }).join("");
+		var body = rows.map(function (r, ri) {
+			var cells = columns.map(function (c) {
+				var v = c.choice_value != null && c.choice_value !== "" ? c.choice_value : c.choice_label;
+				return '<td style="text-align:center"><input type="' + (multi ? "checkbox" : "radio") +
+					'" name="q_' + esc(name) + "_r" + ri + '" value="' + esc(v) + '"></td>';
+			}).join("");
+			return "<tr data-row=\"" + ri + "\"><td>" + esc(r) + "</td>" + cells + "</tr>";
+		}).join("");
+		return '<table class="ucc-grid" data-q="' + esc(name) + '"><thead><tr><th></th>' + head +
+			"</tr></thead><tbody>" + body + "</tbody></table>";
+	}
+
 	function field(q) {
 		var name = q.name;
 		var choices = (q.choices || []);
@@ -99,6 +133,14 @@
 					return '<input type="radio" class="ucc-star-input" name="q_' + esc(name) + '" value="' + esc(v) + '" id="' + id + '" data-n="' + (i + 1) + '">' +
 						'<label for="' + id + '" class="ucc-star" data-n="' + (i + 1) + '" title="' + esc(c.choice_label) + '">★</label>';
 				}).join("") + "</div>";
+			// Investigation finding: Likert Matrix had no case here either -
+			// as unimplemented as the others were, and no schema field for
+			// rows existed anywhere. One shared renderer for all three grid
+			// types; only the per-cell input differs (radio vs checkbox).
+			case "Likert Matrix":
+			case "Multiple Choice Grid":
+			case "Checkbox Grid":
+				return renderGrid(q, choices);
 			// NPS: no case existed at all, so it fell through to the generic
 			// default (a free-text box) - the same broken pattern Ranking/
 			// Slider/File Upload had before tonight. Fixed the same way: a
@@ -275,6 +317,29 @@
 				return li.getAttribute("data-value");
 			});
 		}
+		// Grid: one entry per row, keyed by row index - the same shape
+		// submission_utils.to_text()/has_value() on the server were extended to
+		// handle. Checkbox Grid rows are arrays (0+ selections); the others are
+		// a single value or null. If rows/columns were never configured,
+		// renderGrid() fell back to a plain textarea instead of a table, so
+		// there is no .ucc-grid here and this falls through to the generic
+		// [data-q] read below.
+		if (["Likert Matrix", "Multiple Choice Grid", "Checkbox Grid"].indexOf(type) !== -1) {
+			var table = qEl.querySelector(".ucc-grid");
+			if (table) {
+				var grid = {};
+				Array.prototype.slice.call(table.querySelectorAll("tr[data-row]")).forEach(function (tr) {
+					var rowKey = "row_" + tr.getAttribute("data-row");
+					if (type === "Checkbox Grid") {
+						grid[rowKey] = Array.prototype.slice.call(tr.querySelectorAll("input:checked")).map(function (el) { return el.value; });
+					} else {
+						var checkedCell = tr.querySelector("input:checked");
+						grid[rowKey] = checkedCell ? checkedCell.value : null;
+					}
+				});
+				return grid;
+			}
+		}
 		var input = qEl.querySelector("[data-q]");
 		return input ? input.value : null;
 	}
@@ -295,7 +360,20 @@
 		Array.prototype.slice.call(root.querySelectorAll(".ucc-q")).forEach(function (qEl) {
 			var val = collect(qEl);
 			var required = qEl.getAttribute("data-required") === "1";
-			var empty = val == null || val === "" || (Array.isArray(val) && !val.length);
+			var empty;
+			if (val && typeof val === "object" && !Array.isArray(val)) {
+				// Grid: required means EVERY row answered (Google Forms' own
+				// semantics, which the grid-type request was modelled on) -
+				// some(), not every(), so a partially-filled grid still counts
+				// as incomplete rather than only an entirely-blank one.
+				var rowKeys = Object.keys(val);
+				empty = !rowKeys.length || rowKeys.some(function (k) {
+					var rowVal = val[k];
+					return rowVal == null || (Array.isArray(rowVal) && !rowVal.length);
+				});
+			} else {
+				empty = val == null || val === "" || (Array.isArray(val) && !val.length);
+			}
 			if (required && empty) missing = true;
 			answers.push({ question: qEl.getAttribute("data-question"), value: val });
 		});

@@ -134,7 +134,7 @@ def get_survey_builder(survey_version):
 		filters={"survey_version": survey_version},
 		fields=[
 			"name", "question_text", "question_type", "help_text", "is_required",
-			"sequence", "display_logic", "display_logic_config",
+			"sequence", "display_logic", "display_logic_config", "matrix_rows",
 		],
 		order_by="sequence asc, creation asc",
 	)
@@ -173,7 +173,7 @@ def update_question(question, payload):
 	doc = frappe.get_doc(QUESTION, question)
 	for field in (
 		"question_text", "question_type", "help_text", "is_required",
-		"display_logic", "display_logic_config", "sequence",
+		"display_logic", "display_logic_config", "sequence", "matrix_rows",
 	):
 		if field in data:
 			doc.set(field, data[field])
@@ -261,7 +261,7 @@ def create_question(survey_version, payload):
 	doc = frappe.new_doc(QUESTION)
 	doc.survey_version = survey_version
 	for field in ("question_text", "question_type", "help_text", "is_required",
-				  "display_logic", "display_logic_config", "sequence"):
+				  "display_logic", "display_logic_config", "sequence", "matrix_rows"):
 		if field in data:
 			doc.set(field, data[field])
 	for c in data.get("choices", []):

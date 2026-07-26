@@ -15,6 +15,18 @@ def test_has_value():
 	assert has_value(["a"])
 
 
+def test_has_value_on_grid_answers():
+	# A required grid needs EVERY row answered - Google Forms' own semantics,
+	# which the grid-type request was modelled on. A dict with any row missing
+	# (single-select: None/blank; checkbox: an empty list) is not complete.
+	assert not has_value({})                                    # no rows at all
+	assert not has_value({"row_0": None, "row_1": "col_a"})      # one row missing
+	assert not has_value({"row_0": "col_a", "row_1": ""})        # blank counts as missing
+	assert has_value({"row_0": "col_a", "row_1": "col_b"})       # single-select, complete
+	assert not has_value({"row_0": ["col_a"], "row_1": []})      # checkbox: one row unchecked
+	assert has_value({"row_0": ["col_a"], "row_1": ["col_b", "col_c"]})  # checkbox, complete
+
+
 def test_to_text():
 	assert to_text(None) is None
 	assert to_text("hello") == "hello"
@@ -25,6 +37,17 @@ def test_to_text():
 	assert to_text([]) == "[]"
 	import json
 	assert json.loads(to_text(["1,000 - 2,000", "Other"])) == ["1,000 - 2,000", "Other"]
+
+
+def test_to_text_on_grid_answers():
+	# Without this branch a dict fell through to str(v) - Python's repr,
+	# single-quoted and not valid JSON, silently corrupting the stored answer.
+	import json
+	single = {"row_0": "col_a", "row_1": "col_b"}
+	assert json.loads(to_text(single)) == single
+	multi = {"row_0": ["col_a", "col_c"], "row_1": ["col_b"]}
+	assert json.loads(to_text(multi)) == multi
+	assert to_text({}) == "{}"
 
 
 def test_campaign_window_open():
@@ -51,6 +74,8 @@ def test_campaign_window_open():
 
 if __name__ == "__main__":
 	test_has_value()
+	test_has_value_on_grid_answers()
 	test_to_text()
+	test_to_text_on_grid_answers()
 	test_campaign_window_open()
 	print("submission utils: all checks passed")

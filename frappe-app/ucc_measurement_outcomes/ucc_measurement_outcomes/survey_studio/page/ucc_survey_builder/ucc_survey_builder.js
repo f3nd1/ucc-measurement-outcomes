@@ -41,11 +41,21 @@ const QUESTION_TYPES = [
 	"Short Text", "Paragraph", "Email", "Number", "Date", "Rating",
 	"Single Choice", "Multiple Choice", "Dropdown", "Yes / No", "Likert Matrix",
 	"NPS", "Ranking", "Slider", "File Upload", "Section Heading",
+	"Multiple Choice Grid", "Checkbox Grid",
 ];
 const CHOICE_TYPES = new Set([
 	"Rating", "Single Choice", "Multiple Choice", "Dropdown", "Yes / No",
-	"Likert Matrix", "Ranking",
+	"Likert Matrix", "Ranking", "Multiple Choice Grid", "Checkbox Grid",
 ]);
+// Investigation finding: Likert Matrix had no rendering case anywhere and no
+// schema field for rows either - it was exactly as unimplemented as Ranking/
+// Slider/NPS were before tonight, not a working pattern to copy from. Fixed
+// as part of building the two new grid types: all three share one renderer
+// (_renderGrid), so Likert Matrix's gap closes as a side effect rather than a
+// second, separately-scoped fix.
+const MATRIX_TYPES = new Set(["Likert Matrix", "Multiple Choice Grid", "Checkbox Grid"]);
+// Only Checkbox Grid allows more than one selection per row.
+const MULTI_MATRIX_TYPES = new Set(["Checkbox Grid"]);
 // Display-logic UI removed per decision V1: the fields exist in the schema but
 // nothing executes them yet. Re-add the controls together with the logic
 // engine (which must include a server-side logic-aware required check).
@@ -163,6 +173,10 @@ class SurveyBuilder {
 			border:1px solid var(--border-color,#d9d9d9);border-radius:6px;cursor:pointer;font-size:12px}
 		.ucc-nps-btn.selected{background:var(--primary,#4a63e7);color:#fff;border-color:var(--primary,#4a63e7)}
 		.ucc-nps-ends{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted,#8b95a5);margin-top:4px;max-width:380px}
+		.ucc-grid{border-collapse:collapse;font-size:12px;width:100%}
+		.ucc-grid th,.ucc-grid td{border:1px solid var(--border-color,#e2e6ea);padding:6px 9px}
+		.ucc-grid th{background:var(--bg-light-gray,#eef2f7);font-size:11px}
+		.ucc-grid td:first-child{text-align:left;font-weight:500}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-sb-style";
@@ -669,6 +683,12 @@ class SurveyBuilder {
 							`<label for="${id}" class="ucc-star" data-n="${i + 1}" title="${frappe.utils.escape_html(c.choice_label || "")}">★</label>`;
 					}).join("")}</div>`
 					: '<input class="form-control" disabled placeholder="(no choices configured)">';
+			// Investigation finding: Likert Matrix had no case here either - as
+			// unimplemented as the others were. One shared renderer for all
+			// three grid types; only the per-cell input differs (radio vs
+			// checkbox), matching "reuse B's work" for Checkbox Grid.
+			case "Likert Matrix": case "Multiple Choice Grid": case "Checkbox Grid":
+				return this._renderGridPreview(q, choices);
 			case "Single Choice": case "Yes / No":
 				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="radio" name="pv_${q.name}"> ${frappe.utils.escape_html(c.choice_label)}</label>`).join("") || '<input class="form-control">';
 			case "Multiple Choice":
@@ -710,6 +730,24 @@ class SurveyBuilder {
 		}
 	}
 
+	// Shared by Likert Matrix, Multiple Choice Grid and Checkbox Grid: rows
+	// (matrix_rows, one statement per line) down the side, columns (choices,
+	// the SAME table every simple choice type already uses) across the top.
+	// Preview never submits anywhere, so this is visual only - no name/value
+	// wiring needed the way the public form's version requires.
+	_renderGridPreview(q, columns) {
+		const rows = (q.matrix_rows || "").split("\n").map((s) => s.trim()).filter(Boolean);
+		if (!rows.length || !columns.length) {
+			return `<p class="text-muted" style="font-size:12px">${__("(configure grid rows and columns in the Inspector)")}</p>`;
+		}
+		const multi = MULTI_MATRIX_TYPES.has(q.question_type);
+		const head = columns.map((c) => `<th>${frappe.utils.escape_html(c.choice_label)}</th>`).join("");
+		const body = rows.map((r, ri) => `<tr><td>${frappe.utils.escape_html(r)}</td>${
+			columns.map(() => `<td style="text-align:center"><input type="${multi ? "checkbox" : "radio"}" name="pv_${q.name}_r${ri}"></td>`).join("")
+		}</tr>`).join("");
+		return `<table class="ucc-grid"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+	}
+
 	_sheet(mobile, html) {
 		const $s = this._modal.find(".ucc-sb-sheet").toggleClass("mobile", !!mobile);
 		$s.html(`<div class="ucc-sb-sheet-head"><b>${__("UCC Survey Builder")}</b><button class="ucc-sb-iconbtn ucc-sb-close">✕</button></div><div class="ucc-sb-sheet-body">${html}</div>`);
@@ -731,10 +769,18 @@ class SurveyBuilder {
 			<div class="form-group"><label>${__("Help Text")}</label><textarea class="form-control" data-f="help_text" ${dis}>${frappe.utils.escape_html(q.help_text || "")}</textarea></div>
 			<div class="form-group"><label>${__("Type")}</label><select class="form-control" data-f="question_type" ${dis}>${opt(QUESTION_TYPES, q.question_type)}</select></div>
 			<div class="checkbox"><label><input type="checkbox" data-f="is_required" ${q.is_required ? "checked" : ""} ${dis}> ${__("Required")}</label></div>
-			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label>${__("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
+			<div class="form-group ucc-sb-matrix" style="${MATRIX_TYPES.has(q.question_type) ? "" : "display:none"}"><label>${__("Grid Rows (statements, one per line)")}</label><textarea class="form-control" data-f="matrix_rows" rows="3" ${dis}>${frappe.utils.escape_html(q.matrix_rows || "")}</textarea></div>
+			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label class="ucc-sb-choices-label">${MATRIX_TYPES.has(q.question_type) ? __("Grid Columns (response options, one per line, optional |value)") : __("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
 			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-sb-apply">${__("Apply Changes")}</button>` : ""}
 		`);
-		this.$inspector.find('[data-f="question_type"]').on("change", (e) => this.$inspector.find(".ucc-sb-choices").toggle(CHOICE_TYPES.has(e.target.value)));
+		this.$inspector.find('[data-f="question_type"]').on("change", (e) => {
+			const isMatrix = MATRIX_TYPES.has(e.target.value);
+			this.$inspector.find(".ucc-sb-choices").toggle(CHOICE_TYPES.has(e.target.value));
+			this.$inspector.find(".ucc-sb-matrix").toggle(isMatrix);
+			this.$inspector.find(".ucc-sb-choices-label").text(
+				isMatrix ? __("Grid Columns (response options, one per line, optional |value)") : __("Choices (one per line, optional |value)")
+			);
+		});
 		this.$inspector.find(".ucc-sb-apply").on("click", () => this._apply(q.name));
 	}
 
@@ -748,7 +794,7 @@ class SurveyBuilder {
 		const payload = {
 			question_text: val("question_text").val(), help_text: val("help_text").val(),
 			question_type: val("question_type").val(), is_required: val("is_required").is(":checked") ? 1 : 0,
-			choices,
+			choices, matrix_rows: val("matrix_rows").val(),
 		};
 		this._call("update_question", { question: name, payload: JSON.stringify(payload) }).then(() => {
 			frappe.show_alert({ message: __("Question updated"), indicator: "green" });

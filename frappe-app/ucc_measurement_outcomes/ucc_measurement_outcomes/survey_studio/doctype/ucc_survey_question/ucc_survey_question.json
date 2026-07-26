@@ -16,6 +16,7 @@
   "question_text",
   "help_text",
   "section_break_choices",
+  "matrix_rows",
   "choices",
   "section_break_logic",
   "display_logic",
@@ -49,7 +50,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Question Type",
-   "options": "Short Text\nParagraph\nEmail\nNumber\nDate\nRating\nSingle Choice\nMultiple Choice\nDropdown\nYes / No\nLikert Matrix\nNPS\nRanking\nSlider\nFile Upload\nSection Heading",
+   "options": "Short Text\nParagraph\nEmail\nNumber\nDate\nRating\nSingle Choice\nMultiple Choice\nDropdown\nYes / No\nLikert Matrix\nNPS\nRanking\nSlider\nFile Upload\nSection Heading\nMultiple Choice Grid\nCheckbox Grid",
    "reqd": 1
   },
   {
@@ -76,10 +77,17 @@
    "label": "Help Text"
   },
   {
-   "depends_on": "eval:['Rating','Single Choice','Multiple Choice','Dropdown','Yes / No','Likert Matrix','Ranking'].includes(doc.question_type)",
+   "depends_on": "eval:['Rating','Single Choice','Multiple Choice','Dropdown','Yes / No','Likert Matrix','Ranking','Multiple Choice Grid','Checkbox Grid'].includes(doc.question_type)",
    "fieldname": "section_break_choices",
    "fieldtype": "Section Break",
    "label": "Choices"
+  },
+  {
+   "fieldname": "matrix_rows",
+   "fieldtype": "Small Text",
+   "label": "Matrix Rows (one per line)",
+   "depends_on": "eval:['Likert Matrix','Multiple Choice Grid','Checkbox Grid'].includes(doc.question_type)",
+   "description": "The statements/questions down the left side of the grid. Columns (response options) are configured below in Choices, reused as-is - the same fixed-option shape a grid's columns need."
   },
   {
    "fieldname": "choices",

@@ -125,7 +125,7 @@ def public_survey_payload(token):
 	)
 	questions = _published_questions(
 		version,
-		["name", "question_text", "question_type", "help_text", "is_required", "sequence"],
+		["name", "question_text", "question_type", "help_text", "is_required", "sequence", "matrix_rows"],
 	)
 	for q in questions:
 		q["choices"] = frappe.get_all(
