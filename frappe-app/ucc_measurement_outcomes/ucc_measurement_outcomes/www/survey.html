@@ -125,6 +125,21 @@
 					var v = c.choice_value != null && c.choice_value !== "" ? c.choice_value : c.choice_label;
 					return '<li draggable="true" data-value="' + esc(v) + '"><span class="ucc-rank-handle">⠿</span> ' + esc(c.choice_label) + "</li>";
 				}).join("") + "</ul>";
+			// Item 3: File Upload is NOT wired here. A real guest-facing upload
+			// needs its own rate-limited endpoint, size/type enforcement and a
+			// storage decision (Frappe's File doctype, is_private) - scoped
+			// separately, not bolted onto this endpoint tonight. Say so plainly
+			// rather than rendering an empty box (or a silently-broken file
+			// input that drops whatever was picked). The fallback IS a real
+			// data-q textarea, not just a message: a required File Upload
+			// question already exists as a possibility in the schema, and a
+			// placeholder with nothing to fill in would strand a respondent
+			// who can never satisfy it. Text is honest about the gap while
+			// still letting a required question be answered.
+			case "File Upload":
+				return '<p class="text-muted" style="font-size:12px">' +
+					"File attachments aren't collected through this form yet. If this is required, please describe what you would attach in the space below." +
+					"</p><textarea class=\"form-control\" data-q=\"" + esc(name) + "\" rows=\"2\"></textarea>";
 			case "Section Heading":
 				return "";
 			default:
