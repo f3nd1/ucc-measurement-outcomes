@@ -145,6 +145,18 @@ class SurveyBuilder {
 		.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
 		.ucc-star{font-size:24px;line-height:1;cursor:pointer;color:#d9d9d9;user-select:none}
 		.ucc-star.filled{color:#e0a832}
+		/* Item 3: same widgets as the public form, same reasoning: duplicated
+		   here because a Desk page bundle and a standalone www/ template load
+		   separately, with no shared CSS mechanism to reuse instead. */
+		.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid var(--border-color,#e2e6ea);border-radius:8px;overflow:hidden}
+		.ucc-rank li{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--fg-color,#fff);
+			border-bottom:1px solid var(--border-color,#eef2f7);cursor:grab}
+		.ucc-rank li:last-child{border-bottom:0}
+		.ucc-rank li.dragging{opacity:.4}
+		.ucc-rank-handle{color:var(--text-muted,#98a1af)}
+		.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:360px}
+		.ucc-slider{flex:1}
+		.ucc-slider-out{font-weight:600;min-width:2.4em;text-align:right}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-sb-style";
@@ -605,6 +617,28 @@ class SurveyBuilder {
 			const checkedN = +$(e.target).data("n");
 			$group.find(".ucc-star").each((_, el) => $(el).toggleClass("filled", +$(el).data("n") <= checkedN));
 		});
+		// Item 3: Slider live value, same "input" (not "change") reasoning as
+		// the public form — fires continuously while dragging.
+		this._modal.find(".ucc-sb-previewform").on("input", ".ucc-slider", (e) => {
+			$(e.target).siblings(".ucc-slider-out").text(e.target.value);
+		});
+		// Item 3: Ranking reorder. Same live-move-during-dragover approach as
+		// the public form; jQuery delegation here to match this file's style.
+		let $draggedLi = null;
+		const $form = this._modal.find(".ucc-sb-previewform");
+		$form.on("dragstart", ".ucc-rank li", (e) => {
+			$draggedLi = $(e.currentTarget).addClass("dragging");
+			e.originalEvent.dataTransfer.setData("text/plain", "");
+		});
+		$form.on("dragend", ".ucc-rank li", (e) => { $(e.currentTarget).removeClass("dragging"); $draggedLi = null; });
+		$form.on("dragover", ".ucc-rank li", (e) => {
+			e.preventDefault();
+			const $li = $(e.currentTarget);
+			if (!$draggedLi || $li.is($draggedLi)) return;
+			const $items = $li.parent().children();
+			if ($items.index($draggedLi) < $items.index($li)) $draggedLi.insertAfter($li);
+			else $draggedLi.insertBefore($li);
+		});
 	}
 
 	_previewInput(q) {
@@ -631,6 +665,22 @@ class SurveyBuilder {
 			case "Date": return '<input type="date" class="form-control">';
 			case "Number": return '<input type="number" class="form-control">';
 			case "Email": return '<input type="email" class="form-control">';
+			// Item 3: a real range input, matching the public form's widget.
+			case "Slider":
+				return `<div class="ucc-slider-wrap"><input type="range" class="ucc-slider" min="0" max="100" step="1" value="50">
+					<output class="ucc-slider-out">50</output></div>`;
+			// Item 3: a real drag-to-reorder list. Same interaction the public
+			// form uses; this preview never submits anywhere so there is no
+			// value to read back, only the reordering itself.
+			case "Ranking":
+				return choices.length
+					? `<ul class="ucc-rank">${choices.map((c) => `<li draggable="true"><span class="ucc-rank-handle">⠿</span> ${frappe.utils.escape_html(c.choice_label)}</li>`).join("")}</ul>`
+					: '<p class="text-muted" style="font-size:12px">(no choices configured)</p>';
+			// Item 3: a real file picker (harmless here - Preview never submits
+			// anywhere). The public form deliberately does NOT get this yet; see
+			// the file-upload security note before this checkpoint's report.
+			case "File Upload":
+				return '<input type="file" class="form-control">';
 			default: return '<input class="form-control">';
 		}
 	}

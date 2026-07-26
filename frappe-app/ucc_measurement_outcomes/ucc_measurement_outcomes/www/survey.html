@@ -25,6 +25,18 @@
 	.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
 	.ucc-star{font-size:28px;line-height:1;cursor:pointer;color:#d9d9d9;user-select:none}
 	.ucc-star.filled{color:#e0a832}
+	/* Item 3: Ranking - native HTML5 drag-and-drop reorder, same mechanics the
+	   Survey Builder already uses to reorder questions. */
+	.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid #e2e6ea;border-radius:8px;overflow:hidden}
+	.ucc-rank li{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;
+		border-bottom:1px solid #eef2f7;cursor:grab}
+	.ucc-rank li:last-child{border-bottom:0}
+	.ucc-rank li.dragging{opacity:.4}
+	.ucc-rank-handle{color:#98a1af}
+	/* Item 3: Slider - native range input, value shown live. */
+	.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:420px}
+	.ucc-slider{flex:1}
+	.ucc-slider-out{font-weight:600;min-width:2.4em;text-align:right}
 </style>
 
 {# Payload in a NON-executable script tag, parsed with JSON.parse. Injecting it
@@ -96,6 +108,23 @@
 				return '<input type="date" class="form-control" data-q="' + esc(name) + '">';
 			case "Email":
 				return '<input type="email" class="form-control" data-q="' + esc(name) + '">';
+			// Item 3: a real range input, not an empty box. The generic
+			// [data-q] fallback in collect() below already reads its .value, so
+			// no new collect() branch is needed for this one.
+			case "Slider":
+				return '<div class="ucc-slider-wrap"><input type="range" class="ucc-slider" data-q="' + esc(name) + '" min="0" max="100" step="1" value="50">' +
+					'<output class="ucc-slider-out">50</output></div>';
+			// Item 3: a real drag-to-reorder list, not a text box. Stored value
+			// is the resulting order as a JSON array of choice values - the
+			// SAME encoding decision V7 already made for multi-select answers
+			// (to_text() in submission_utils.py JSON-encodes any list), reused
+			// rather than inventing a second "sequence of values" format.
+			case "Ranking":
+				if (!choices.length) return '<p class="text-muted">(no choices configured)</p>';
+				return '<ul class="ucc-rank" data-q="' + esc(name) + '">' + choices.map(function (c) {
+					var v = c.choice_value != null && c.choice_value !== "" ? c.choice_value : c.choice_label;
+					return '<li draggable="true" data-value="' + esc(v) + '"><span class="ucc-rank-handle">⠿</span> ' + esc(c.choice_label) + "</li>";
+				}).join("") + "</ul>";
 			case "Section Heading":
 				return "";
 			default:
@@ -137,6 +166,47 @@
 		});
 	});
 
+	// Item 3: Slider - live value display. "input" fires continuously while
+	// dragging the thumb; "change" only fires on release, which would leave the
+	// number stale until the user let go.
+	root.addEventListener("input", function (e) {
+		if (!e.target.classList.contains("ucc-slider")) return;
+		var out = e.target.parentElement.querySelector(".ucc-slider-out");
+		if (out) out.textContent = e.target.value;
+	});
+
+	// Item 3: Ranking - reorder the dragged <li> live as it crosses another
+	// item, the same "move the real node during dragover" approach used
+	// nowhere else in this codebase but standard for native HTML5 list
+	// reordering (this page has no jQuery, unlike the Desk builder, so this is
+	// plain addEventListener rather than the .on() pattern used there).
+	var draggedLi = null;
+	root.addEventListener("dragstart", function (e) {
+		var li = e.target.closest(".ucc-rank li");
+		if (!li) return;
+		draggedLi = li;
+		li.classList.add("dragging");
+		// Some browsers refuse to start a drag with no data set.
+		e.dataTransfer.setData("text/plain", "");
+	});
+	root.addEventListener("dragend", function (e) {
+		var li = e.target.closest(".ucc-rank li");
+		if (li) li.classList.remove("dragging");
+		draggedLi = null;
+	});
+	root.addEventListener("dragover", function (e) {
+		var li = e.target.closest(".ucc-rank li");
+		if (!li || !draggedLi || li === draggedLi) return;
+		e.preventDefault();
+		var list = li.parentElement;
+		var items = Array.prototype.slice.call(list.children);
+		if (items.indexOf(draggedLi) < items.indexOf(li)) list.insertBefore(draggedLi, li.nextSibling);
+		else list.insertBefore(draggedLi, li);
+	});
+	root.addEventListener("drop", function (e) {
+		if (e.target.closest(".ucc-rank")) e.preventDefault();
+	});
+
 	function collect(qEl) {
 		var type = qEl.getAttribute("data-type");
 		if (type === "Multiple Choice") {
@@ -145,6 +215,15 @@
 		if (["Single Choice", "Rating", "Yes / No"].indexOf(type) !== -1) {
 			var checked = qEl.querySelector("input:checked");
 			return checked ? checked.value : null;
+		}
+		// Item 3: the order IS the answer - read the <li>s in their current DOM
+		// order, which drag-reordering (wired on root below) has already put
+		// into place. Nothing to check/uncheck; a list with choices in it is
+		// always a complete ranking, same as a range input always has a value.
+		if (type === "Ranking") {
+			return Array.prototype.slice.call(qEl.querySelectorAll(".ucc-rank li")).map(function (li) {
+				return li.getAttribute("data-value");
+			});
 		}
 		var input = qEl.querySelector("[data-q]");
 		return input ? input.value : null;
