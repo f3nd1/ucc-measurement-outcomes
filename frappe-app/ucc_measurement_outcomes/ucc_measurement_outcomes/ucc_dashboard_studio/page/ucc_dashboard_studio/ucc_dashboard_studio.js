@@ -46,6 +46,34 @@ class DashboardStudio {
 		this.load();
 	}
 
+	exportAs(fmt, section) {
+		frappe.call({
+			method: DAPI + "export_dashboard",
+			args: Object.assign({ fmt: fmt, section: section || "kpis" }, this.filters),
+			callback: (r) => {
+				const res = r.message;
+				if (!res) return;
+				let blob;
+				if (res.encoding === "base64") {
+					// atob gives a binary string; Blob needs real bytes.
+					const bin = atob(res.content);
+					const bytes = new Uint8Array(bin.length);
+					for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+					blob = new Blob([bytes], { type: res.mime });
+				} else {
+					blob = new Blob([res.content], { type: res.mime });
+				}
+				const a = document.createElement("a");
+				a.href = URL.createObjectURL(blob);
+				a.download = res.filename;
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(a.href);
+			},
+		});
+	}
+
 	loadFilters() {
 		frappe.call({ method: DAPI + "dashboard_filters",
 					  callback: (r) => { if (r.message) this._fillFilters(r.message); } });
@@ -113,6 +141,19 @@ class DashboardStudio {
 		// rendered unstyled next to the app's btn-default/btn-primary set.
 		this.$tabOverview = $(`<button class="btn btn-default btn-sm active">${__("Overview")}</button>`).appendTo($tabs).on("click", () => this._setView("overview"));
 		this.$tabC7 = $(`<button class="btn btn-default btn-sm">${__("Criterion 7")}</button>`).appendTo($tabs).on("click", () => this._setView("criterion7"));
+		// Export what is on screen: both go through get_dashboard_data with the
+		// current filters, so a download can never show more than the view.
+		$('<span style="flex:1"></span>').appendTo($tabs);
+		this.$csv = $('<select class="form-control input-sm" style="width:auto">' +
+			`<option value="kpis">${__("CSV: index scores")}</option>` +
+			`<option value="contribution">${__("CSV: components")}</option>` +
+			`<option value="trend">${__("CSV: trend")}</option>` +
+			`<option value="weak">${__("CSV: weak areas")}</option>` +
+			"</select>").appendTo($tabs);
+		$(`<button class="btn btn-default btn-sm">${__("Download CSV")}</button>`)
+			.appendTo($tabs).on("click", () => this.exportAs("csv", this.$csv.val()));
+		$(`<button class="btn btn-default btn-sm">${__("Download PDF")}</button>`)
+			.appendTo($tabs).on("click", () => this.exportAs("pdf"));
 		this.$body = $('<div></div>').appendTo($m);
 		this.$next = $('<div></div>').appendTo($m);   // item 2
 		this._renderTrail();

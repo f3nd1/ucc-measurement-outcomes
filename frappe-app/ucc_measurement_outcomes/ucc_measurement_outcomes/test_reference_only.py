@@ -104,16 +104,25 @@ class TestScoringNeverReadsHistorical(unittest.TestCase):
 	def test_scoring_modules_do_not_name_survey_response(self):
 		# Belt and braces: the allowlist is the real guard, but a stray query
 		# added outside the seam would still show up here.
+		# Export and lineage are included: anything that renders a number as a
+		# calculated result must not be able to read historical responses either.
 		for module in ("metric_calc.py", "index_calc.py", "metric_engine.py",
-					   "index_engine.py"):
+					   "index_engine.py", "dashboard_export.py", "lineage.py",
+					   os.path.join("api", "dashboard.py"),
+					   os.path.join("api", "lineage.py")):
 			src = pathlib.Path(HERE, module).read_text()
-			for line in src.splitlines():
+			# Docstrings are as non-executable as comments, and these modules
+			# explain the rule in theirs. Strip them, then scan what is left -
+			# what this guard is for is a stray QUERY, not the word.
+			import re
+			code = re.sub(r'("""|\'\'\')(?:.|\n)*?\1', "", src)
+			for line in code.splitlines():
 				if "Survey Response" not in line:
 					continue
 				stripped = line.strip()
 				self.assertTrue(
 					stripped.startswith("#"),
-					f"{module} names Survey Response outside a comment: {stripped}")
+					f"{module} names Survey Response in code: {stripped}")
 
 
 class TestCorrectionsCannotRewriteHistory(unittest.TestCase):
