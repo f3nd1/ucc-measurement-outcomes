@@ -81,10 +81,20 @@ class SurveyBuilder {
 	_injectStyle() {
 		if (document.getElementById("ucc-sb-style")) return;
 		const css = `
-		.ucc-sb-grid{display:grid;grid-template-columns:210px 1fr 320px;gap:14px;align-items:start;margin-top:12px}
-		.ucc-sb-panel{background:var(--card-bg,#fff);border:1px solid var(--border-color,#e2e6ea);border-radius:10px}
-		.ucc-sb-panel h5{margin:0;padding:11px 13px;border-bottom:1px solid var(--border-color,#e2e6ea);font-size:12px}
-		.ucc-sb-body{padding:12px}
+		.ucc-sb-grid{display:grid;grid-template-columns:210px 1fr 320px;gap:14px;align-items:stretch;margin-top:12px}
+		.ucc-sb-panel{background:var(--card-bg,#fff);border:1px solid var(--border-color,#e2e6ea);border-radius:10px;
+			display:flex;flex-direction:column;overflow:hidden}
+		.ucc-sb-panel h5{margin:0;padding:11px 13px;border-bottom:1px solid var(--border-color,#e2e6ea);font-size:12px;flex:0 0 auto}
+		/* Finding 4: all three columns used to scroll together, so editing
+		   question 20 of 24 scrolled the palette and inspector out of view.
+		   Each panel is now its own flex column: header fixed, body scrolls on
+		   its own. The grid's height is measured in JS (_layoutColumns) rather
+		   than assumed via position:sticky, which would depend on Frappe's own
+		   scroll container and navbar offset — neither verifiable without a
+		   bench. Native drag-and-drop is untouched by this: dragstart/dragover/
+		   drop fire on the elements themselves and are not affected by an
+		   ancestor's overflow. */
+		.ucc-sb-body{padding:12px;flex:1 1 auto;min-height:0;overflow-y:auto}
 		.ucc-sb-toolbar{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
 		.ucc-sb-bulkbar{display:none;gap:6px;align-items:center;background:#eef3fb;border:1px solid #d5e1f0;border-radius:8px;padding:6px 10px;margin-top:8px;font-size:12px}
 		.ucc-sb-bulkbar.show{display:flex}
@@ -163,6 +173,23 @@ class SurveyBuilder {
 		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
 		this._modal = $('<div class="ucc-sb-modal"><div class="ucc-sb-sheet"></div></div>').appendTo(document.body);
+		this.$grid = $grid;
+		this._layoutColumns();
+		// Debounced: the banner (editable/read-only) and bulk bar both change the
+		// grid's vertical offset, and resize is otherwise noisy.
+		let t;
+		$(window).on("resize.ucc-sb", () => { clearTimeout(t); t = setTimeout(() => this._layoutColumns(), 120); });
+	}
+
+	// Finding 4: measured, not guessed. A fixed pixel offset for Frappe's own
+	// navbar/page-head would be a number this session cannot verify without a
+	// bench; getBoundingClientRect reads the real position the grid actually
+	// ended up at, so it is correct regardless of Frappe's chrome height.
+	_layoutColumns() {
+		if (!this.$grid || !this.$grid.length) return;
+		const top = this.$grid.get(0).getBoundingClientRect().top;
+		const bottomMargin = 24;
+		this.$grid.css("height", `calc(100vh - ${Math.max(0, Math.round(top))}px - ${bottomMargin}px)`);
 	}
 
 	// Finding 1: show where this page sits in the chain.
@@ -251,6 +278,8 @@ class SurveyBuilder {
 			this._renderTrail();
 			this._applyPendingQuestion();   // finding 2: arrived via deep link
 			this._loadCoverage();           // finding 3: mapping status
+			// The banner above just toggled, which moves the grid's top offset.
+			this._layoutColumns();
 		});
 	}
 
@@ -330,6 +359,7 @@ class SurveyBuilder {
 	_renderBulkBar() {
 		const n = this.selection.size;
 		this.$bulk.toggleClass("show", n > 0 && this.editable);
+		this._layoutColumns();   // the bulk bar showing/hiding moves the grid's offset
 		if (!n) return;
 		this.$bulk.empty().append(`<span>${__("{0} selected", [n])}</span>`);
 		$(`<button class="btn btn-xs btn-danger">${__("Delete")}</button>`).appendTo(this.$bulk).on("click", () => this._bulkDelete());
