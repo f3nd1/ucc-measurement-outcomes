@@ -1,0 +1,72 @@
+[
+ {
+  "doctype": "Custom Field",
+  "name": "Survey Tracking-ucc_campaign_sb",
+  "dt": "Survey Tracking",
+  "fieldname": "ucc_campaign_sb",
+  "fieldtype": "Section Break",
+  "label": "Collection (UCC Measurement Outcomes)",
+  "module": "Survey Studio",
+  "collapsible": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Survey Tracking-ucc_survey_version",
+  "dt": "Survey Tracking",
+  "fieldname": "ucc_survey_version",
+  "fieldtype": "Link",
+  "options": "UCC Survey Version",
+  "label": "UCC Survey Version",
+  "module": "Survey Studio",
+  "insert_after": "ucc_campaign_sb",
+  "description": "The frozen question set these responses belong to. survey_name links to Survey Management, which is a planning document and is not versioned - without this link a score cannot be reproduced against the exact questions asked."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Survey Tracking-ucc_collection_status",
+  "dt": "Survey Tracking",
+  "fieldname": "ucc_collection_status",
+  "fieldtype": "Select",
+  "options": "\nDraft\nScheduled\nOpen\nClosed",
+  "label": "Collection Status",
+  "module": "Survey Studio",
+  "insert_after": "ucc_survey_version",
+  "description": "Live-collection state. Deliberately blank by default so the existing Survey Tracking records, which are post-hoc consolidation rows and never collected anything, are not misread as campaigns."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Survey Tracking-ucc_access_mode",
+  "dt": "Survey Tracking",
+  "fieldname": "ucc_access_mode",
+  "fieldtype": "Select",
+  "options": "\nAnonymous Link\nSecure Token",
+  "label": "Access Mode",
+  "module": "Survey Studio",
+  "insert_after": "ucc_collection_status"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Survey Tracking-ucc_allow_multiple_responses",
+  "dt": "Survey Tracking",
+  "fieldname": "ucc_allow_multiple_responses",
+  "fieldtype": "Check",
+  "label": "Allow Multiple Responses",
+  "module": "Survey Studio",
+  "insert_after": "ucc_access_mode",
+  "default": "0"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Survey Tracking-ucc_public_token",
+  "dt": "Survey Tracking",
+  "fieldname": "ucc_public_token",
+  "fieldtype": "Data",
+  "label": "Public Token",
+  "module": "Survey Studio",
+  "insert_after": "ucc_allow_multiple_responses",
+  "read_only": 1,
+  "unique": 1,
+  "no_copy": 1,
+  "description": "Generated server-side. A Custom Field cannot generate it - that comes from this app's doc_events hook on Survey Tracking, not from educ_sg."
+ }
+]

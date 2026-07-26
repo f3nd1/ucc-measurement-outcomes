@@ -18,5 +18,24 @@ app_license = "mit"
 # fixed urls for a year — see public/js/ucc_measurement_outcomes.bundle.js.
 app_include_js = ["ucc_measurement_outcomes.bundle.js"]
 
+# D2: Survey Tracking (educ_sg) becomes the campaign. The fields it lacks are
+# added as Custom Fields owned by THIS app and shipped as fixtures, so educ_sg's
+# own DocType JSON is never edited and stays upgradeable. Every field is
+# `ucc_`-prefixed, which is also what this filter exports - a plain
+# {"dt": "Custom Field"} would drag every unrelated customisation on the site
+# into our fixtures.
+fixtures = [
+	{"dt": "Custom Field", "filters": [["name", "like", "Survey Tracking-ucc_%"]]},
+]
+
+# A Custom Field cannot generate a token or validate across fields, so the two
+# fields that need behaviour get it here rather than in educ_sg.
+doc_events = {
+	"Survey Tracking": {
+		"before_insert": "ucc_measurement_outcomes.survey_tracking_hooks.before_insert",
+		"validate": "ucc_measurement_outcomes.survey_tracking_hooks.validate",
+	},
+}
+
 # Later phases register: fixtures (roles/workspaces), scheduler events for index
 # calculation jobs, and website routes for the public survey endpoint.
