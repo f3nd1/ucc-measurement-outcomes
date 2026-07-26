@@ -12,7 +12,10 @@
   "raw_value",
   "normalised_value",
   "weight",
-  "contribution"
+  "contribution",
+  "lineage_objectives",
+  "lineage_clauses",
+  "lineage_questions"
  ],
  "fields": [
   {
@@ -55,6 +58,27 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Contribution"
+  },
+  {
+   "fieldname": "lineage_objectives",
+   "fieldtype": "Small Text",
+   "label": "Objectives (as calculated)",
+   "read_only": 1,
+   "description": "Objective codes this component traced to AT CALCULATION TIME. Snapshotted because Question Mapping is live: without this, an old result's lineage report would reshape whenever someone remaps a question, while its numbers stayed fixed."
+  },
+  {
+   "fieldname": "lineage_clauses",
+   "fieldtype": "Small Text",
+   "label": "Clauses (as calculated)",
+   "read_only": 1,
+   "description": "Clause references, snapshotted alongside the objectives."
+  },
+  {
+   "fieldname": "lineage_questions",
+   "fieldtype": "Small Text",
+   "label": "Source questions (as calculated)",
+   "read_only": 1,
+   "description": "UCC Survey Question names that fed this component's metric at calculation time."
   }
  ],
  "index_web_pages_for_search": 1,

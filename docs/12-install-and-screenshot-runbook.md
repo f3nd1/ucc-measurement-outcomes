@@ -43,6 +43,24 @@ bench build --app ucc_measurement_outcomes      # bundles the Desk page JS + sha
 bench --site <site> clear-cache
 ```
 
+**After pulling a branch that adds a Page, `bench migrate` is required — `build`
+and `restart` are not enough.** Page JSON is a DocType record, so migrate is what
+registers it; build only bundles assets. A new Studio page will 404 until then,
+which reads as a broken route rather than a missing record. This bit the Campaign
+Analytics and Lineage Report pages, both of which needed migrate after a
+build+restart that looked complete.
+
+Rule of thumb for what a pull needs:
+
+| Changed | Command |
+|---|---|
+| Page JSON, DocType JSON, Custom Field fixtures | `bench --site <site> migrate` |
+| Any `.js` under `public/` or a Studio page | `bench build --app ucc_measurement_outcomes` |
+| Python (controllers, `api/*`, hooks) | `bench restart` |
+| A `www/` web page template | `bench --site <site> clear-website-cache` |
+
+When in doubt, all four in that order.
+
 `qrcode` is a declared dependency (used by the Campaign QR button) — `get-app`
 should pull it; if the QR button later errors, `./env/bin/pip install qrcode`.
 

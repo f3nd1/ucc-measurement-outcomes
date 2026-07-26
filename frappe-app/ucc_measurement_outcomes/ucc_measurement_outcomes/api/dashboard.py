@@ -8,8 +8,13 @@ so it is bench-safe. Simple KPI tiles could later move to native Frappe Number
 Cards; the contribution / target-vs-actual views stay custom.
 """
 
+import base64
+
 import frappe
 from frappe import _
+
+from ucc_measurement_outcomes import dashboard_export
+from ucc_measurement_outcomes.explorer_agg import to_csv
 
 RESULT = "UCC Index Result"
 
@@ -133,4 +138,42 @@ def dashboard_filters():
 		"periods": distinct("period"),
 		"entity_types": entity_types,
 		"entities": distinct("entity"),
+	}
+
+
+@frappe.whitelist()
+def export_dashboard(fmt="csv", section="kpis", index=None, index_version=None,
+					 period=None, entity_type=None, entity=None):
+	"""CSV or PDF of the CURRENTLY FILTERED dashboard.
+
+	Goes through get_dashboard_data, so the same permission check and the same
+	filters apply - an export can never show more than the screen it came from.
+	CSV is written by explorer_agg.to_csv, the writer Data Explorer already uses.
+	PDF is Frappe's own wkhtmltopdf rendering; no PDF library is added.
+	"""
+	filters = {"index": index, "index_version": index_version, "period": period,
+			   "entity_type": entity_type, "entity": entity}
+	data = get_dashboard_data(**filters)
+	stamp = frappe.utils.format_datetime(frappe.utils.now(), "d MMM yyyy HH:mm")
+	slug = (index or "dashboard").replace(" ", "-")
+
+	if fmt == "pdf":
+		from frappe.utils.pdf import get_pdf
+		html = dashboard_export.to_html(data, filters, stamp)
+		# Binary over a JSON response: base64, decoded to a Blob client-side -
+		# the same download idiom Data Explorer already uses.
+		return {
+			"filename": "%s-report.pdf" % slug,
+			"content": base64.b64encode(get_pdf(html)).decode("ascii"),
+			"encoding": "base64",
+			"mime": "application/pdf",
+		}
+
+	table = dashboard_export.to_table(data, section)
+	label = {"kpis": "Index", "contribution": "Component",
+			 "trend": "Period", "weak": "Area"}.get(section, "Row")
+	return {
+		"filename": "%s-%s.csv" % (slug, section),
+		"content": to_csv(table, label),
+		"mime": "text/csv",
 	}

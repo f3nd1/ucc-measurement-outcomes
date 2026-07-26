@@ -55,6 +55,55 @@ def _load_metric_values(nodes, period, entity):
 	return values
 
 
+def _lineage_snapshot(metric_codes):
+	"""metric_code -> {objectives, clauses, questions} as they stand right now.
+
+	Walks metric -> its source questions -> their objective mapping. A question
+	can carry several objectives (5 of 265 in real data), so these are sets, and
+	a metric spanning several objectives keeps all of them.
+	"""
+	codes = sorted(c for c in metric_codes if c)
+	if not codes:
+		return {}
+	questions_by_metric = {}
+	for src in frappe.get_all(
+		"UCC Metric Source",
+		filters={"parent": ["in", codes], "source_question": ["is", "set"]},
+		fields=["parent", "source_question"],
+	):
+		questions_by_metric.setdefault(src["parent"], set()).add(src["source_question"])
+
+	all_questions = sorted({q for qs in questions_by_metric.values() for q in qs})
+	mapping = {}
+	if all_questions:
+		for m in frappe.get_all(
+			"UCC Question Mapping",
+			filters={"question": ["in", all_questions]},
+			fields=["question", "objective", "primary_clause"],
+		):
+			entry = mapping.setdefault(m["question"], {"objectives": set(), "clauses": set()})
+			if m.get("objective"):
+				entry["objectives"].add(m["objective"])
+			if m.get("primary_clause"):
+				entry["clauses"].add(m["primary_clause"])
+
+	out = {}
+	for code in codes:
+		questions = questions_by_metric.get(code, set())
+		objectives, clauses = set(), set()
+		for q in questions:
+			hit = mapping.get(q)
+			if hit:
+				objectives |= hit["objectives"]
+				clauses |= hit["clauses"]
+		out[code] = {
+			"objectives": sorted(objectives),
+			"clauses": sorted(clauses),
+			"questions": sorted(questions),
+		}
+	return out
+
+
 def calculate_index(index_version, period=None, entity_type=None, entity=None, metric_values=None):
 	"""Compute one immutable index result. metric_values may be supplied
 	directly (e.g. for tests / fixtures); otherwise they are read from
@@ -79,7 +128,9 @@ def calculate_index(index_version, period=None, entity_type=None, entity=None, m
 		"value": result["value"],
 		"target": frappe.db.get_value("UCC Index Definition", version.index, "target"),
 	})
+	lineage = _lineage_snapshot({b.get("source_metric") for b in result["breakdown"]})
 	for b in result["breakdown"]:
+		trace = lineage.get(b.get("source_metric"), {})
 		doc.append("breakdown", {
 			"component_key": b["key"],
 			"component_label": b["label"],
@@ -88,6 +139,13 @@ def calculate_index(index_version, period=None, entity_type=None, entity=None, m
 			"normalised_value": b["value"],
 			"weight": b["weight"],
 			"contribution": b["contribution"],
+			# Snapshotted with the numbers, not read live at report time. Question
+			# Mapping keeps changing; without this an old result's lineage report
+			# would reshape under it while its scores stayed fixed - and this
+			# report is Criterion 7.1.1 evidence.
+			"lineage_objectives": ", ".join(trace.get("objectives", [])),
+			"lineage_clauses": ", ".join(trace.get("clauses", [])),
+			"lineage_questions": ", ".join(trace.get("questions", [])),
 		})
 	doc.insert()
 	return doc.name

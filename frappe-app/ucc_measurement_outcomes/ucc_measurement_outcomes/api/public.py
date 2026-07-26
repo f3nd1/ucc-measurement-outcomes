@@ -24,9 +24,15 @@ from frappe import _
 # refuses to load.
 from frappe.rate_limiter import rate_limit
 
-from ucc_measurement_outcomes.submission_utils import has_value, to_text
+from ucc_measurement_outcomes.submission_utils import (
+	campaign_window_open,
+	has_value,
+	to_text,
+)
 
 CAMPAIGN = "UCC Survey Campaign"
+# D2: Survey Tracking IS the campaign. Token resolution now points here.
+TRACKING = "Survey Tracking"
 QUESTION = "UCC Survey Question"
 VERSION = "UCC Survey Version"
 
@@ -41,10 +47,25 @@ RATE_LIMIT = {"limit": 20, "seconds": 3600}
 # See BENCH_VERIFY.md "Rate limiting" for the curl check that actually exercises it.
 
 
+def _tracking_date_fields():
+	"""Survey Tracking is educ_sg's; its window fieldnames are theirs, not ours.
+	Felix's description gives "date start/end" but the real spelling has never
+	been dumped, and two probes on this project already died on a guessed
+	column. Resolve from the meta and treat an unresolved bound as unbounded."""
+	real = {df.fieldname for df in frappe.get_meta(TRACKING).fields}
+	start = next((f for f in ("date_start", "start_date", "opens_on", "from_date") if f in real), None)
+	end = next((f for f in ("date_end", "end_date", "closes_on", "to_date") if f in real), None)
+	return start, end
+
+
 def _get_open_campaign(token, for_update=False):
+	"""Resolve a public token to the Survey Tracking record acting as its
+	campaign, or refuse. D2 made Survey Tracking the campaign; token resolution
+	still pointed at the retired UCC Survey Campaign, which is why a genuinely
+	minted token returned "Survey not found"."""
 	if not token:
 		frappe.throw(_("Survey not found."), frappe.DoesNotExistError)
-	name = frappe.db.get_value(CAMPAIGN, {"public_token": token}, "name")
+	name = frappe.db.get_value(TRACKING, {"ucc_public_token": token}, "name")
 	if not name:
 		# Generic message: never confirm/deny a token to an anonymous caller.
 		frappe.throw(_("Survey not found."), frappe.DoesNotExistError)
@@ -52,17 +73,30 @@ def _get_open_campaign(token, for_update=False):
 	# check-then-insert cannot race with a concurrent submit for this campaign.
 	# ponytail: serialises submissions per campaign; per-respondent locking if
 	# a single campaign ever needs high submit throughput.
-	# TODO: bench-verify - confirm frappe.get_doc(..., for_update=True) row
-	# locking on the target Frappe version.
-	campaign = frappe.get_doc(CAMPAIGN, name, for_update=for_update)
-	if not campaign.is_open():
+	campaign = frappe.get_doc(TRACKING, name, for_update=for_update)
+
+	start_f, end_f = _tracking_date_fields()
+	as_date = frappe.utils.getdate
+	if not campaign_window_open(
+		campaign.get("ucc_collection_status"),
+		as_date(campaign.get(start_f)) if start_f and campaign.get(start_f) else None,
+		as_date(campaign.get(end_f)) if end_f and campaign.get(end_f) else None,
+		as_date(),
+	):
+		# Covers the historical Survey Tracking rows too: they are post-hoc
+		# consolidation records with no collection status, so they can never be
+		# opened by a token even if one were somehow set on them.
+		frappe.throw(_("This survey is not currently open."))
+
+	version = campaign.get("ucc_survey_version")
+	if not version:
 		frappe.throw(_("This survey is not currently open."))
 	# Decision V2: the campaign window is not the only gate. The version must be
 	# Published (which also blocks Draft/In Review — previously a campaign could
 	# serve unpublished content, violating the only-published-content principle —
 	# and blocks Closed), and an Archived survey stops collecting.
 	version_status, survey = frappe.db.get_value(
-		VERSION, campaign.survey_version, ["status", "survey"]
+		VERSION, version, ["status", "survey"]
 	)
 	if version_status != "Published" or frappe.db.get_value(
 		"UCC Survey", survey, "status"
@@ -85,7 +119,7 @@ def public_survey_payload(token):
 	limit / whitelist) so the public web page can render it server-side without
 	going through the API layer."""
 	campaign = _get_open_campaign(token)
-	version = campaign.survey_version
+	version = campaign.get("ucc_survey_version")
 	header = frappe.db.get_value(
 		VERSION, version, ["title_snapshot", "version_number"], as_dict=True
 	)
@@ -124,16 +158,30 @@ def submit_survey(token, answers, respondent_key=None):
 	never left without its Answers.
 	"""
 	campaign = _get_open_campaign(token, for_update=True)
-	version = campaign.survey_version
-	answers = json.loads(answers) if isinstance(answers, str) else answers
+	version = campaign.get("ucc_survey_version")
+	if isinstance(answers, str):
+		try:
+			answers = json.loads(answers)
+		except ValueError:
+			answers = None
 	if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
+		# The guest gets a generic message - never leak shapes or internals on a
+		# public endpoint. The trace goes to a FILE log, not Error Log: log_error
+		# inserts a document into the current transaction, and the throw on the
+		# next line rolls that transaction back, taking the log row with it. That
+		# is why the previous attempt at this recorded nothing at all.
+		# Read it with: bench --site <site> console-free -> tail logs/ucc_public.log
+		frappe.logger("ucc_public", allow_site=True).error(
+			"submit_survey: unexpected answers payload type=%s repr=%s"
+			% (type(answers).__name__, repr(answers)[:500])
+		)
 		frappe.throw(_("Invalid submission."))
 
 	# One response per respondent, unless the campaign explicitly allows more.
-	if respondent_key and not campaign.allow_multiple_responses:
+	if respondent_key and not campaign.get("ucc_allow_multiple_responses"):
 		if frappe.db.exists(
 			"UCC Survey Submission",
-			{"campaign": campaign.name, "respondent_key": respondent_key, "status": "Completed"},
+			{"survey_tracking": campaign.name, "respondent_key": respondent_key, "status": "Completed"},
 		):
 			frappe.throw(_("A response has already been recorded for you."))
 
@@ -155,7 +203,7 @@ def submit_survey(token, answers, respondent_key=None):
 
 	submission = frappe.get_doc({
 		"doctype": "UCC Survey Submission",
-		"campaign": campaign.name,
+		"survey_tracking": campaign.name,
 		"survey_version": version,
 		"status": "Completed",
 		"respondent_key": respondent_key,

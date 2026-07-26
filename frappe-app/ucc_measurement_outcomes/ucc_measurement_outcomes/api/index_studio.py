@@ -8,7 +8,11 @@ import json
 import frappe
 from frappe import _
 
-from ucc_measurement_outcomes.index_engine import structural_issues, weights_valid
+from ucc_measurement_outcomes.index_engine import (
+	structural_issues,
+	structural_warnings,
+	weights_valid,
+)
 from ucc_measurement_outcomes import index_templates
 
 INDEX_VERSION = "UCC Index Version"
@@ -71,9 +75,35 @@ def get_index_builder(index_version):
 		}
 		for n in version.nodes
 	]
+	# Metric list for the inspector: source_metric was a free-text box, which made
+	# a typo a silently unscored node. Also carries each metric's own
+	# normalisation, because THAT is the rule that actually runs - the node's
+	# normalisation field is informational (see docs/09-decision-log.md:
+	# normalise once at the metric layer, the index applies weights only).
+	metrics = frappe.get_all(
+		"UCC Metric Definition",
+		fields=["name", "metric_name", "default_normalisation"],
+		order_by="name",
+	)
+	sources = frappe.get_all(
+		"UCC Metric Source", fields=["parent", "normalisation"],
+	)
+	by_metric = {}
+	for s in sources:
+		by_metric.setdefault(s["parent"], set()).add(s["normalisation"] or None)
+	for m in metrics:
+		# A metric's sources may each override the default. One distinct rule =
+		# that is the effective rule; several = the node cannot claim just one.
+		rules = {r for r in by_metric.get(m["name"], set()) if r}
+		m["effective_normalisation"] = (
+			list(rules)[0] if len(rules) == 1 else (None if rules else m["default_normalisation"])
+		)
+		m["mixed_normalisation"] = len(rules) > 1
+		m["source_count"] = len(by_metric.get(m["name"], set()))
+
 	return {
 		"name": version.name, "index": version.index, "status": version.status,
-		"editable": not version.is_immutable, "nodes": nodes,
+		"editable": not version.is_immutable, "nodes": nodes, "metrics": metrics,
 	}
 
 
@@ -111,10 +141,14 @@ def validate_index(index_version):
 	this, so a structurally broken formula cannot be published."""
 	_require(index_version, "read")
 	version = frappe.get_doc(INDEX_VERSION, index_version)
-	issues = list(structural_issues(
-		[{"key": n.node_key, "parent_key": n.parent_key, "weight": n.weight}
-		 for n in version.nodes]
-	))
+	graph = [{"key": n.node_key, "parent_key": n.parent_key, "weight": n.weight,
+			  "type": n.node_type, "source_metric": n.source_metric}
+			 for n in version.nodes]
+	issues = list(structural_issues(graph))
+	# Warnings are reported but never block publish. A node added at 0% (which is
+	# how nodes ARE added - we do not silently rebalance its siblings) is exactly
+	# this case: harmless to the totals, contributing nothing, worth saying.
+	warnings = list(structural_warnings(graph))
 	groups = {}
 	for n in version.nodes:
 		groups.setdefault(n.parent_key or "__root__", []).append(n.weight or 0)
@@ -123,7 +157,7 @@ def validate_index(index_version):
 			continue  # the root index node has no siblings to total
 		if not weights_valid(weights):
 			issues.append(_("Weights under '{0}' total {1}%, expected 100%.").format(parent, round(sum(weights), 2)))
-	return {"valid": not issues, "issues": issues}
+	return {"valid": not issues, "issues": issues, "warnings": warnings}
 
 
 @frappe.whitelist()

@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "campaign",
+  "survey_tracking",
   "survey_version",
   "status",
   "column_break_meta",
@@ -24,7 +25,15 @@
    "in_standard_filter": 1,
    "label": "Campaign",
    "options": "UCC Survey Campaign",
-   "reqd": 1
+   "reqd": 0,
+   "description": "Legacy: the retiring UCC Survey Campaign. New submissions carry survey_tracking instead. Kept until Campaign is retired so existing rows, demo data and the integration test stay readable."
+  },
+  {
+   "fieldname": "survey_tracking",
+   "fieldtype": "Link",
+   "label": "Survey Tracking",
+   "options": "Survey Tracking",
+   "description": "D2: Survey Tracking is the campaign. Set by the public submit path."
   },
   {
    "fieldname": "survey_version",
