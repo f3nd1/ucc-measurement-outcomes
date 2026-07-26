@@ -141,13 +141,20 @@
 		// Depending on it meant a missing global could kill submission silently.
 		btn.disabled = true;
 		btn.textContent = "Submitting…";
+		// Form-encoded, because that is exactly the wire format frappe.call uses
+		// and the format the /api/method layer is built around. A JSON body whose
+		// "answers" value was itself a JSON string double-encoded the payload and
+		// the server rejected it as not-a-list.
+		var params = new URLSearchParams();
+		params.append("token", token);
+		params.append("answers", JSON.stringify(answers));
 		fetch("/api/method/ucc_measurement_outcomes.api.public.submit_survey", {
 			method: "POST",
 			headers: {
-				"Content-Type": "application/json",
+				"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
 				"X-Frappe-CSRF-Token": window.csrf_token || "",
 			},
-			body: JSON.stringify({ token: token, answers: JSON.stringify(answers) }),
+			body: params.toString(),
 		})
 			.then(function (res) {
 				return res.json().then(function (body) { return { ok: res.ok, body: body }; });
