@@ -75,9 +75,35 @@ def get_index_builder(index_version):
 		}
 		for n in version.nodes
 	]
+	# Metric list for the inspector: source_metric was a free-text box, which made
+	# a typo a silently unscored node. Also carries each metric's own
+	# normalisation, because THAT is the rule that actually runs - the node's
+	# normalisation field is informational (see docs/09-decision-log.md:
+	# normalise once at the metric layer, the index applies weights only).
+	metrics = frappe.get_all(
+		"UCC Metric Definition",
+		fields=["name", "metric_name", "default_normalisation"],
+		order_by="name",
+	)
+	sources = frappe.get_all(
+		"UCC Metric Source", fields=["parent", "normalisation"],
+	)
+	by_metric = {}
+	for s in sources:
+		by_metric.setdefault(s["parent"], set()).add(s["normalisation"] or None)
+	for m in metrics:
+		# A metric's sources may each override the default. One distinct rule =
+		# that is the effective rule; several = the node cannot claim just one.
+		rules = {r for r in by_metric.get(m["name"], set()) if r}
+		m["effective_normalisation"] = (
+			list(rules)[0] if len(rules) == 1 else (None if rules else m["default_normalisation"])
+		)
+		m["mixed_normalisation"] = len(rules) > 1
+		m["source_count"] = len(by_metric.get(m["name"], set()))
+
 	return {
 		"name": version.name, "index": version.index, "status": version.status,
-		"editable": not version.is_immutable, "nodes": nodes,
+		"editable": not version.is_immutable, "nodes": nodes, "metrics": metrics,
 	}
 
 

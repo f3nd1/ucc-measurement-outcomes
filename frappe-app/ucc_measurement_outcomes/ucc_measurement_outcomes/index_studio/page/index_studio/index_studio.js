@@ -32,12 +32,27 @@ const NORMALISATIONS = [
 	"Ratio to Percentage", "Count", "Hours", "Category Only (No Score)",
 ];
 
+// What each rule actually does, taken from index_engine.normalise so the label
+// and the arithmetic cannot drift apart. "Likert 1-5 to 0-100" tells you nothing
+// about where a 4 lands.
+const NORM_HELP = {
+	"Likert 1-5 to 0-100": "1 → 0, 3 → 50, 5 → 100. Anything outside 1–5 is clamped.",
+	"Yes/No to 100/0": "Any non-zero value → 100, zero → 0.",
+	"Reverse 0-100": "Flips an existing 0–100 score: 30 → 70. Already reversed, so the Reverse Scored box is ignored.",
+	"Ratio to Percentage": "Multiplies by 100: 0.8 → 80. Clamped to 0–100.",
+	"Count": "Left as-is. A raw count, not a 0–100 score.",
+	"Hours": "Left as-is. Raw hours, not a 0–100 score.",
+	"Category Only (No Score)": "Never scored. Contributes nothing to the index.",
+};
+
 class IndexStudio {
 	constructor(page) {
 		this.page = page;
 		this.nodes = [];
+		this.metrics = [];
 		this.editable = false;
 		this.selectedKey = null;
+		this._injectStyle();
 		this._build();
 		this.applyRouteOptions();
 	}
@@ -82,6 +97,25 @@ class IndexStudio {
 			if (node) this._pendingMetric = null;   // keep it until a version matches
 		}
 		if (node) this._select(node.node_key);
+	}
+
+	_injectStyle() {
+		if (document.getElementById("ucc-idx-style")) return;
+		const el = document.createElement("style");
+		el.id = "ucc-idx-style";
+		el.textContent = `
+		.ucc-idx-norm{border-radius:8px;padding:9px 11px;margin:0 0 12px;font-size:12px}
+		.ucc-idx-norm .l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
+		.ucc-idx-norm.ok{background:#e8f5ef;color:#1c5e44;border:1px solid #bfe0d1}
+		.ucc-idx-norm.warn{background:#fff8ea;color:#715824;border:1px solid #ecd6aa}
+		.ucc-idx-norm.bad{background:#fdf6f6;color:#8f3838;border:1px solid #e0b4b4}
+		.ucc-idx-norm.none{background:#f2f5f9;color:#5b6672;border:1px solid #dbe1e8}
+		.ucc-idx-help{font-size:11px;opacity:.85;margin-top:4px}
+		.ucc-idx-note{font-size:11px;color:#8b95a5;margin-top:6px}
+		.ucc-idx-doc{margin-bottom:12px}
+		.ucc-idx-doc summary{font-size:11px;color:#8b95a5;cursor:pointer}
+		`;
+		document.head.appendChild(el);
 	}
 
 	_build() {
@@ -133,7 +167,7 @@ class IndexStudio {
 		});
 		const $grid = $('<div style="display:grid;grid-template-columns:1fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		this.$canvas = $('<div style="height:560px"></div>').appendTo($grid);
-		this.$inspector = $('<div><p class="text-muted" style="font-size:12px">' + __("Click a node to edit its weight, metric and normalisation.") + "</p></div>").appendTo($grid);
+		this.$inspector = $('<div><p class="text-muted" style="font-size:12px">' + __("Click a node to edit it.") + "</p></div>").appendTo($grid);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {
 			onSelect: (n) => this._select(n.id),
 			onMove: (n) => this._onMove(n),
@@ -235,6 +269,7 @@ class IndexStudio {
 				this.version = version;
 				this.indexCode = r.message.index;
 				this.nodes = r.message.nodes || [];
+				this.metrics = r.message.metrics || [];
 				this.editable = !!r.message.editable;
 				this.selectedKey = null;
 				this.$publish.prop("disabled", !this.editable);
@@ -390,6 +425,43 @@ class IndexStudio {
 		this._renderInspector();
 	}
 
+	// The one thing the inspector must say unambiguously: what rule turns this
+	// node's raw value into a score, and whether one applies at all.
+	_normalisationPanel(n, metric) {
+		if (!n.source_metric) {
+			return `<div class="ucc-idx-norm none">
+				<b>${__("No source metric")}</b><br>
+				${__("This node scores nothing until a metric is chosen, so no normalisation applies to it yet.")}
+			</div>`;
+		}
+		if (!metric) {
+			// Selected metric is not in the list: it was deleted, or the code was
+			// typed before this became a select.
+			return `<div class="ucc-idx-norm bad">
+				<b>${__("Metric not found")}</b><br>
+				${__("'{0}' does not exist, so this node cannot score. Pick one from the list.", [n.source_metric])}
+			</div>`;
+		}
+		if (metric.mixed_normalisation) {
+			return `<div class="ucc-idx-norm warn">
+				<b>${__("Mixed rules")}</b><br>
+				${__("{0} has sources using different normalisation rules, so no single rule describes this node. Open it in Mapping Studio to see them.", [metric.name])}
+			</div>`;
+		}
+		const rule = metric.effective_normalisation;
+		if (!rule) {
+			return `<div class="ucc-idx-norm bad">
+				<b>${__("No rule set")}</b><br>
+				${__("{0} has no normalisation rule, so its answers are refused rather than scored — the index will treat this node as missing.", [metric.name])}
+			</div>`;
+		}
+		return `<div class="ucc-idx-norm ok">
+			<div class="l">${__("Active rule, from {0}", [frappe.utils.escape_html(metric.name)])}</div>
+			<b>${frappe.utils.escape_html(rule)}</b>
+			<div class="ucc-idx-help">${frappe.utils.escape_html(NORM_HELP[rule] || "")}</div>
+		</div>`;
+	}
+
 	_renderInspector() {
 		const n = this.nodes.find((x) => x.node_key === this.selectedKey);
 		if (!n) {
@@ -402,6 +474,17 @@ class IndexStudio {
 		const dis = this.editable ? "" : "disabled";
 		const isMetric = n.node_type === "Metric";
 		const normOpts = NORMALISATIONS.map((o) => `<option ${o === n.normalisation ? "selected" : ""}>${o}</option>`).join("");
+		const metric = (this.metrics || []).find((m) => m.name === n.source_metric);
+		const metricOpts = ['<option value=""></option>'].concat(
+			(this.metrics || []).map((m) =>
+				`<option value="${frappe.utils.escape_html(m.name)}" ${m.name === n.source_metric ? "selected" : ""}>${
+					frappe.utils.escape_html(m.name)}${m.metric_name ? " — " + frappe.utils.escape_html(m.metric_name) : ""}</option>`)
+		).join("");
+		// The rule that ACTUALLY runs lives on the metric's sources, not here.
+		// Normalisation happens once at the metric layer; the index applies
+		// weights only (docs/09-decision-log.md). So state the effective rule
+		// plainly and stop presenting the node's own field as if it drives a score.
+		const effective = this._normalisationPanel(n, metric);
 		this.$inspector.html(`
 			<h5 style="margin-top:0">${frappe.utils.escape_html(n.label || n.node_key)} <span class="text-muted" style="font-size:11px">(${n.node_type})</span></h5>
 			<p class="text-muted" style="font-size:11px;margin-top:-4px">${
@@ -414,8 +497,15 @@ class IndexStudio {
 			<div class="form-group"><label>${__("Label")}</label><input class="form-control" data-f="label" value="${frappe.utils.escape_html(n.label || "")}" ${dis}></div>
 			<div class="form-group"><label>${__("Weight (%)")}</label><input type="number" class="form-control" data-f="weight" value="${n.weight || 0}" ${dis}></div>
 			${isMetric ? `
-			<div class="form-group"><label>${__("Source Metric")}</label><input class="form-control" data-f="source_metric" value="${frappe.utils.escape_html(n.source_metric || "")}" placeholder="Metric code" ${dis}></div>
-			<div class="form-group"><label>${__("Normalisation")}</label><select class="form-control" data-f="normalisation" ${dis}>${normOpts}</select></div>
+			<div class="form-group"><label>${__("Source Metric")}</label>
+				<select class="form-control" data-f="source_metric" ${dis}>${metricOpts}</select></div>
+			${effective}
+			<details class="ucc-idx-doc"${n.normalisation ? "" : ""}>
+				<summary>${__("Node normalisation note")}</summary>
+				<div class="form-group" style="margin-top:8px"><select class="form-control" data-f="normalisation" ${dis}>${normOpts}</select></div>
+				<div class="ucc-idx-help">${frappe.utils.escape_html(NORM_HELP[n.normalisation] || __("No rule chosen."))}</div>
+				<div class="ucc-idx-note">${__("Documentation only. The score is normalised once, at the metric layer; the index applies weights and never re-normalises.")}</div>
+			</details>
 			<div class="checkbox"><label><input type="checkbox" data-f="reverse_scored" ${n.reverse_scored ? "checked" : ""} ${dis}> ${__("Reverse Scored")}</label></div>` : ""}
 			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-idx-apply">${__("Apply")}</button>
 			<hr>
