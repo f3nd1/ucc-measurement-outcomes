@@ -19,6 +19,15 @@ from ucc_measurement_outcomes.api.public import public_survey_payload
 
 def get_context(context):
 	context.no_cache = 1
+	# Frappe's CSRF check runs in auth.py BEFORE any whitelisted method body and
+	# throws CSRFTokenError - a ValidationError subclass, so HTTP 400 with the
+	# message "Invalid Request". window.csrf_token is set for logged-in desk
+	# users and is routinely absent on a guest portal page, which made every
+	# guest submission fail with a 400 that never reached our code (and so never
+	# logged). Hand the page the token for the session it was actually rendered
+	# under instead of hoping a global exists.
+	session = getattr(frappe.local, "session", None)
+	context.csrf_token = (session.data.csrf_token if session and session.data else "") or ""
 	token = frappe.form_dict.get("token")
 	context.token = token or ""
 	context.survey = None

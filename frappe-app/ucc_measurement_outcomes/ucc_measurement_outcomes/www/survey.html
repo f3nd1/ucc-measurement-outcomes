@@ -25,6 +25,10 @@
    containing "</script>" would have broken out of the block entirely. #}
 <script type="application/json" id="ucc-survey-data">{{ (survey_json or "null") | replace("</", "<\\/") }}</script>
 <script type="application/json" id="ucc-survey-token">{{ (token or "") | tojson }}</script>
+{# The CSRF token for THIS page's session. See survey.py: relying on
+   window.csrf_token failed on guest sessions, and Frappe rejects the POST with
+   a 400 before our endpoint runs, so nothing was ever logged. #}
+<script type="application/json" id="ucc-csrf">{{ (csrf_token or "") | tojson }}</script>
 
 <script>
 (function () {
@@ -37,6 +41,8 @@
 	}
 	var survey = readJSON("ucc-survey-data");
 	var token = readJSON("ucc-survey-token") || "";
+	// Page-rendered token first; window.csrf_token only as a fallback.
+	var csrf = readJSON("ucc-csrf") || window.csrf_token || "";
 	if (!survey) return;
 
 	function esc(s) {
@@ -150,9 +156,12 @@
 		params.append("answers", JSON.stringify(answers));
 		fetch("/api/method/ucc_measurement_outcomes.api.public.submit_survey", {
 			method: "POST",
+			// Explicit: Frappe matches the CSRF header against the session the
+			// cookie identifies, so the cookie must go with it.
+			credentials: "same-origin",
 			headers: {
 				"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"X-Frappe-CSRF-Token": csrf,
 			},
 			body: params.toString(),
 		})

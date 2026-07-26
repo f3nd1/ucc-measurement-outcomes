@@ -166,11 +166,14 @@ def submit_survey(token, answers, respondent_key=None):
 			answers = None
 	if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
 		# The guest gets a generic message - never leak shapes or internals on a
-		# public endpoint. The Error Log gets what actually arrived, because
-		# "Invalid submission." on its own cost a full round trip to diagnose.
-		frappe.log_error(
-			title="UCC public submit: unexpected answers payload",
-			message="type=%s repr=%s" % (type(answers).__name__, repr(answers)[:500]),
+		# public endpoint. The trace goes to a FILE log, not Error Log: log_error
+		# inserts a document into the current transaction, and the throw on the
+		# next line rolls that transaction back, taking the log row with it. That
+		# is why the previous attempt at this recorded nothing at all.
+		# Read it with: bench --site <site> console-free -> tail logs/ucc_public.log
+		frappe.logger("ucc_public", allow_site=True).error(
+			"submit_survey: unexpected answers payload type=%s repr=%s"
+			% (type(answers).__name__, repr(answers)[:500])
 		)
 		frappe.throw(_("Invalid submission."))
 
