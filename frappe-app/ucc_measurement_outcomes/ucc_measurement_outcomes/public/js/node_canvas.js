@@ -53,8 +53,12 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 	_build() {
 		this.container.classList.add("ucc-nc-shell");
 		this.container.innerHTML = `
+			<!-- +/- next to a node canvas reads as add/remove node. They are zoom;
+			     say so, since shape and position alone say the wrong thing. -->
 			<div class="ucc-nc-tools">
-				<button data-z="in">+</button><button data-z="out">−</button><button data-z="reset">↺</button>
+				<button data-z="in" title="${__("Zoom in")}" aria-label="${__("Zoom in")}">+</button>
+				<button data-z="out" title="${__("Zoom out")}" aria-label="${__("Zoom out")}">−</button>
+				<button data-z="reset" title="${__("Reset view")}" aria-label="${__("Reset view")}">↺</button>
 			</div>
 			<div class="ucc-nc-stage"><svg class="ucc-nc-edges"></svg></div>
 			<div class="ucc-nc-empty">${frappe.utils.escape_html(__("Nothing here yet."))}</div>`;

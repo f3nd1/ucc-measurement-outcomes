@@ -239,6 +239,13 @@ class IndexStudio {
 				this.selectedKey = null;
 				this.$publish.prop("disabled", !this.editable);
 				this.$badge.text(this.editable ? "" : __("Published (read-only)"));
+				// (a) The template picker is a CREATE-NEW control and never
+				// describes what is loaded, but it sits next to the version field
+				// and reads as if it does — a leftover "SAPI" beside a loaded
+				// SEQI-V03 invites pressing Create on the wrong index. Reset it so
+				// it can only ever show its placeholder while a version is open.
+				this.templateCode = "";
+				if (this.$template) this.$template.val("");
 				this._renderCanvas();
 				this._renderInspector();
 				this._renderTrail();
@@ -298,7 +305,10 @@ class IndexStudio {
 	_renderInspector() {
 		const n = this.nodes.find((x) => x.node_key === this.selectedKey);
 		if (!n) {
-			this.$inspector.html('<p class="text-muted" style="font-size:12px">' + __("Click a node to edit its weight, metric and normalisation.") + "</p>");
+			// (b) Was "edit its weight, metric and normalisation" — true only for
+			// Metric nodes. Clicking a Dimension correctly shows Label + Weight
+			// alone, which read as a half-broken panel against that promise.
+			this.$inspector.html('<p class="text-muted" style="font-size:12px">' + __("Click a node to edit it.") + "</p>");
 			return;
 		}
 		const dis = this.editable ? "" : "disabled";
@@ -306,6 +316,13 @@ class IndexStudio {
 		const normOpts = NORMALISATIONS.map((o) => `<option ${o === n.normalisation ? "selected" : ""}>${o}</option>`).join("");
 		this.$inspector.html(`
 			<h5 style="margin-top:0">${frappe.utils.escape_html(n.label || n.node_key)} <span class="text-muted" style="font-size:11px">(${n.node_type})</span></h5>
+			<p class="text-muted" style="font-size:11px;margin-top:-4px">${
+				isMetric
+					? __("Carries a metric: its score comes from the metric named below.")
+					: n.node_type === "Index"
+						? __("The index root. Its score is the weighted roll-up of everything beneath it.")
+						: __("A grouping. It carries weight only — the metrics sit on the nodes beneath it.")
+			}</p>
 			<div class="form-group"><label>${__("Label")}</label><input class="form-control" data-f="label" value="${frappe.utils.escape_html(n.label || "")}" ${dis}></div>
 			<div class="form-group"><label>${__("Weight (%)")}</label><input type="number" class="form-control" data-f="weight" value="${n.weight || 0}" ${dis}></div>
 			${isMetric ? `
