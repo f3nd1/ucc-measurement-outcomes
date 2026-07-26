@@ -13,7 +13,8 @@
   "column_break_meta",
   "question_type",
   "answer_value",
-  "answer_numeric"
+  "answer_numeric",
+  "correction_reason"
  ],
  "fields": [
   {
@@ -66,6 +67,12 @@
    "fieldtype": "Float",
    "label": "Answer Numeric",
    "read_only": 1
+  },
+  {
+   "fieldname": "correction_reason",
+   "fieldtype": "Small Text",
+   "label": "Correction Reason",
+   "description": "Required when an already-submitted answer is changed. Frappe's version history records who, when and the old value; this records why."
   }
  ],
  "index_web_pages_for_search": 1,
@@ -93,5 +100,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "track_changes": 0
+ "track_changes": 1
 }
