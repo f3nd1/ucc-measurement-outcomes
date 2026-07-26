@@ -278,6 +278,94 @@ class IndexStudio {
 		}
 	}
 
+	// Node keys are the formula's identity - they appear in Score Breakdown rows
+	// and in deep links - so they must be unique and must not be reused after a
+	// removal. Derive from the parent and probe past anything taken.
+	_freeKey(parentKey) {
+		const taken = new Set(this.nodes.map((n) => n.node_key));
+		const base = `${parentKey || "n"}_`;
+		let i = 0;
+		while (taken.has(base + i)) i += 1;
+		return base + i;
+	}
+
+	// The node set is saved wholesale by save_nodes, so adding is just pushing
+	// onto this.nodes - the same mechanism _addRootNode already uses. No new
+	// endpoint, no schema change.
+	_addChild(parent) {
+		if (!this.editable) return;
+		frappe.prompt(
+			[
+				{ fieldname: "node_type", fieldtype: "Select", label: __("Type"), reqd: 1,
+				  options: "Dimension\nMetric", default: "Metric",
+				  description: __("A Dimension groups other nodes. A Metric carries a score.") },
+				{ fieldname: "label", fieldtype: "Data", label: __("Label"), reqd: 1 },
+			],
+			(v) => {
+				const i = this.nodes.length;
+				this.nodes.push({
+					node_key: this._freeKey(parent.node_key),
+					node_type: v.node_type,
+					label: v.label,
+					parent_key: parent.node_key,
+					// Added at 0%, never by silently rebalancing its siblings:
+					// rewriting weights the user did not touch is how a published
+					// score stops being reproducible. Validate reports the 0% as a
+					// warning; the user rebalances deliberately.
+					weight: 0,
+					// Same default grid _renderCanvas uses for unpositioned nodes.
+					pos_x: 40 + (i % 3) * 220,
+					pos_y: 40 + Math.floor(i / 3) * 120,
+				});
+				this._save(() => {
+					this._renderCanvas();
+					this._select(this.nodes[this.nodes.length - 1].node_key);
+					frappe.show_alert({ indicator: "green", message: __(
+						"{0} added at 0% — set its weight, then Validate.", [v.label]) });
+				});
+			},
+			__("Add a node under {0}", [parent.label || parent.node_key]),
+			__("Add")
+		);
+	}
+
+	_removeNode(n) {
+		if (!this.editable) return;
+		// Cascading would silently destroy the mapping work hanging beneath a
+		// dimension. Make the user remove children deliberately instead.
+		const kids = this.nodes.filter((x) => x.parent_key === n.node_key);
+		if (kids.length) {
+			return frappe.msgprint({
+				title: __("Remove its children first"),
+				indicator: "orange",
+				message: __("{0} still has {1} node(s) under it: {2}. Removing it would take them with it.",
+					[n.label || n.node_key, kids.length,
+					 kids.map((k) => k.label || k.node_key).join(", ")]),
+			});
+		}
+		if (!n.parent_key) {
+			return frappe.msgprint({
+				title: __("Cannot remove the root"),
+				indicator: "orange",
+				message: __("The root node is the index itself. Remove the version instead."),
+			});
+		}
+		frappe.confirm(
+			__("Remove {0}? Its parent's weights will no longer total 100%, so Validate will fail until you rebalance them.",
+			   [n.label || n.node_key]),
+			() => {
+				this.nodes = this.nodes.filter((x) => x.node_key !== n.node_key);
+				this.selectedKey = null;
+				this._save(() => {
+					this._renderCanvas();
+					this._renderInspector();
+					this._validate();   // show the now-broken total immediately
+					frappe.show_alert({ indicator: "orange", message: __("{0} removed", [n.label || n.node_key]) });
+				});
+			}
+		);
+	}
+
 	_addRootNode() {
 		// The root is the index node itself; dimensions/metrics hang off it.
 		this.nodes.push({
@@ -329,9 +417,14 @@ class IndexStudio {
 			<div class="form-group"><label>${__("Source Metric")}</label><input class="form-control" data-f="source_metric" value="${frappe.utils.escape_html(n.source_metric || "")}" placeholder="Metric code" ${dis}></div>
 			<div class="form-group"><label>${__("Normalisation")}</label><select class="form-control" data-f="normalisation" ${dis}>${normOpts}</select></div>
 			<div class="checkbox"><label><input type="checkbox" data-f="reverse_scored" ${n.reverse_scored ? "checked" : ""} ${dis}> ${__("Reverse Scored")}</label></div>` : ""}
-			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-idx-apply">${__("Apply")}</button>` : ""}
+			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-idx-apply">${__("Apply")}</button>
+			<hr>
+			<button class="btn btn-default btn-sm btn-block ucc-idx-add">${__("+ Add child node")}</button>
+			<button class="btn btn-default btn-sm btn-block ucc-idx-remove">${__("Remove this node")}</button>` : ""}
 		`);
 		this.$inspector.find(".ucc-idx-apply").on("click", () => this._apply(n));
+		this.$inspector.find(".ucc-idx-add").on("click", () => this._addChild(n));
+		this.$inspector.find(".ucc-idx-remove").on("click", () => this._removeNode(n));
 	}
 
 	_apply(n) {
@@ -361,10 +454,15 @@ class IndexStudio {
 			args: { index_version: this.version },
 			callback: (r) => {
 				if (!r.message) return;
-				if (r.message.valid) {
-					this.$badge.css("color", "var(--green,#237a57)").text(__("Weights valid"));
-				} else {
+				const warn = (r.message.warnings || []).join(" ");
+				if (!r.message.valid) {
 					this.$badge.css("color", "var(--red,#b94848)").text(r.message.issues.join(" "));
+				} else if (warn) {
+					// Valid but worth saying: a 0% node publishes fine and scores
+					// nothing. Amber, never blocking.
+					this.$badge.css("color", "#8a6d1f").text(warn);
+				} else {
+					this.$badge.css("color", "var(--green,#237a57)").text(__("Weights valid"));
 				}
 			},
 		});

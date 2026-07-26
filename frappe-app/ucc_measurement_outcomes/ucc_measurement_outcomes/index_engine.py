@@ -100,6 +100,31 @@ def structural_issues(nodes):
 	return issues
 
 
+def structural_warnings(nodes):
+	"""Problems worth saying out loud that must NOT block publishing.
+
+	A 0% node passes every existing check - it does not change its parent's
+	total, so weights_valid is happy and structural_issues has nothing to say -
+	while contributing exactly nothing to the score. That is the expected state
+	right after adding a node (they are added at 0 rather than silently
+	rebalancing everyone else), so it is a warning, not an error."""
+	warnings = []
+	zero = sorted(n["key"] for n in nodes
+				  if n.get("parent_key") and not (n.get("weight") or 0))
+	if zero:
+		warnings.append(
+			"Contributing nothing at 0%% weight: %s." % ", ".join(zero))
+	childless = {n.get("parent_key") for n in nodes if n.get("parent_key")}
+	leaves = sorted(n["key"] for n in nodes
+					if n["key"] not in childless
+					and n.get("type") == "Metric"
+					and not n.get("source_metric"))
+	if leaves:
+		warnings.append(
+			"Metric nodes with no source metric set: %s." % ", ".join(leaves))
+	return warnings
+
+
 def weights_total(weights):
 	return round(sum(weights), 6)
 

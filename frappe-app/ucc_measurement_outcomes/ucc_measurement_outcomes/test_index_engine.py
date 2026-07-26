@@ -6,6 +6,7 @@ from index_engine import (
 	compute_index,
 	normalise,
 	structural_issues,
+	structural_warnings,
 	weighted_score,
 	weights_valid,
 )
@@ -116,6 +117,34 @@ def test_structural_issues():
 	assert weights_valid([120, -20])  # documents WHY the structural check exists
 
 
+def test_structural_warnings():
+	# A freshly added node sits at 0% - it must be reported but must NOT block
+	# publishing, so it is a warning and structural_issues stays silent on it.
+	nodes = [
+		{"key": "idx", "parent_key": None, "type": "Index"},
+		{"key": "a", "parent_key": "idx", "weight": 100, "type": "Metric",
+		 "source_metric": "M1"},
+		{"key": "new", "parent_key": "idx", "weight": 0, "type": "Metric"},
+	]
+	warnings = structural_warnings(nodes)
+	assert any("0%" in w and "new" in w for w in warnings), warnings
+	assert any("no source metric" in w and "new" in w for w in warnings), warnings
+	# The blocking checks stay clean: 100 + 0 still totals 100.
+	assert not structural_issues(nodes), structural_issues(nodes)
+	assert weights_valid([100, 0])
+
+	# The root is never flagged for having no weight - it has no siblings.
+	assert not any("idx" in w for w in structural_warnings(
+		[{"key": "idx", "parent_key": None, "weight": 0, "type": "Index"}]))
+
+	# A fully wired formula warns about nothing.
+	assert structural_warnings([
+		{"key": "idx", "parent_key": None, "type": "Index"},
+		{"key": "a", "parent_key": "idx", "weight": 100, "type": "Metric",
+		 "source_metric": "M1"},
+	]) == []
+
+
 if __name__ == "__main__":
 	test_normalise()
 	test_weighted_score()
@@ -123,4 +152,5 @@ if __name__ == "__main__":
 	test_compute_index()
 	test_partial_coverage()
 	test_structural_issues()
+	test_structural_warnings()
 	print("index engine: all checks passed")

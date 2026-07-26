@@ -8,7 +8,11 @@ import json
 import frappe
 from frappe import _
 
-from ucc_measurement_outcomes.index_engine import structural_issues, weights_valid
+from ucc_measurement_outcomes.index_engine import (
+	structural_issues,
+	structural_warnings,
+	weights_valid,
+)
 from ucc_measurement_outcomes import index_templates
 
 INDEX_VERSION = "UCC Index Version"
@@ -111,10 +115,14 @@ def validate_index(index_version):
 	this, so a structurally broken formula cannot be published."""
 	_require(index_version, "read")
 	version = frappe.get_doc(INDEX_VERSION, index_version)
-	issues = list(structural_issues(
-		[{"key": n.node_key, "parent_key": n.parent_key, "weight": n.weight}
-		 for n in version.nodes]
-	))
+	graph = [{"key": n.node_key, "parent_key": n.parent_key, "weight": n.weight,
+			  "type": n.node_type, "source_metric": n.source_metric}
+			 for n in version.nodes]
+	issues = list(structural_issues(graph))
+	# Warnings are reported but never block publish. A node added at 0% (which is
+	# how nodes ARE added - we do not silently rebalance its siblings) is exactly
+	# this case: harmless to the totals, contributing nothing, worth saying.
+	warnings = list(structural_warnings(graph))
 	groups = {}
 	for n in version.nodes:
 		groups.setdefault(n.parent_key or "__root__", []).append(n.weight or 0)
@@ -123,7 +131,7 @@ def validate_index(index_version):
 			continue  # the root index node has no siblings to total
 		if not weights_valid(weights):
 			issues.append(_("Weights under '{0}' total {1}%, expected 100%.").format(parent, round(sum(weights), 2)))
-	return {"valid": not issues, "issues": issues}
+	return {"valid": not issues, "issues": issues, "warnings": warnings}
 
 
 @frappe.whitelist()
