@@ -2,7 +2,7 @@
 Run: `python test_submission_utils.py`
 """
 
-from submission_utils import has_value, to_text
+from submission_utils import campaign_window_open, has_value, to_text
 
 
 def test_has_value():
@@ -27,7 +27,30 @@ def test_to_text():
 	assert json.loads(to_text(["1,000 - 2,000", "Other"])) == ["1,000 - 2,000", "Other"]
 
 
+def test_campaign_window_open():
+	from datetime import date
+	today = date(2026, 7, 26)
+	# Status is the first gate: a campaign that is not Open never collects,
+	# whatever its dates say. Historical Survey Tracking rows have status blank,
+	# which is exactly this case - they are consolidation records, not campaigns.
+	assert not campaign_window_open("", None, None, today)
+	assert not campaign_window_open("Draft", None, None, today)
+	assert not campaign_window_open("Closed", None, None, today)
+	# Open with no window at all = unbounded.
+	assert campaign_window_open("Open", None, None, today)
+	# Bounds are inclusive on both ends.
+	assert campaign_window_open("Open", date(2026, 7, 26), date(2026, 7, 26), today)
+	assert campaign_window_open("Open", date(2026, 7, 1), date(2026, 8, 1), today)
+	# Not yet open / already closed.
+	assert not campaign_window_open("Open", date(2026, 7, 27), None, today)
+	assert not campaign_window_open("Open", None, date(2026, 7, 25), today)
+	# One-sided windows.
+	assert campaign_window_open("Open", date(2026, 7, 1), None, today)
+	assert campaign_window_open("Open", None, date(2026, 8, 1), today)
+
+
 if __name__ == "__main__":
 	test_has_value()
 	test_to_text()
+	test_campaign_window_open()
 	print("submission utils: all checks passed")
