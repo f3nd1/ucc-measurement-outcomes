@@ -23,7 +23,11 @@ frappe.pages["mapping-studio"].on_page_load = function (wrapper) {
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
 frappe.pages["mapping-studio"].on_page_show = function (wrapper) {
-	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
+	if (!wrapper.ucc) return;
+	// Objectives and metrics can be created while this page sits constructed in
+	// the background; pick them up on the way back in.
+	wrapper.ucc._loadMasters();
+	wrapper.ucc.applyRouteOptions();
 };
 
 const MAPI = "ucc_measurement_outcomes.api.mapping.";
@@ -37,8 +41,28 @@ class MappingStudio {
 		this.masters = { objectives: [], standards: [], metrics: [] };
 		this.selected = null;
 		this._build();
-		frappe.call({ method: MAPI + "mapping_masters", callback: (r) => { if (r.message) this.masters = r.message; } });
+		this._loadMasters();
 		this.applyRouteOptions();
+	}
+
+	// The inspector's Objective and Standard dropdowns are built from this list.
+	// It used to be fetched once, in the constructor, and never again - and the
+	// constructor runs on on_page_load, which fires once per session. So any
+	// UCC Objective created after the page was first opened (by extraction, or
+	// by anyone in another tab) could not appear in the dropdown until a full
+	// browser reload, which reads as "the data is missing" rather than "the list
+	// is stale". Refetch instead of caching for the session.
+	_loadMasters() {
+		frappe.call({
+			method: MAPI + "mapping_masters",
+			callback: (r) => {
+				if (!r.message) return;
+				this.masters = r.message;
+				// An inspector already on screen is holding the old option list.
+				const q = this.selected && this.rows.find((x) => x.name === this.selected);
+				if (q) this._renderInspector(q);
+			},
+		});
 	}
 
 	// Finding 2: deep-link entry point (idempotent, clears route_options).
@@ -163,6 +187,9 @@ class MappingStudio {
 								"{0} questions, {1} mappings, {2} objectives created",
 								[res.message.questions_created, res.message.mappings_created,
 								 res.message.objectives_created]) });
+							// Extraction just created objectives - the inspector's
+							// dropdown is now out of date by definition.
+							this._loadMasters();
 							this.load(this.version);
 						},
 					});
