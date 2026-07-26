@@ -37,6 +37,13 @@
 	.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:420px}
 	.ucc-slider{flex:1}
 	.ucc-slider-out{font-weight:600;min-width:2.4em;text-align:right}
+	/* NPS: real hidden radios (same technique as stars), visible buttons. */
+	.ucc-nps-row{display:flex;gap:4px;flex-wrap:wrap}
+	.ucc-nps-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+	.ucc-nps-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+		border:1px solid #d9d9d9;border-radius:6px;cursor:pointer;font-size:13px}
+	.ucc-nps-btn.selected{background:#4a63e7;color:#fff;border-color:#4a63e7}
+	.ucc-nps-ends{display:flex;justify-content:space-between;font-size:11px;color:#8b95a5;margin-top:4px;max-width:400px}
 </style>
 
 {# Payload in a NON-executable script tag, parsed with JSON.parse. Injecting it
@@ -92,6 +99,23 @@
 					return '<input type="radio" class="ucc-star-input" name="q_' + esc(name) + '" value="' + esc(v) + '" id="' + id + '" data-n="' + (i + 1) + '">' +
 						'<label for="' + id + '" class="ucc-star" data-n="' + (i + 1) + '" title="' + esc(c.choice_label) + '">★</label>';
 				}).join("") + "</div>";
+			// NPS: no case existed at all, so it fell through to the generic
+			// default (a free-text box) - the same broken pattern Ranking/
+			// Slider/File Upload had before tonight. Fixed the same way: a
+			// real 0-10 button row, not free text. Fixed scale, not driven by
+			// choices - NPS is not in this app's CHOICE_TYPES (no configurable
+			// options), same as Slider.
+			case "NPS":
+				return '<div class="ucc-nps" data-q="' + esc(name) + '">' +
+					'<div class="ucc-nps-row">' +
+					Array.from({ length: 11 }, function (_, n) {
+						var id = "nps_" + esc(name) + "_" + n;
+						return '<input type="radio" class="ucc-nps-input" name="q_' + esc(name) + '" value="' + n + '" id="' + id + '">' +
+							'<label for="' + id + '" class="ucc-nps-btn">' + n + "</label>";
+					}).join("") +
+					"</div>" +
+					'<div class="ucc-nps-ends"><span>Not at all likely</span><span>Extremely likely</span></div>' +
+					"</div>";
 			case "Single Choice":
 			case "Yes / No":
 				return '<div data-q="' + esc(name) + '" data-multi="0">' + choices.map(function (c) { return opt(c, "radio"); }).join("") + "</div>";
@@ -190,6 +214,17 @@
 		if (out) out.textContent = e.target.value;
 	});
 
+	// NPS: highlight the one checked button, unlike stars which fill
+	// cumulatively - NPS is a single selection, not a "how many".
+	root.addEventListener("change", function (e) {
+		if (!e.target.classList.contains("ucc-nps-input")) return;
+		var group = e.target.closest(".ucc-nps");
+		Array.prototype.slice.call(group.querySelectorAll(".ucc-nps-input")).forEach(function (inp) {
+			var lbl = group.querySelector('label[for="' + inp.id + '"]');
+			if (lbl) lbl.classList.toggle("selected", inp.checked);
+		});
+	});
+
 	// Item 3: Ranking - reorder the dragged <li> live as it crosses another
 	// item, the same "move the real node during dragover" approach used
 	// nowhere else in this codebase but standard for native HTML5 list
@@ -227,7 +262,7 @@
 		if (type === "Multiple Choice") {
 			return Array.prototype.slice.call(qEl.querySelectorAll("input:checked")).map(function (el) { return el.value; });
 		}
-		if (["Single Choice", "Rating", "Yes / No"].indexOf(type) !== -1) {
+		if (["Single Choice", "Rating", "Yes / No", "NPS"].indexOf(type) !== -1) {
 			var checked = qEl.querySelector("input:checked");
 			return checked ? checked.value : null;
 		}

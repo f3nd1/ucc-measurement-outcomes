@@ -157,6 +157,12 @@ class SurveyBuilder {
 		.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:360px}
 		.ucc-slider{flex:1}
 		.ucc-slider-out{font-weight:600;min-width:2.4em;text-align:right}
+		.ucc-nps-row{position:relative;display:flex;gap:4px;flex-wrap:wrap}
+		.ucc-nps-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+		.ucc-nps-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+			border:1px solid var(--border-color,#d9d9d9);border-radius:6px;cursor:pointer;font-size:12px}
+		.ucc-nps-btn.selected{background:var(--primary,#4a63e7);color:#fff;border-color:var(--primary,#4a63e7)}
+		.ucc-nps-ends{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted,#8b95a5);margin-top:4px;max-width:380px}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-sb-style";
@@ -622,6 +628,13 @@ class SurveyBuilder {
 		this._modal.find(".ucc-sb-previewform").on("input", ".ucc-slider", (e) => {
 			$(e.target).siblings(".ucc-slider-out").text(e.target.value);
 		});
+		// NPS: highlight the one checked button, same as the public form.
+		this._modal.find(".ucc-sb-previewform").on("change", ".ucc-nps-input", (e) => {
+			const $group = $(e.target).closest(".ucc-nps-row");
+			$group.find("input.ucc-nps-input").each((_, inp) => {
+				$group.find(`label[for="${inp.id}"]`).toggleClass("selected", inp.checked);
+			});
+		});
 		// Item 3: Ranking reorder. Same live-move-during-dragover approach as
 		// the public form; jQuery delegation here to match this file's style.
 		let $draggedLi = null;
@@ -665,6 +678,18 @@ class SurveyBuilder {
 			case "Date": return '<input type="date" class="form-control">';
 			case "Number": return '<input type="number" class="form-control">';
 			case "Email": return '<input type="email" class="form-control">';
+			// NPS: had no case at all, so it fell through to the generic default
+			// (a free-text box) - same broken pattern Ranking/Slider/File Upload
+			// had. A real 0-10 button row, fixed scale (not driven by choices,
+			// same as Slider - NPS is not in CHOICE_TYPES).
+			case "NPS":
+				return `<div class="ucc-nps">
+					<div class="ucc-nps-row">${Array.from({ length: 11 }, (_, n) => {
+						const id = `pv_nps_${q.name}_${n}`;
+						return `<input type="radio" class="ucc-nps-input" name="pv_${q.name}" id="${id}"><label for="${id}" class="ucc-nps-btn">${n}</label>`;
+					}).join("")}</div>
+					<div class="ucc-nps-ends"><span>${__("Not at all likely")}</span><span>${__("Extremely likely")}</span></div>
+				</div>`;
 			// Item 3: a real range input, matching the public form's widget.
 			case "Slider":
 				return `<div class="ucc-slider-wrap"><input type="range" class="ucc-slider" min="0" max="100" step="1" value="50">
