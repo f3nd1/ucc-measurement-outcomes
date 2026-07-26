@@ -135,12 +135,29 @@ class DataExplorer {
 		this.sel.dataset = name;
 		this._renderTrail();
 		const spec = this.catalogue[name] || { dimensions: [], measures: [] };
+		// A reference dataset is queryable but never feeds a score. Say so on the
+		// page rather than only in the catalogue, so a pivot of historical data
+		// can't be mistaken for something that contributes to an index.
+		this._renderReferenceBanner(spec);
 		this._fill(this.measureField, spec.measures, false);
 		this._fill(this.rowField, spec.dimensions, true);
 		this._fill(this.colField, spec.dimensions, true);
 		this.sel.measure = this.measureField.val();
 		this.sel.row = this.rowField.val() || null;
 		this.sel.column = this.colField.val() || null;
+	}
+
+	_renderReferenceBanner(spec) {
+		if (!this.$ref) this.$ref = $('<div></div>').insertBefore(this.$out);
+		if (!spec.reference) return this.$ref.empty();
+		// Frappe's own alert class - this page has no stylesheet of its own and
+		// one banner does not justify starting one.
+		this.$ref.html(
+			`<div class="alert alert-warning" style="font-size:12px;margin:10px 0 0">
+				<b>${__("Reference only")}</b> — ${frappe.utils.escape_html(
+					spec.note || __("this data does not feed any calculated index."))}
+			</div>`
+		);
 	}
 
 	_args() {
