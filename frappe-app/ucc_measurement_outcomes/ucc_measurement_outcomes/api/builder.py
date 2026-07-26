@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 
 from ucc_measurement_outcomes.bulk_parse import parse_bulk_questions
+from ucc_measurement_outcomes.versioning import next_version_number
 
 QUESTION = "UCC Survey Question"
 VERSION = "UCC Survey Version"
@@ -62,6 +63,56 @@ def _resequence(survey_version, make_room_at=None):
 def _require(survey_version, ptype):
 	if not frappe.has_permission(VERSION, ptype, doc=survey_version):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def list_versions(limit=100):
+	"""Versions for the picker, newest-modified first. Read-only, so this is one
+	permission check rather than a filter per row: any version the caller could
+	not read is simply not fetched.
+
+	Not scoped to a single survey — Felix's reference (Dashboard Studio's
+	picker) shows a flat list across all dashboards, and this page has never had
+	a separate "pick a survey first" step, so the same flat shape is used here.
+	"""
+	if not frappe.has_permission(VERSION, "read"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	rows = frappe.get_all(
+		VERSION,
+		fields=["name", "survey", "version_number", "status", "modified"],
+		order_by="modified desc",
+		limit=int(limit),
+	)
+	titles = {
+		s.name: s.title
+		for s in frappe.get_all("UCC Survey", filters={"name": ["in", [r.survey for r in rows] or [""]]},
+								fields=["name", "title"])
+	}
+	for r in rows:
+		r["survey_title"] = titles.get(r.survey) or r.survey
+	return rows
+
+
+@frappe.whitelist()
+def new_version(survey):
+	"""Create a blank Draft version of `survey` at the next free version number.
+
+	Deliberately blank, not a copy of the latest version's questions: this page
+	already has an explicit "Copy to version..." action for bringing questions
+	across, and auto-copying here would duplicate content the user did not ask
+	to duplicate.
+	"""
+	if not frappe.has_permission(VERSION, "create"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if not frappe.db.exists("UCC Survey", survey):
+		frappe.throw(_("Survey {0} not found").format(survey))
+	count = frappe.db.count(VERSION, {"survey": survey})
+	n = next_version_number(count, lambda n: frappe.db.exists(VERSION, f"{survey}-V{n:02d}"))
+	doc = frappe.get_doc({
+		"doctype": VERSION, "survey": survey,
+		"version_number": f"{n:02d}", "status": "Draft",
+	}).insert()
+	return doc.name
 
 
 @frappe.whitelist()

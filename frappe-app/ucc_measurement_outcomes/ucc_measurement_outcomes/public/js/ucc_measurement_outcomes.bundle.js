@@ -22,3 +22,4 @@ import "./node_canvas.js";
 import "./filter_bar.js";
 import "./empty_state.js";
 import "./trail.js";
+import "./version_picker.js";

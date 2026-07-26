@@ -11,6 +11,25 @@ helper imports frappe lazily inside the function body.
 FROZEN_STATUSES = {"Published", "Closed"}
 
 
+def next_version_number(existing_count, name_exists):
+	"""Smallest free version number (as an int), probing past any gap left by a
+	deleted-then-recreated version.
+
+	existing_count alone is not authoritative: delete V01 of a V01+V02 pair and
+	count() drops to 1, so "next = count + 1" collides with V02 and raises
+	DuplicateEntry (the exact bug this probe exists to prevent — first found in
+	Index Studio's version creation, same shape here since both use
+	{parent}-V{n:02d} naming). name_exists(n) checks whether that specific
+	number's full name is taken; the caller supplies it since only it knows the
+	real name format and has a database to check against.
+	"""
+	# ponytail: linear probe, fine at human version counts.
+	n = existing_count + 1
+	while name_exists(n):
+		n += 1
+	return n
+
+
 def version_is_frozen(status):
 	"""True if a version in this status must not have its content edited."""
 	return status in FROZEN_STATUSES

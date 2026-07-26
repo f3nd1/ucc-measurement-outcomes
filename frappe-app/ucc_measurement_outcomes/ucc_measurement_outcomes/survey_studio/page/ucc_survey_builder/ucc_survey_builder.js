@@ -25,8 +25,17 @@ frappe.pages["ucc-survey-builder"].on_page_load = function (wrapper) {
 // second visit would be ignored if route_options were only read in the
 // constructor. on_page_show runs on every visit.
 frappe.pages["ucc-survey-builder"].on_page_show = function (wrapper) {
-	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
+	if (!wrapper.ucc) return;
+	// Same stale-list bug fixed earlier this session in Mapping/Dashboard
+	// Studio: a version created elsewhere (or by "+ New Version" itself,
+	// before this callback existed) would not appear until a full reload.
+	wrapper.ucc._loadVersionList();
+	wrapper.ucc.applyRouteOptions();
 };
+
+// Item 1: colours reuse the .indicator-pill classes already used throughout
+// this app (coverage panel, Mapping Studio groups) rather than new ones.
+const VERSION_STATUS_COLOR = { Draft: "gray", "In Review": "orange", Published: "green", Closed: "gray" };
 
 const QUESTION_TYPES = [
 	"Short Text", "Paragraph", "Email", "Number", "Date", "Rating",
@@ -46,6 +55,7 @@ class SurveyBuilder {
 	constructor(page) {
 		this.page = page;
 		this.version = null;
+		this.versionItems = [];
 		this.questions = [];
 		this.editable = false;
 		this.selected = null;
@@ -65,7 +75,7 @@ class SurveyBuilder {
 		frappe.route_options = {};
 		if (opts.question) this._pendingQuestion = opts.question;
 		if (opts.survey_version) {
-			this.versionField.set_value(opts.survey_version);   // triggers load()
+			this.load(opts.survey_version);
 		} else {
 			this._applyPendingQuestion();
 		}
@@ -137,18 +147,21 @@ class SurveyBuilder {
 	_buildLayout() {
 		const $main = $(this.page.main).empty();
 		this.$trail = $('<div></div>').appendTo($main);   // finding 1
-		const $picker = $('<div style="max-width:360px"></div>').appendTo($main);
-		this.versionField = frappe.ui.form.make_control({
-			parent: $picker.get(0),
-			df: {
-				// Finding 5: no reqd here — this is a standalone picker, not a form
-				// field in a save cycle, and reqd paints an error border on an
-				// untouched empty page. The change handler already guards on `v`.
-				fieldtype: "Link", options: "UCC Survey Version", label: __("Survey Version"),
-				change: () => { const v = this.versionField.get_value(); if (v) this.load(v); },
-			},
-			render_input: true,
+		// Item 1: replaces the plain Link field with a picker showing each
+		// version's status as a coloured pill, a checkmark on the active one, an
+		// edit affordance, and a "+ New Version" footer action — modelled on a
+		// picker Felix described from elsewhere (nothing in this app already had
+		// this shape; see version_picker.js for what was actually found).
+		const $pickerLabel = $(`<label style="display:block;font-size:12px;color:var(--text-muted,#8b95a5);margin-bottom:3px">${__("Survey Version")}</label>`).appendTo($main);
+		const $picker = $('<div></div>').appendTo($main);
+		this.picker = new window.UCCVersionPicker($picker.get(0), {
+			statusColor: VERSION_STATUS_COLOR,
+			placeholder: __("Pick a survey version…"),
+			onSelect: (name) => this.load(name),
+			onEdit: (name) => frappe.set_route("Form", "UCC Survey Version", name),
+			onCreate: () => this._createVersion(),
 		});
+		this._loadVersionList();
 		const $tb = $('<div class="ucc-sb-toolbar"></div>').appendTo($main);
 		$(`<button class="btn btn-default btn-sm">${__("Bulk paste")}</button>`).appendTo($tb).on("click", () => this._openBulk());
 		$(`<button class="btn btn-default btn-sm">${__("Preview")}</button>`).appendTo($tb).on("click", () => this._preview());
@@ -280,7 +293,54 @@ class SurveyBuilder {
 			this._loadCoverage();           // finding 3: mapping status
 			// The banner above just toggled, which moves the grid's top offset.
 			this._layoutColumns();
+			this.picker.setItems(this.versionItems || [], this.version.name);
 		});
+	}
+
+	// Item 1: the picker's list, fetched once and refetched on page show and
+	// right after "+ New Version" — same stale-list defect fixed earlier this
+	// session in Mapping/Dashboard Studio (a list built once in a constructor
+	// never reflects anything created afterwards).
+	_loadVersionList() {
+		frappe.call({
+			method: API + "list_versions",
+			callback: (r) => {
+				this.versionItems = (r.message || []).map((v) => ({
+					name: v.name, status: v.status,
+					label: `${v.survey_title} · V${v.version_number}`,
+				}));
+				this.picker.setItems(this.versionItems, this.version ? this.version.name : null);
+			},
+		});
+	}
+
+	// Item 1: "+ New Version" needs to know which Survey. If one is already
+	// loaded, default to it — the common case is "start a new draft of what
+	// I'm looking at" — otherwise ask. Deliberately blank (see new_version's
+	// docstring): "Copy to version..." already exists for bringing questions
+	// across, so auto-copying here would duplicate content nobody asked to
+	// duplicate.
+	_createVersion() {
+		const survey = this.version ? this.version.survey : null;
+		const go = (surveyName) => {
+			frappe.call({
+				method: API + "new_version",
+				args: { survey: surveyName },
+				callback: (r) => {
+					if (!r.message) return;
+					frappe.show_alert({ indicator: "green", message: __("New draft version created") });
+					this._loadVersionList();
+					this.load(r.message);
+				},
+			});
+		};
+		if (survey) return go(survey);
+		frappe.prompt(
+			[{ fieldname: "survey", fieldtype: "Link", options: "UCC Survey", label: __("Survey"), reqd: 1 }],
+			(v) => go(v.survey),
+			__("New Survey Version"),
+			__("Create")
+		);
 	}
 
 	// Finding 3: mapping status comes from the SAME whitelisted method Mapping

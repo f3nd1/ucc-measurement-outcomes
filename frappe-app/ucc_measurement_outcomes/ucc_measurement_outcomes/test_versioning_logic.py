@@ -7,6 +7,7 @@ The Frappe DocType tests that need a live site live next to each DocType.
 from versioning import (
 	FROZEN_STATUSES,
 	frozen_fields_blocked,
+	next_version_number,
 	version_is_frozen,
 	version_transition_blocked,
 )
@@ -52,9 +53,23 @@ def test_frozen_content():
 	assert not frozen_fields_blocked("Published", ["pos_x"], allowed=("status", "pos_x"))
 
 
+def test_next_version_number():
+	# Nothing exists yet: count=0 -> V1, no probing needed.
+	assert next_version_number(0, lambda n: False) == 1
+	# Normal case: 2 rows exist (V1, V2) -> next is V3.
+	assert next_version_number(2, lambda n: n in (1, 2)) == 3
+	# The bug this exists to prevent: V1 deleted from a V1+V2 pair leaves
+	# count=1, so a naive "count + 1" collides with the still-existing V2.
+	assert next_version_number(1, lambda n: n == 2) == 3
+	# A deeper gap: V1-V4 exist, V2 was deleted. count=3 (V1,V3,V4) says "try 4",
+	# which also collides; probe until 5.
+	assert next_version_number(3, lambda n: n in (1, 3, 4)) == 5
+
+
 if __name__ == "__main__":
 	test_frozen()
 	test_transitions()
 	test_frozen_content()
+	test_next_version_number()
 	assert FROZEN_STATUSES == {"Published", "Closed"}
 	print("versioning logic: all checks passed")
