@@ -23,10 +23,16 @@ frappe.pages["mapping-studio"].on_page_load = function (wrapper) {
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
 frappe.pages["mapping-studio"].on_page_show = function (wrapper) {
-	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
+	if (!wrapper.ucc) return;
+	// Objectives and metrics can be created while this page sits constructed in
+	// the background; pick them up on the way back in.
+	wrapper.ucc._loadMasters();
+	wrapper.ucc.applyRouteOptions();
 };
 
 const MAPI = "ucc_measurement_outcomes.api.mapping.";
+const XAPI = "ucc_measurement_outcomes.api.extract.";
+const srcLabel = (s) => `${s.name} (${s.rows})`;
 
 class MappingStudio {
 	constructor(page) {
@@ -35,8 +41,28 @@ class MappingStudio {
 		this.masters = { objectives: [], standards: [], metrics: [] };
 		this.selected = null;
 		this._build();
-		frappe.call({ method: MAPI + "mapping_masters", callback: (r) => { if (r.message) this.masters = r.message; } });
+		this._loadMasters();
 		this.applyRouteOptions();
+	}
+
+	// The inspector's Objective and Standard dropdowns are built from this list.
+	// It used to be fetched once, in the constructor, and never again - and the
+	// constructor runs on on_page_load, which fires once per session. So any
+	// UCC Objective created after the page was first opened (by extraction, or
+	// by anyone in another tab) could not appear in the dropdown until a full
+	// browser reload, which reads as "the data is missing" rather than "the list
+	// is stale". Refetch instead of caching for the session.
+	_loadMasters() {
+		frappe.call({
+			method: MAPI + "mapping_masters",
+			callback: (r) => {
+				if (!r.message) return;
+				this.masters = r.message;
+				// An inspector already on screen is holding the old option list.
+				const q = this.selected && this.rows.find((x) => x.name === this.selected);
+				if (q) this._renderInspector(q);
+			},
+		});
 	}
 
 	// Finding 2: deep-link entry point (idempotent, clears route_options).
@@ -73,6 +99,12 @@ class MappingStudio {
 			},
 			render_input: true,
 		});
+		// Checkpoint D: 275 of 318 Survey Question Item rows carry an objective a
+		// human decided on. Offer that as a starting point rather than making
+		// people retype it — an explicit, previewed import, never a sync.
+		$(`<button class="btn btn-default btn-sm" style="margin-top:8px">${
+			__("Extract from Survey Management…")}</button>`)
+			.appendTo($main).on("click", () => this._openExtract());
 		this.$coverage = $('<div class="ucc-map-coverage" style="margin-top:12px"></div>').appendTo($main);
 		const $grid = $('<div style="display:grid;grid-template-columns:1.4fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		const $left = $('<div></div>').appendTo($grid);
@@ -85,6 +117,85 @@ class MappingStudio {
 		this.canvas.setEmpty({ message: __("Pick a survey to see how its questions map to objectives.") });
 		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
+	}
+
+	// Checkpoint D: pick a source, read what would be created, then commit.
+	// Nothing is written until the second button.
+	_openExtract() {
+		if (!this.version) {
+			return frappe.msgprint(__("Pick a Draft survey version first — that's where the extracted questions go."));
+		}
+		frappe.call({
+			method: XAPI + "list_sources",
+			callback: (r) => {
+				const sources = r.message || [];
+				if (!sources.length) {
+					return frappe.msgprint(__("No Survey Management records have question-master rows to extract."));
+				}
+				const d = new frappe.ui.Dialog({
+					title: __("Extract from Survey Management"),
+					fields: [
+						{ fieldname: "src", fieldtype: "Select", label: __("Source"), reqd: 1,
+						  options: sources.map(srcLabel).join("\n") },
+						{ fieldname: "out", fieldtype: "HTML" },
+					],
+					primary_action_label: __("Preview"),
+					primary_action: () => this._previewExtract(d, sources),
+				});
+				d.show();
+			},
+		});
+	}
+
+	_previewExtract(d, sources) {
+		const label = d.get_values().src;
+		const chosen = sources.find((s) => srcLabel(s) === label) || sources[0];
+		frappe.call({
+			method: XAPI + "preview_extraction",
+			args: { survey_version: this.version, survey_management: chosen.name },
+			callback: (r) => {
+				const p = r.message;
+				if (!p) return;
+				const c = p.counts;
+				const rows = p.questions.slice(0, 40).map((q) =>
+					`<tr><td>${frappe.utils.escape_html(q.question_text.slice(0, 80))}</td>
+					 <td>${q.objectives.map((o) => frappe.utils.escape_html(o.label)).join("<br>")}</td>
+					 <td>${q.exists ? __("already present") : __("new")}</td></tr>`).join("");
+				d.fields_dict.out.$wrapper.html(`
+					<div style="font-size:12px;margin-top:10px">
+						<b>${__("Would create")}:</b>
+						${c.questions - c.questions_already_present} ${__("questions")},
+						${c.mappings} ${__("objective mappings")},
+						${c.new_objectives} ${__("new objectives")}.<br>
+						${c.questions_already_present} ${__("questions already exist and are reused")};
+						${c.questions_multi_objective} ${__("carry more than one objective")};
+						${c.skipped} ${__("source rows skipped")}.
+						<table class="table table-bordered" style="margin-top:8px">
+							<tr><th>${__("Question")}</th><th>${__("Objectives")}</th><th>${__("Status")}</th></tr>
+							${rows}
+						</table>
+						${p.questions.length > 40 ? `<div class="text-muted">${
+							__("showing first 40 of {0}", [p.questions.length])}</div>` : ""}
+					</div>`);
+				d.set_primary_action(__("Create these records"), () => {
+					frappe.call({
+						method: XAPI + "commit_extraction",
+						args: { survey_version: this.version, survey_management: chosen.name },
+						callback: (res) => {
+							d.hide();
+							frappe.show_alert({ indicator: "green", message: __(
+								"{0} questions, {1} mappings, {2} objectives created",
+								[res.message.questions_created, res.message.mappings_created,
+								 res.message.objectives_created]) });
+							// Extraction just created objectives - the inspector's
+							// dropdown is now out of date by definition.
+							this._loadMasters();
+							this.load(this.version);
+						},
+					});
+				});
+			},
+		});
 	}
 
 	// Finding 1: Survey Studio is upstream of this page — make that clickable.

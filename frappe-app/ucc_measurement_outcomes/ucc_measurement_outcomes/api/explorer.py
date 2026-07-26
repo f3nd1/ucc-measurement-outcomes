@@ -16,6 +16,12 @@ from frappe import _
 
 from ucc_measurement_outcomes.explorer_agg import aggregate, to_csv
 
+REFERENCE_NOTE = (
+	"Historical data collected before this app existed. Reference only - it is "
+	"never read into a Metric Result or an Index Result, because 47% of its rows "
+	"cannot be attributed to a specific question."
+)
+
 # measure name -> (aggregation, measured field or None for count)
 DATASETS = {
 	"Survey Answers": {
@@ -68,6 +74,24 @@ DATASETS = {
 		"measures": {"Row Count": ("count", None)},
 		"filters": ["campaign", "survey_version", "status", "source"],
 	},
+	# Historical educ_sg collection. VISIBLE FOR CONTEXT, NEVER SCOREABLE.
+	# 1,104 of 2,339 rows (47%) cannot be attributed to a specific question by
+	# any method tested - text matching, qn_no, or row position - so these
+	# responses can be looked at but can never produce a Metric Result or an
+	# Index Result. The enforcement lives in metric_calc.py; the flag here is
+	# what makes the UI say so out loud.
+	"Survey Responses (historical)": {
+		"doctype": "Survey Response",
+		"external": True,
+		"reference": True,
+		"note": REFERENCE_NOTE,
+		# TODO: bench-verify - these come from Felix's field list, not from a
+		# schema dump. `external` makes _compute check them against the real meta
+		# before querying, so a wrong name is a legible error, not a 500.
+		"dimensions": ["program", "course", "frequency"],
+		"measures": {"Row Count": ("count", None)},
+		"filters": ["program", "course", "frequency"],
+	},
 }
 
 # Datasets from the brief that would read EXTERNAL DocTypes not yet confirmed on
@@ -95,6 +119,10 @@ def list_datasets():
 				"dimensions": spec["dimensions"],
 				"measures": list(spec["measures"].keys()),
 				"filters": spec["filters"],
+				# Reference datasets are queryable but must be labelled as such,
+				# so nobody reads a pivot of them as a score.
+				"reference": bool(spec.get("reference")),
+				"note": spec.get("note"),
 			}
 			for name, spec in DATASETS.items()
 		},
@@ -105,6 +133,24 @@ def list_datasets():
 	}
 
 
+def _assert_external_fields(spec):
+	"""Datasets over DocTypes this app does not own are declared from a field
+	list, not a schema dump. Two probes on this project have already died on a
+	fieldname that turned out to be spelled differently, so check against the
+	real meta and name the actual fields instead of failing inside a query."""
+	real = {df.fieldname for df in frappe.get_meta(spec["doctype"]).fields}
+	real.update({"name", "owner", "creation", "modified"})
+	declared = set(spec["dimensions"]) | set(spec["filters"])
+	declared.update(f for _agg, f in spec["measures"].values() if f)
+	missing = sorted(declared - real)
+	if missing:
+		frappe.throw(
+			_("Dataset '{0}' names fields that {1} does not have: {2}. Real fields: {3}").format(
+				spec["doctype"], spec["doctype"], ", ".join(missing), ", ".join(sorted(real))
+			)
+		)
+
+
 def _compute(dataset, measure, row=None, column=None, filters=None):
 	if dataset in PENDING_DATASETS:
 		frappe.throw(_("Dataset '{0}' needs its external DocType confirmed on the bench first.").format(dataset))
@@ -113,6 +159,8 @@ def _compute(dataset, measure, row=None, column=None, filters=None):
 		frappe.throw(_("Unknown dataset."))
 	if not frappe.has_permission(spec["doctype"], "read"):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if spec.get("external"):
+		_assert_external_fields(spec)
 	if measure not in spec["measures"]:
 		frappe.throw(_("Unknown measure."))
 	for dim in (row, column):

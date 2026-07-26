@@ -22,7 +22,13 @@ frappe.pages["ucc-dashboard-studio"].on_page_load = function (wrapper) {
 
 // Finding 2: see survey_builder — pages construct once, on_page_show runs every visit.
 frappe.pages["ucc-dashboard-studio"].on_page_show = function (wrapper) {
-	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
+	if (!wrapper.ucc) return;
+	// Same stale-list bug as Mapping Studio's objective dropdown: these options
+	// come from records, were fetched once in the constructor, and on_page_load
+	// fires once per session. Publish an index version and come back here and it
+	// was missing from the filter until a full browser reload.
+	wrapper.ucc.loadFilters();
+	wrapper.ucc.applyRouteOptions();
 };
 
 const DAPI = "ucc_measurement_outcomes.api.dashboard.";
@@ -35,9 +41,14 @@ class DashboardStudio {
 		this.data = null;
 		this._injectStyle();
 		this._build();
-		frappe.call({ method: DAPI + "dashboard_filters", callback: (r) => { if (r.message) this._fillFilters(r.message); } });
+		this.loadFilters();
 		this.applyRouteOptions();
 		this.load();
+	}
+
+	loadFilters() {
+		frappe.call({ method: DAPI + "dashboard_filters",
+					  callback: (r) => { if (r.message) this._fillFilters(r.message); } });
 	}
 
 	// Finding 2: deep-link entry point (idempotent, clears route_options).

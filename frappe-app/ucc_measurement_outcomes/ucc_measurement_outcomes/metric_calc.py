@@ -11,7 +11,7 @@ answer_numeric, and writes one Metric Result. Runs as a background job.
 
 import frappe
 
-from ucc_measurement_outcomes.metric_engine import aggregate_metric
+from ucc_measurement_outcomes.metric_engine import aggregate_metric, assert_scoreable_source
 
 METRIC = "UCC Metric Definition"
 ANSWER = "UCC Survey Answer"
@@ -20,12 +20,24 @@ ANSWER = "UCC Survey Answer"
 def calculate_metric_result(metric_code, period=None, entity_type=None, entity=None):
 	metric = frappe.get_doc(METRIC, metric_code)
 
+	# THE SCORING SEAM. Everything that becomes a score enters here and nowhere
+	# else, so this is where "historical data may be seen, never scored" is
+	# enforced rather than merely stated. Any new source type must call
+	# assert_scoreable_source before reading, which is an allowlist of one:
+	# UCC Survey Answer. Historical educ_sg responses cannot pass it, and a
+	# future Operational Field reader cannot quietly point source_reference at
+	# Survey Response List Childtable.
+	assert_scoreable_source(ANSWER)
+
 	# (answer_name, raw_value, normalisation, reverse, survey_version)
 	answer_rows = []
 	for src in metric.sources:
 		if src.source_type != "Survey Question" or not src.source_question:
 			# TODO: bench-verify - Operational Field sources read external DocTypes
 			# (e.g. Assessment Result) not yet confirmed on the bench; skipped here.
+			# When one is wired, it goes through assert_scoreable_source first -
+			# source_reference is a free-text Data field and would otherwise be a
+			# way to name any table at all.
 			continue
 		norm = src.normalisation or metric.default_normalisation
 		rev = bool(src.reverse_scored)

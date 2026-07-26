@@ -11,6 +11,31 @@ except ImportError:  # pragma: no cover
 	from index_engine import normalise
 
 
+# The scoring seam. A DocType must appear here to become a score, and the only
+# thing that qualifies is our own Answer row - it carries a real question LINK
+# and a normalisable value.
+#
+# This is an ALLOWLIST on purpose. A denylist naming Survey Response would block
+# the one path we thought of and wave through the next one; requiring an opt-in
+# means a future source has to be argued for rather than merely added.
+#
+# Historical educ_sg responses can never qualify: 1,104 of 2,339 rows (47%)
+# cannot be attributed to a specific question by text, by qn_no, or by row
+# position, so a score computed from them would be an average over an unknown
+# mixture of questions. They stay visible in Data Explorer and unscoreable here.
+SCOREABLE_SOURCE_DOCTYPES = frozenset({"UCC Survey Answer"})
+
+
+def assert_scoreable_source(doctype):
+	"""Raise unless `doctype` may be read into a Metric Result."""
+	if doctype not in SCOREABLE_SOURCE_DOCTYPES:
+		raise PermissionError(
+			f"{doctype!r} is not a scoreable source. Scoring reads only "
+			f"{sorted(SCOREABLE_SOURCE_DOCTYPES)}; everything else is reference data."
+		)
+	return doctype
+
+
 def aggregate_metric(entries):
 	"""entries: [{value, normalisation, reverse}] raw answers for a metric.
 

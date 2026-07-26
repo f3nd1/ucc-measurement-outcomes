@@ -34,14 +34,18 @@ def get_mapping_overview(survey_version):
 		fields=["name", "question_text", "question_type", "sequence"],
 		order_by="sequence asc, creation asc",
 	)
-	mappings = {
-		m["question"]: m
-		for m in frappe.get_all(
-			MAPPING,
-			filters={"survey_version": survey_version},
-			fields=["question", "objective", "standard", "primary_clause", "related_clauses"],
-		)
-	}
+	# A question may carry more than one objective mapping (real UCC data has
+	# questions on two and three objectives). Keying a dict on question silently
+	# kept whichever row came back last, so the UI showed one of three objectives
+	# with no sign the others existed.
+	mappings = {}
+	for m in frappe.get_all(
+		MAPPING,
+		filters={"survey_version": survey_version},
+		fields=["question", "objective", "standard", "primary_clause", "related_clauses"],
+		order_by="creation asc",
+	):
+		mappings.setdefault(m["question"], []).append(m)
 	# Metric mapping: which metric(s) name this question as a source.
 	metric_by_question = {}
 	for ms in frappe.get_all(
@@ -52,24 +56,41 @@ def get_mapping_overview(survey_version):
 		metric_by_question.setdefault(ms["source_question"], []).append(ms["parent"])
 
 	for q in questions:
-		m = mappings.get(q["name"], {})
+		rows = mappings.get(q["name"], [])
+		m = rows[0] if rows else {}
+		# The single-value fields stay for the existing inspector; `objectives`
+		# carries the full truth so nothing is hidden.
 		q["objective"] = m.get("objective")
 		q["standard"] = m.get("standard")
 		q["primary_clause"] = m.get("primary_clause")
 		q["related_clauses"] = m.get("related_clauses")
+		q["objectives"] = [r["objective"] for r in rows if r.get("objective")]
 		q["metrics"] = metric_by_question.get(q["name"], [])
 	return {"survey_version": survey_version, "questions": questions}
 
 
 @frappe.whitelist()
 def upsert_question_mapping(question, objective, standard=None, primary_clause=None, related_clauses=None):
-	"""Create or update the single objective mapping for a question."""
+	"""Create or update this question's objective mapping.
+
+	The unique constraint on `question` was removed once real data showed
+	questions carrying two and three objectives. This endpoint still edits ONE
+	row, because the inspector it serves has one objective field - so when a
+	question already has several it refuses rather than picking one of them at
+	random and overwriting it."""
 	survey_version = frappe.db.get_value(QUESTION, question, "survey_version")
 	if not survey_version:
 		frappe.throw(_("Question not found."))
 	_require(survey_version, "write")
-	name = frappe.db.get_value(MAPPING, {"question": question}, "name")
-	doc = frappe.get_doc(MAPPING, name) if name else frappe.new_doc(MAPPING)
+	names = frappe.get_all(MAPPING, filters={"question": question},
+						   order_by="creation asc", pluck="name")
+	if len(names) > 1:
+		frappe.throw(
+			_("This question has {0} objective mappings. Editing it through the "
+			  "single-objective field would overwrite one of them - open the "
+			  "question's mapping list instead.").format(len(names))
+		)
+	doc = frappe.get_doc(MAPPING, names[0]) if names else frappe.new_doc(MAPPING)
 	doc.question = question
 	doc.objective = objective
 	doc.standard = standard
