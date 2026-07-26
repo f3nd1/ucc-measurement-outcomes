@@ -79,14 +79,41 @@ class TestExplorerCatalogue(unittest.TestCase):
 
 
 class TestScoringNeverReadsHistorical(unittest.TestCase):
-	"""Checkpoint E extends this: metric_calc must never name Survey Response."""
+	"""Checkpoint E: the seam is an allowlist, not a comment."""
 
-	def test_metric_calc_does_not_mention_survey_response(self):
+	def test_only_our_answer_row_is_scoreable(self):
+		from ucc_measurement_outcomes.metric_engine import SCOREABLE_SOURCE_DOCTYPES
+		self.assertEqual(set(SCOREABLE_SOURCE_DOCTYPES), {"UCC Survey Answer"})
+
+	def test_historical_response_tables_are_refused(self):
+		from ucc_measurement_outcomes.metric_engine import assert_scoreable_source
+		for forbidden in ("Survey Response", "Survey Response List Childtable",
+						  "Survey Tracking", "Survey Question Item", "Assessment Result"):
+			with self.assertRaises(PermissionError, msg=forbidden):
+				assert_scoreable_source(forbidden)
+
+	def test_the_allowed_source_passes(self):
+		from ucc_measurement_outcomes.metric_engine import assert_scoreable_source
+		self.assertEqual(assert_scoreable_source("UCC Survey Answer"), "UCC Survey Answer")
+
+	def test_metric_calc_calls_the_guard(self):
+		# A guard nothing invokes is a comment. This fails if the call is removed.
+		src = pathlib.Path(HERE, "metric_calc.py").read_text()
+		self.assertIn("assert_scoreable_source(ANSWER)", src)
+
+	def test_scoring_modules_do_not_name_survey_response(self):
+		# Belt and braces: the allowlist is the real guard, but a stray query
+		# added outside the seam would still show up here.
 		for module in ("metric_calc.py", "index_calc.py", "metric_engine.py",
 					   "index_engine.py"):
 			src = pathlib.Path(HERE, module).read_text()
-			self.assertNotIn("Survey Response", src,
-							 f"{module} names Survey Response - scoring must never read it")
+			for line in src.splitlines():
+				if "Survey Response" not in line:
+					continue
+				stripped = line.strip()
+				self.assertTrue(
+					stripped.startswith("#"),
+					f"{module} names Survey Response outside a comment: {stripped}")
 
 
 if __name__ == "__main__":
