@@ -20,14 +20,24 @@
 	.ucc-thanks{padding:30px;text-align:center}
 </style>
 
-<script>
-window.UCC_SURVEY = {{ survey_json or "null" }};
-window.UCC_TOKEN = {{ (token or "") | tojson }};
+{# Payload in a NON-executable script tag, parsed with JSON.parse. Injecting it
+   into executable JS depended on Jinja not escaping the quotes, and a question
+   containing "</script>" would have broken out of the block entirely. #}
+<script type="application/json" id="ucc-survey-data">{{ (survey_json or "null") | replace("</", "<\\/") }}</script>
+<script type="application/json" id="ucc-survey-token">{{ (token or "") | tojson }}</script>
 
+<script>
 (function () {
-	var survey = window.UCC_SURVEY;
 	var root = document.getElementById("ucc-survey-root");
-	if (!survey || !root) return;
+	if (!root) return;
+
+	function readJSON(id) {
+		var el = document.getElementById(id);
+		try { return el ? JSON.parse(el.textContent) : null; } catch (e) { return null; }
+	}
+	var survey = readJSON("ucc-survey-data");
+	var token = readJSON("ucc-survey-token") || "";
+	if (!survey) return;
 
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -69,8 +79,13 @@ window.UCC_TOKEN = {{ (token or "") | tojson }};
 		}
 	}
 
+	// NOT a <form>. Frappe's web layout can already wrap page content in one,
+	// and the HTML parser silently DROPS a nested form, reparenting its children
+	// to the outer one - which is how a Submit button ended up doing a native
+	// GET reload while our submit listener was bound to an element that no
+	// longer existed. A div with a type="button" trigger cannot navigate at all.
 	var html = "<h2>" + esc(survey.title) + "</h2>";
-	html += '<form id="ucc-form">';
+	html += '<div id="ucc-form">';
 	survey.questions.forEach(function (q, i) {
 		if (q.question_type === "Section Heading") {
 			html += '<h4 style="margin-top:18px">' + esc(q.question_text) + "</h4>";
@@ -82,7 +97,8 @@ window.UCC_TOKEN = {{ (token or "") | tojson }};
 		html += field(q);
 		html += "</div>";
 	});
-	html += '<button type="submit" class="btn btn-primary" style="margin-top:18px">Submit</button></form>';
+	html += '<div id="ucc-error" class="alert alert-warning" style="display:none;margin-top:14px"></div>';
+	html += '<button type="button" id="ucc-submit" class="btn btn-primary" style="margin-top:18px">Submit</button></div>';
 	root.innerHTML = html;
 
 	function collect(qEl) {
@@ -98,8 +114,17 @@ window.UCC_TOKEN = {{ (token or "") | tojson }};
 		return input ? input.value : null;
 	}
 
-	document.getElementById("ucc-form").addEventListener("submit", function (e) {
-		e.preventDefault();
+	var btn = document.getElementById("ucc-submit");
+	var errEl = document.getElementById("ucc-error");
+	function showError(msg) {
+		errEl.textContent = msg;
+		errEl.style.display = "block";
+		btn.disabled = false;
+		btn.textContent = "Submit";
+	}
+
+	btn.addEventListener("click", function () {
+		errEl.style.display = "none";
 		var answers = [];
 		var missing = false;
 		Array.prototype.slice.call(root.querySelectorAll(".ucc-q")).forEach(function (qEl) {
@@ -109,19 +134,39 @@ window.UCC_TOKEN = {{ (token or "") | tojson }};
 			if (required && empty) missing = true;
 			answers.push({ question: qEl.getAttribute("data-question"), value: val });
 		});
-		if (missing) {
-			frappe.msgprint("Please answer all required questions.");
-			return;
-		}
-		frappe.call({
-			method: "ucc_measurement_outcomes.api.public.submit_survey",
-			args: { token: window.UCC_TOKEN, answers: JSON.stringify(answers) },
-			callback: function (r) {
-				if (r.message) {
-					root.innerHTML = '<div class="ucc-thanks"><h3>Thank you</h3><p class="text-muted">Your response has been recorded.</p></div>';
-				}
+		if (missing) return showError("Please answer all required questions.");
+
+		// fetch, not frappe.call: this is a guest portal page and desk JS
+		// (frappe.call, frappe.msgprint) is not guaranteed to be loaded on it.
+		// Depending on it meant a missing global could kill submission silently.
+		btn.disabled = true;
+		btn.textContent = "Submitting…";
+		fetch("/api/method/ucc_measurement_outcomes.api.public.submit_survey", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
 			},
-		});
+			body: JSON.stringify({ token: token, answers: JSON.stringify(answers) }),
+		})
+			.then(function (res) {
+				return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+			})
+			.then(function (r) {
+				if (!r.ok || !r.body || !r.body.message) {
+					// Frappe returns its throw() text in _server_messages / exception.
+					var msg = "Your response could not be recorded. Please try again.";
+					try {
+						var sm = JSON.parse(r.body._server_messages || "[]");
+						if (sm.length) msg = JSON.parse(sm[0]).message || msg;
+					} catch (e) { /* keep the generic message */ }
+					return showError(msg);
+				}
+				root.innerHTML = '<div class="ucc-thanks"><h3>Thank you</h3><p class="text-muted">Your response has been recorded.</p></div>';
+			})
+			.catch(function () {
+				showError("Could not reach the server. Please check your connection and try again.");
+			});
 	});
 })();
 </script>
