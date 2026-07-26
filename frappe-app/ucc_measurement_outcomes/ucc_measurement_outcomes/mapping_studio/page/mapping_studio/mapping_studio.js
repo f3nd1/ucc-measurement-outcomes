@@ -40,6 +40,8 @@ class MappingStudio {
 		this.rows = [];
 		this.masters = { objectives: [], standards: [], metrics: [] };
 		this.selected = null;
+		this.filter = "all";
+		this._injectStyle();
 		this._build();
 		this._loadMasters();
 		this.applyRouteOptions();
@@ -84,6 +86,53 @@ class MappingStudio {
 		if (this.rows.some((r) => r.name === name)) this._select(name);
 	}
 
+	// This page had NO stylesheet - every .ucc-map-* class it referenced was
+	// undefined, so it rendered as Bootstrap defaults with nothing carrying
+	// visual weight. That is most of why four panels read as equal.
+	_injectStyle() {
+		if (document.getElementById("ucc-map-style")) return;
+		const el = document.createElement("style");
+		el.id = "ucc-map-style";
+		el.textContent = `
+		.ucc-map-chain{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;
+			border:1px solid #d9e0ea;border-radius:10px;background:#f7f9fc;padding:12px 14px}
+		.ucc-map-link{flex:1;min-width:150px;padding:6px 10px;border-radius:8px;cursor:pointer}
+		.ucc-map-link:hover{background:#e7edf6}
+		.ucc-map-link .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#8b95a5}
+		.ucc-map-link .v{font-size:22px;font-weight:700;line-height:1.2;color:#1f272e}
+		.ucc-map-link .v .of{font-size:13px;font-weight:600;color:#97a1b0}
+		.ucc-map-link .s{font-size:11px;color:#8b95a5;margin-top:3px}
+		.ucc-map-arrow{align-self:center;color:#c3c9cf;font-size:16px}
+		.ucc-map-track{height:5px;background:#e4e9f1;border-radius:99px;overflow:hidden;margin-top:5px}
+		.ucc-map-track span{display:block;height:100%;border-radius:99px;background:#237a57}
+		.ucc-map-track span.warn{background:#c99a2e}
+		.ucc-map-track span.bad{background:#b94848}
+		.ucc-map-secondary{font-size:11px;color:#8a6d1f;margin-top:6px;padding-left:4px}
+		.ucc-map-views{display:flex;gap:4px;margin-bottom:8px}
+		.ucc-map-views button.active{background:#17294d;color:#fff}
+		.ucc-map-filter{font-size:11px;color:#8b95a5;margin-bottom:8px}
+		/* Indentation is what makes the chain structural: objective is the
+		   heading, its questions sit inside it. */
+		.ucc-map-group{border:1px solid #e2e6ea;border-radius:9px;margin-bottom:10px;overflow:hidden}
+		.ucc-map-group.gap{border-color:#e0b4b4}
+		.ucc-map-group.idle{border-style:dashed}
+		.ucc-map-ghead{display:flex;align-items:center;gap:8px;padding:8px 12px;
+			background:#f2f5f9;font-weight:600;font-size:12px}
+		.ucc-map-group.gap .ucc-map-ghead{background:#fdf6f6;color:#b94848}
+		.ucc-map-ghead .cl{font-weight:400;font-size:11px;color:#8b95a5}
+		.ucc-map-ghead .n{margin-left:auto;font-size:11px;color:#8b95a5}
+		.ucc-map-qrow{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 26px;
+			border-top:1px solid #eef2f7;font-size:12px;cursor:pointer}
+		.ucc-map-qrow:hover{background:#f7f9fc}
+		.ucc-map-qrow.sel{background:#eef3ff;box-shadow:inset 3px 0 0 #3d55d4}
+		.ucc-map-qtext{flex:1;text-decoration:underline dotted;text-underline-offset:2px}
+		.ucc-map-also{font-size:10px;color:#6f58a8;background:#f1edf9;border-radius:20px;padding:1px 8px;white-space:nowrap}
+		.ucc-map-metrics{white-space:nowrap}
+		.ucc-map-multi{font-size:11px;color:#6f58a8;background:#f1edf9;border-radius:7px;padding:7px 9px;margin:-6px 0 12px}
+		`;
+		document.head.appendChild(el);
+	}
+
 	_build() {
 		const $main = $(this.page.main).empty();
 		this.$trail = $('<div></div>').appendTo($main);   // finding 1
@@ -108,8 +157,17 @@ class MappingStudio {
 		this.$coverage = $('<div class="ucc-map-coverage" style="margin-top:12px"></div>').appendTo($main);
 		const $grid = $('<div style="display:grid;grid-template-columns:1.4fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		const $left = $('<div></div>').appendTo($grid);
+		// The canvas is genuinely good for one question's lineage but it was
+		// never the work surface, and as a permanent panel it made four regions
+		// of equal weight with no entry point. A toggle over the same selection.
+		this.view = "list";
+		const $views = $('<div class="ucc-map-views"></div>').appendTo($left);
+		this.$viewList = $(`<button class="btn btn-default btn-xs active">${__("List")}</button>`)
+			.appendTo($views).on("click", () => this._setView("list"));
+		this.$viewCanvas = $(`<button class="btn btn-default btn-xs">${__("Canvas")}</button>`)
+			.appendTo($views).on("click", () => this._setView("canvas"));
 		this.$table = $('<div class="ucc-map-table"></div>').appendTo($left);
-		this.$canvas = $('<div style="height:360px;margin-top:12px"></div>').appendTo($left);
+		this.$canvas = $('<div style="height:420px;display:none"></div>').appendTo($left);
 		this.$inspector = $('<div class="ucc-map-inspector"><p class="text-muted" style="font-size:12px">' +
 			__("Select a question to edit its objective and metric mapping.") + "</p></div>").appendTo($grid);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
@@ -287,29 +345,55 @@ class MappingStudio {
 		});
 	}
 
+	// The chain, stated literally. This page's whole job is
+	// Survey Management -> Objective -> Question, and that used to be inferable
+	// only from a column in a flat table. Here it is the first thing on screen,
+	// and it carries the coverage numbers the old separate panel held.
 	_renderCoverage() {
 		const c = this.coverage;
 		const cnt = c.counts;
-		const gapList = (title, names, cls) => {
-			if (!names.length) return `<div style="flex:1"><b>${title}</b><div class="text-muted" style="font-size:11px">${__("None")}</div></div>`;
-			const chips = names.map((n) => `<span class="indicator-pill ${cls}" data-gap="${frappe.utils.escape_html(n)}" style="cursor:pointer;margin:2px">${frappe.utils.escape_html((c.question_text && c.question_text[n]) ? c.question_text[n].slice(0, 24) : n)}</span>`).join("");
-			return `<div style="flex:1"><b>${title} (${names.length})</b><div style="margin-top:4px">${chips}</div></div>`;
+		const bar = (done, total, cls) => {
+			const pct = total ? Math.round((done / total) * 100) : 0;
+			return `<div class="ucc-map-track"><span class="${cls}" style="width:${pct}%"></span></div>`;
 		};
-		const dupCount = c.duplicate_questions.length;
+		const unmapped = c.questions_without_objective.length;
+		const idle = c.unmapped_objectives.length;
+		const dupes = c.duplicate_questions.length;
+		const noClause = c.questions_without_clause.length;
+
 		this.$coverage.html(`
-			<div class="panel" style="border:1px solid var(--border-color,#e2e6ea);border-radius:8px;padding:12px">
-				<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-					<span class="indicator-pill blue">${__("Questions")}: ${cnt.questions_mapped}/${cnt.questions} ${__("mapped")}</span>
-					<span class="indicator-pill ${cnt.objectives_used < cnt.objectives ? "orange" : "green"}">${__("Objectives used")}: ${cnt.objectives_used}/${cnt.objectives}</span>
-					<span class="indicator-pill ${dupCount ? "red" : "green"}">${__("Duplicate questions")}: ${dupCount}</span>
+			<div class="ucc-map-chain">
+				<div class="ucc-map-link" data-filter="all">
+					<div class="k">${__("Source")}</div>
+					<div class="v">${frappe.utils.escape_html(this.version || "—")}</div>
+					<div class="s">${__("survey version")}</div>
 				</div>
-				<div style="display:flex;gap:16px;flex-wrap:wrap">
-					${gapList(__("No objective"), c.questions_without_objective, "red")}
-					${gapList(__("No clause"), c.questions_without_clause, "orange")}
-					<div style="flex:1"><b>${__("Unmapped objectives")} (${c.unmapped_objectives.length})</b><div style="margin-top:4px">${c.unmapped_objectives.map((o) => `<span class="indicator-pill gray" style="margin:2px">${frappe.utils.escape_html(o)}</span>`).join("") || '<span class="text-muted" style="font-size:11px">' + __("None") + "</span>"}</div></div>
+				<span class="ucc-map-arrow">→</span>
+				<div class="ucc-map-link" data-filter="idle">
+					<div class="k">${__("Objectives")}</div>
+					<div class="v">${cnt.objectives_used}<span class="of">/${cnt.objectives}</span></div>
+					${bar(cnt.objectives_used, cnt.objectives, idle ? "warn" : "ok")}
+					<div class="s">${idle ? __("{0} with no question", [idle]) : __("all in use")}</div>
 				</div>
-			</div>`);
-		this.$coverage.find("[data-gap]").on("click", (e) => this._select($(e.currentTarget).data("gap")));
+				<span class="ucc-map-arrow">→</span>
+				<div class="ucc-map-link" data-filter="unmapped">
+					<div class="k">${__("Questions")}</div>
+					<div class="v">${cnt.questions_mapped}<span class="of">/${cnt.questions}</span></div>
+					${bar(cnt.questions_mapped, cnt.questions, unmapped ? "bad" : "ok")}
+					<div class="s">${unmapped ? __("{0} need an objective", [unmapped]) : __("all mapped")}</div>
+				</div>
+			</div>
+			${(dupes || noClause) ? `<div class="ucc-map-secondary">
+				${dupes ? __("{0} duplicate question text", [dupes]) + " · " : ""}
+				${noClause ? __("{0} with no clause", [noClause]) : ""}
+			</div>` : ""}`);
+
+		// Clicking a segment filters the list below — the header is the entry
+		// point, not just a readout.
+		this.$coverage.find("[data-filter]").on("click", (e) => {
+			this.filter = $(e.currentTarget).data("filter");
+			this._renderTable();
+		});
 	}
 
 	// Decision (b): hand the downstream stage the survey context AND the counts
@@ -335,31 +419,93 @@ class MappingStudio {
 		return this.coverage && this.coverage.questions_without_objective.indexOf(name) !== -1;
 	}
 
+	// Objective-first. The old layout was a flat list of questions with an
+	// objective COLUMN, so the chain was a cell value you had to read sideways.
+	// Here the objective is the heading and its questions nest under it, which
+	// makes the relationship structural rather than inferred.
+	_groups() {
+		const byObjective = new Map();
+		const unmapped = [];
+		this.rows.forEach((q) => {
+			// Checkpoint A: a question can carry several objectives. `objectives`
+			// holds all of them; `objective` is only the first.
+			const objs = (q.objectives && q.objectives.length) ? q.objectives
+				: (q.objective ? [q.objective] : []);
+			if (!objs.length || this._isUnmapped(q.name)) return unmapped.push(q);
+			objs.forEach((o) => {
+				if (!byObjective.has(o)) byObjective.set(o, []);
+				byObjective.get(o).push({ q: q, alsoIn: objs.filter((x) => x !== o) });
+			});
+		});
+		return { unmapped: unmapped, objectives: [...byObjective.entries()].sort() };
+	}
+
+	_questionRow(q, alsoIn, isGap) {
+		const metrics = (q.metrics || []).length
+			? (q.metrics || []).map((m) => `<span class="indicator-pill green ucc-map-metric-link" data-metric="${frappe.utils.escape_html(m)}" style="cursor:pointer" title="${__("Open in Index Studio")}">${frappe.utils.escape_html(m)} →</span>`).join(" ")
+			: "";
+		// A question under three objectives appears three times. Unmarked that
+		// reads as a duplicate row, so say what it is.
+		const also = (alsoIn && alsoIn.length)
+			? `<span class="ucc-map-also" title="${__("Also mapped to")}: ${frappe.utils.escape_html(alsoIn.join(", "))}">⧉ ${__("also")} ${frappe.utils.escape_html(alsoIn.join(", "))}</span>`
+			: "";
+		return `<div class="ucc-map-qrow ${isGap ? "gap" : ""} ${this.selected === q.name ? "sel" : ""}" data-name="${q.name}">
+			<span class="ucc-map-qtext ucc-map-q-link" title="${__("Open in Survey Builder")}">${frappe.utils.escape_html((q.question_text || "").slice(0, 90))}</span>
+			${also}${metrics ? `<span class="ucc-map-metrics">${metrics}</span>` : ""}
+		</div>`;
+	}
+
 	_renderTable() {
-		const head = `<thead><tr>
-			<th>#</th><th>${__("Question")}</th><th>${__("Objective")}</th>
-			<th>${__("Clause")}</th><th>${__("Metrics")}</th></tr></thead>`;
-		const body = this.rows.map((q, i) => {
-			const metrics = (q.metrics || []).join(", ");
-			// Finding 2: the metric cell is the hop into Index Studio; the question
-			// text is the hop back to Survey Builder.
-			const metricCell = metrics
-				? (q.metrics || []).map((m) => `<span class="indicator-pill green ucc-map-metric-link" data-metric="${frappe.utils.escape_html(m)}" style="cursor:pointer" title="${__("Open in Index Studio")}">${frappe.utils.escape_html(m)} →</span>`).join(" ")
-				: '<span class="text-muted">—</span>';
-			// Finding 3: the table used to decide "unmapped" from q.objective while
-			// the canvas used the coverage method — two sources for one fact. Both
-			// now read _isUnmapped(), i.e. api.mapping.mapping_coverage.
-			const isGap = this._isUnmapped(q.name);
-			return `<tr data-name="${q.name}" class="${isGap ? "ucc-map-gap" : ""}" style="cursor:pointer">
-				<td>${i + 1}</td>
-				<td><span class="ucc-map-q-link" style="cursor:pointer;text-decoration:underline dotted" title="${__("Open in Survey Builder")}">${frappe.utils.escape_html((q.question_text || "").slice(0, 70))}</span></td>
-				<td>${isGap ? `<span class="indicator-pill red">${__("unmapped")}</span>` : `<span class="indicator-pill blue">${frappe.utils.escape_html(q.objective || "")}</span>`}</td>
-				<td>${frappe.utils.escape_html(q.primary_clause || "—")}</td>
-				<td>${metricCell}</td>
-			</tr>`;
-		}).join("");
-		this.$table.html(`<table class="table table-bordered" style="font-size:12px">${head}<tbody>${body}</tbody></table>`);
-		this.$table.find("tbody tr").on("click", (e) => this._select($(e.currentTarget).data("name")));
+		if (this.view === "canvas") {
+			this.$table.hide();
+			this.$canvas.show();
+			return;
+		}
+		this.$canvas.hide();
+		this.$table.show();
+
+		const g = this._groups();
+		const filter = this.filter || "all";
+		let html = "";
+
+		// Gaps are pinned at the top and are the flat unmapped list, so the fast
+		// "give everything an objective" pass the old table was good at survives.
+		if (g.unmapped.length && filter !== "idle") {
+			html += `<div class="ucc-map-group gap">
+				<div class="ucc-map-ghead">⚠ ${__("No objective yet")} <span class="n">${g.unmapped.length}</span></div>
+				${g.unmapped.map((q) => this._questionRow(q, null, true)).join("")}
+			</div>`;
+		}
+		if (filter !== "unmapped") {
+			g.objectives.forEach(([code, entries]) => {
+				const clause = (entries[0].q.primary_clause || "");
+				html += `<div class="ucc-map-group">
+					<div class="ucc-map-ghead">${frappe.utils.escape_html(code)}
+						${clause ? `<span class="cl">${frappe.utils.escape_html(clause)}</span>` : ""}
+						<span class="n">${entries.length}</span></div>
+					${entries.map((e) => this._questionRow(e.q, e.alsoIn, false)).join("")}
+				</div>`;
+			});
+			// An objective with no question is a gap in the other direction.
+			const idle = (this.coverage && this.coverage.unmapped_objectives) || [];
+			if (idle.length && filter !== "unmapped") {
+				html += `<div class="ucc-map-group idle">
+					<div class="ucc-map-ghead">${__("Objectives with no question")} <span class="n">${idle.length}</span></div>
+					<div class="ucc-map-qrow" style="cursor:default">${idle.map((o) => `<span class="indicator-pill gray" style="margin:2px">${frappe.utils.escape_html(o)}</span>`).join("")}</div>
+				</div>`;
+			}
+		}
+		if (!html) html = `<div class="text-muted" style="font-size:12px;padding:20px">${__("Nothing to show for this filter.")}</div>`;
+		if (filter !== "all") {
+			html = `<div class="ucc-map-filter">${__("Filtered")} · <a href="#" class="ucc-map-clear">${__("show everything")}</a></div>` + html;
+		}
+		this.$table.html(html);
+		this.$table.find(".ucc-map-clear").on("click", (e) => {
+			e.preventDefault();
+			this.filter = "all";
+			this._renderTable();
+		});
+		this.$table.find(".ucc-map-qrow[data-name]").on("click", (e) => this._select($(e.currentTarget).data("name")));
 		this.$table.find(".ucc-map-metric-link").on("click", (e) => {
 			e.stopPropagation();
 			frappe.route_options = Object.assign(
@@ -372,10 +518,24 @@ class MappingStudio {
 			e.stopPropagation();
 			frappe.route_options = {
 				survey_version: this.version,
-				question: $(e.currentTarget).closest("tr").data("name"),
+				question: $(e.currentTarget).closest("[data-name]").data("name"),
 			};
 			frappe.set_route("ucc-survey-builder");
 		});
+	}
+
+	_setView(v) {
+		this.view = v;
+		this.$viewList.toggleClass("active", v === "list");
+		this.$viewCanvas.toggleClass("active", v === "canvas");
+		this._renderTable();
+		// Edges are drawn from getBoundingClientRect, which is all zeros while
+		// the canvas is display:none - so a lineage built in list view lands with
+		// degenerate connectors. Redraw once it is actually visible.
+		if (v === "canvas" && this.selected) {
+			const q = this.rows.find((x) => x.name === this.selected);
+			if (q) this._renderLineage(q);
+		}
 	}
 
 	_select(name) {
@@ -384,6 +544,8 @@ class MappingStudio {
 		if (!q) return;
 		this._renderLineage(q);
 		this._renderInspector(q);
+		// Selection is what the canvas shows, so keep the list highlight in sync.
+		if (this.view === "list") this._renderTable();
 	}
 
 	_renderLineage(q) {
@@ -407,7 +569,13 @@ class MappingStudio {
 		this.$inspector.html(`
 			<h5 style="margin-top:0">${__("Objective Mapping")}</h5>
 			<div class="form-group"><label>${__("Objective")}</label><select class="form-control" data-f="objective">${opt(this.masters.objectives, q.objective)}</select></div>
-			<div class="form-group"><label>${__("Standard")}</label><select class="form-control" data-f="standard">${opt(this.masters.standards, q.standard)}</select></div>
+			${(q.objectives && q.objectives.length > 1)
+				? `<div class="ucc-map-multi">${__("This question carries {0} objectives: {1}. The field above edits one at a time.",
+					[q.objectives.length, frappe.utils.escape_html(q.objectives.join(", "))])}</div>`
+				: ""}
+			${this.masters.standards.length
+				? `<div class="form-group"><label>${__("Standard")}</label><select class="form-control" data-f="standard">${opt(this.masters.standards, q.standard)}</select></div>`
+				: `<input type="hidden" data-f="standard" value="${frappe.utils.escape_html(q.standard || "")}">`}
 			<div class="form-group"><label>${__("Primary Clause")}</label><input class="form-control" data-f="primary_clause" value="${frappe.utils.escape_html(q.primary_clause || "")}"></div>
 			<div class="form-group"><label>${__("Related Clauses")}</label><textarea class="form-control" data-f="related_clauses">${frappe.utils.escape_html(q.related_clauses || "")}</textarea></div>
 			<button class="btn btn-primary btn-sm btn-block ucc-map-save">${__("Save Objective Mapping")}</button>
