@@ -146,7 +146,7 @@ def public_survey_payload(token):
 	)
 	questions = _published_questions(
 		version,
-		["name", "question_text", "question_type", "help_text", "is_required", "sequence", "matrix_rows"],
+		["name", "question_text", "question_type", "help_text", "is_required", "sequence", "matrix_rows", "layout_width"],
 	)
 	by_question = _choices_by_question([q["name"] for q in questions])
 	for q in questions:

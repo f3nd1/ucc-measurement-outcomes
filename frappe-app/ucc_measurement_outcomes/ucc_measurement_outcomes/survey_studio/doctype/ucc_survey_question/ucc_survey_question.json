@@ -12,6 +12,7 @@
   "column_break_meta",
   "question_type",
   "is_required",
+  "layout_width",
   "section_break_content",
   "question_text",
   "help_text",
@@ -58,6 +59,14 @@
    "fieldname": "is_required",
    "fieldtype": "Check",
    "label": "Required"
+  },
+  {
+   "default": "Full Width",
+   "description": "How much of the row this question takes on a wide screen. Presentation only - it changes nothing about how the answer is stored or scored, and every width collapses to full width on a phone.",
+   "fieldname": "layout_width",
+   "fieldtype": "Select",
+   "label": "Width",
+   "options": "Full Width\nTwo Thirds\nHalf\nOne Third"
   },
   {
    "fieldname": "section_break_content",

@@ -56,6 +56,12 @@ const CHOICE_TYPES = new Set([
 const MATRIX_TYPES = new Set(["Likert Matrix", "Multiple Choice Grid", "Checkbox Grid"]);
 // Only Checkbox Grid allows more than one selection per row.
 const MULTI_MATRIX_TYPES = new Set(["Checkbox Grid"]);
+// Layout width: presentation only, and only in Preview + the public form. The
+// question list below stays a 1D management list - it is for finding and
+// reordering questions, not for showing what the respondent sees.
+// Must match layout_width's Select options and the WIDTHS map in www/survey.html.
+const WIDTHS = ["Full Width", "Two Thirds", "Half", "One Third"];
+const WIDTH_CLASS = { "Two Thirds": "ucc-sb-w8", "Half": "ucc-sb-w6", "One Third": "ucc-sb-w4" };
 // Display-logic UI removed per decision V1: the fields exist in the schema but
 // nothing executes them yet. Re-add the controls together with the logic
 // engine (which must include a server-side logic-aware required check).
@@ -146,6 +152,16 @@ class SurveyBuilder {
 		.ucc-sb-sheet-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-color,#e2e6ea)}
 		.ucc-sb-sheet-body{padding:18px}
 		.ucc-sb-pq{padding:12px 0;border-bottom:1px solid #eee}
+		/* Preview mirrors www/survey.html's grid so what the builder shows is what
+		   the respondent gets. Same rule: never grid-auto-flow:dense. The mobile
+		   toggle is a fixed-width sheet, not a narrow viewport, so the collapse is
+		   keyed off .mobile here rather than a media query. */
+		.ucc-sb-previewform{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
+		.ucc-sb-pq,.ucc-sb-sec{grid-column:1/-1}
+		.ucc-sb-w8{grid-column:span 8}
+		.ucc-sb-w6{grid-column:span 6}
+		.ucc-sb-w4{grid-column:span 4}
+		.ucc-sb-sheet.mobile .ucc-sb-pq{grid-column:1/-1}
 		.ucc-sb-pq label.q{display:block;font-weight:600;margin-bottom:6px}
 		/* Item 2: same star markup/classes as the public form's, so the preview
 		   looks like what a respondent actually sees. Real radios underneath
@@ -620,8 +636,8 @@ class SurveyBuilder {
 	_preview() {
 		let mobile = false;
 		const form = this.questions.map((q, i) => {
-			if (q.question_type === "Section Heading") return `<h4>${frappe.utils.escape_html(q.question_text || "")}</h4>`;
-			return `<div class="ucc-sb-pq"><label class="q">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${this._previewInput(q)}</div>`;
+			if (q.question_type === "Section Heading") return `<h4 class="ucc-sb-sec">${frappe.utils.escape_html(q.question_text || "")}</h4>`;
+			return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}"><label class="q">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${this._previewInput(q)}</div>`;
 		}).join("");
 		this._sheet(mobile, `<h5>${__("Preview")} — <span class="ucc-sb-vp"></span></h5>
 			<button class="btn btn-xs btn-default ucc-sb-toggle" style="margin-bottom:10px">${__("Toggle desktop / mobile")}</button>
@@ -769,6 +785,8 @@ class SurveyBuilder {
 			<div class="form-group"><label>${__("Help Text")}</label><textarea class="form-control" data-f="help_text" ${dis}>${frappe.utils.escape_html(q.help_text || "")}</textarea></div>
 			<div class="form-group"><label>${__("Type")}</label><select class="form-control" data-f="question_type" ${dis}>${opt(QUESTION_TYPES, q.question_type)}</select></div>
 			<div class="checkbox"><label><input type="checkbox" data-f="is_required" ${q.is_required ? "checked" : ""} ${dis}> ${__("Required")}</label></div>
+			<div class="form-group"><label>${__("Width")}</label><select class="form-control" data-f="layout_width" ${dis}>${opt(WIDTHS, q.layout_width || WIDTHS[0])}</select>
+				<div class="text-muted" style="font-size:11px;margin-top:4px">${__("Side-by-side on a wide screen; always full width on a phone. Preview shows the real result.")}</div></div>
 			<div class="form-group ucc-sb-matrix" style="${MATRIX_TYPES.has(q.question_type) ? "" : "display:none"}"><label>${__("Grid Rows (statements, one per line)")}</label><textarea class="form-control" data-f="matrix_rows" rows="3" ${dis}>${frappe.utils.escape_html(q.matrix_rows || "")}</textarea></div>
 			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label class="ucc-sb-choices-label">${MATRIX_TYPES.has(q.question_type) ? __("Grid Columns (response options, one per line, optional |value)") : __("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
 			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-sb-apply">${__("Apply Changes")}</button>` : ""}
@@ -795,6 +813,7 @@ class SurveyBuilder {
 			question_text: val("question_text").val(), help_text: val("help_text").val(),
 			question_type: val("question_type").val(), is_required: val("is_required").is(":checked") ? 1 : 0,
 			choices, matrix_rows: val("matrix_rows").val(),
+			layout_width: val("layout_width").val(),
 		};
 		this._call("update_question", { question: name, payload: JSON.stringify(payload) }).then(() => {
 			frappe.show_alert({ message: __("Question updated"), indicator: "green" });

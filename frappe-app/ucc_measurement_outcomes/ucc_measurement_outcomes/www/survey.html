@@ -12,6 +12,22 @@
 </div>
 
 <style>
+	/* Layout: a 12-column grid whose ROWS are derived from document order plus
+	   each question's span - so there is no 2D coordinate anywhere in the data
+	   model, and reorder/resequence/answer storage are all untouched.
+	   grid-auto-flow stays the default (row), never dense: dense back-fills
+	   earlier gaps with later items, which would show question 7 above question
+	   6 while the numbering still said otherwise. */
+	#ucc-form{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
+	/* Mobile first: everything full width, widths only apply once there is room.
+	   Avoids !important overrides and means a phone needs no JS at all. */
+	.ucc-q,.ucc-sec{grid-column:1/-1}
+	#ucc-error,#ucc-submit{grid-column:1/-1}
+	@media (min-width:600px){
+		.ucc-w-8{grid-column:span 8}
+		.ucc-w-6{grid-column:span 6}
+		.ucc-w-4{grid-column:span 4}
+	}
 	.ucc-q{padding:14px 0;border-bottom:1px solid #e2e6ea}
 	.ucc-q > label{display:block;font-weight:600;margin-bottom:6px}
 	.ucc-q .help{font-size:12px;color:#8b95a5;margin-bottom:8px}
@@ -109,6 +125,13 @@
 		}).join("");
 		return '<table class="ucc-grid" data-q="' + esc(name) + '"><thead><tr><th></th>' + head +
 			"</tr></thead><tbody>" + body + "</tbody></table>";
+	}
+
+	// Presentation only. Unset (every question that exists today) = full width,
+	// i.e. exactly the single column this form has always rendered.
+	var WIDTHS = { "Two Thirds": "ucc-w-8", "Half": "ucc-w-6", "One Third": "ucc-w-4" };
+	function widthClass(q) {
+		return WIDTHS[q.layout_width] || "";
 	}
 
 	function field(q) {
@@ -222,10 +245,10 @@
 	html += '<div id="ucc-form">';
 	survey.questions.forEach(function (q, i) {
 		if (q.question_type === "Section Heading") {
-			html += '<h4 style="margin-top:18px">' + esc(q.question_text) + "</h4>";
+			html += '<h4 class="ucc-sec" style="margin-top:18px">' + esc(q.question_text) + "</h4>";
 			return;
 		}
-		html += '<div class="ucc-q" data-question="' + esc(q.name) + '" data-type="' + esc(q.question_type) + '" data-required="' + (q.is_required ? 1 : 0) + '">';
+		html += '<div class="ucc-q ' + widthClass(q) + '" data-question="' + esc(q.name) + '" data-type="' + esc(q.question_type) + '" data-required="' + (q.is_required ? 1 : 0) + '">';
 		html += "<label>" + (i + 1) + ". " + esc(q.question_text) + (q.is_required ? ' <span class="ucc-req">*</span>' : "") + "</label>";
 		if (q.help_text) html += '<div class="help">' + esc(q.help_text) + "</div>";
 		html += field(q);
