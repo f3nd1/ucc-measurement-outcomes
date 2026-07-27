@@ -565,6 +565,10 @@ class SurveyBuilder {
 			question_text: q.question_text, question_type: q.question_type, help_text: q.help_text,
 			is_required: q.is_required, sequence: q.sequence,
 			display_logic: q.display_logic, display_logic_config: q.display_logic_config,
+			// Undo-of-delete restores from this snapshot, so anything create_question
+			// accepts has to be in it - matrix_rows was missed when the grid types
+			// landed, which silently emptied a restored grid's rows.
+			matrix_rows: q.matrix_rows, layout_width: q.layout_width,
 			choices: q.choices || [],
 		};
 	}
