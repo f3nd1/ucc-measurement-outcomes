@@ -28,6 +28,7 @@ from ucc_measurement_outcomes.submission_utils import (
 	campaign_window_open,
 	has_value,
 	to_text,
+	value_allowed,
 )
 
 CAMPAIGN = "UCC Survey Campaign"
@@ -114,6 +115,26 @@ def _published_questions(survey_version, fields):
 	)
 
 
+def _choices_by_question(names):
+	"""Choice rows for many questions at once, keyed by question, in idx order.
+
+	One query for the whole version rather than one per question: the submit
+	path needs every question's choices to validate against, and the render path
+	was already doing the same N+1 loop.
+	"""
+	out = {n: [] for n in names}
+	if not names:
+		return out
+	for c in frappe.get_all(
+		"UCC Survey Question Choice",
+		filters={"parent": ["in", names], "parenttype": QUESTION},
+		fields=["parent", "choice_label", "choice_value", "sequence"],
+		order_by="parent asc, idx asc",
+	):
+		out[c.pop("parent")].append(c)
+	return out
+
+
 def public_survey_payload(token):
 	"""Core: published questions for a campaign token. Plain function (no rate
 	limit / whitelist) so the public web page can render it server-side without
@@ -127,13 +148,9 @@ def public_survey_payload(token):
 		version,
 		["name", "question_text", "question_type", "help_text", "is_required", "sequence", "matrix_rows"],
 	)
+	by_question = _choices_by_question([q["name"] for q in questions])
 	for q in questions:
-		q["choices"] = frappe.get_all(
-			"UCC Survey Question Choice",
-			filters={"parent": q["name"], "parenttype": QUESTION},
-			fields=["choice_label", "choice_value", "sequence"],
-			order_by="idx asc",
-		)
+		q["choices"] = by_question[q["name"]]
 	return {
 		"title": header.title_snapshot if header else None,
 		"version_number": header.version_number if header else None,
@@ -188,14 +205,33 @@ def submit_survey(token, answers, respondent_key=None):
 	# Only accept answers to questions that belong to this published version.
 	valid = {
 		q["name"]: q
-		for q in _published_questions(version, ["name", "question_type", "is_required"])
+		for q in _published_questions(
+			version,
+			["name", "question_type", "is_required", "question_text", "matrix_rows"],
+		)
 	}
+	choices = _choices_by_question(list(valid))
 	provided = {}
 	for a in answers:
 		qid = a.get("question")
 		if qid not in valid:
 			frappe.throw(_("Unknown question in submission."))
-		provided[qid] = a.get("value")
+		value = a.get("value")
+		# Nothing used to check the value itself - only that the question existed
+		# and that required ones were non-empty. On a public, unauthenticated
+		# endpoint that meant a hand-made POST could put any value at all into a
+		# scored answer (a 999 on a 1-5 scale normalised to 100). Reject, never
+		# clamp: a clamped answer is fabricated, and every score has to trace
+		# back to something a respondent actually submitted.
+		reason = value_allowed(
+			valid[qid]["question_type"], value, choices[qid], valid[qid].get("matrix_rows")
+		)
+		if reason:
+			# Naming the question is safe - it is content this endpoint already
+			# serves publicly - and it is the only way the message is actionable
+			# for the one case a real respondent can hit (a malformed email).
+			frappe.throw(_("{0}: {1}.").format(valid[qid]["question_text"], reason))
+		provided[qid] = value
 
 	missing = [qid for qid, q in valid.items() if q["is_required"] and not has_value(provided.get(qid))]
 	if missing:
