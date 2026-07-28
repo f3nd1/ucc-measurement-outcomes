@@ -10,6 +10,56 @@ helper imports frappe lazily inside the function body.
 # previously published/reported score can always be reproduced.
 FROZEN_STATUSES = {"Published", "Closed"}
 
+# Decision 2026-07-28: a published version's CONTENT is frozen; its PRESENTATION
+# is not. The invariant immutability exists to protect is "every published score
+# must be reproducible" - and a score derives from question text, type and
+# choices plus the answers given. layout_width feeds none of that: not
+# metric_engine, not index_engine, not mapping, not lineage, not Score Breakdown.
+# Nothing downstream of a question can observe it.
+#
+# A WHITELIST, never a blacklist: every field added to a question later is frozen
+# by default, and exempting one has to be a deliberate act. A blacklist would
+# silently make each new field editable after publish.
+PRESENTATION_FIELDS = frozenset({"layout_width"})
+
+# Everything a survey question stores, and the parts of a choice row that carry
+# meaning. Listed rather than derived because "compare every field" would drag in
+# modified/modified_by/idx and report a change on every save.
+QUESTION_FIELDS = (
+	"survey_version", "sequence", "question_type", "is_required", "layout_width",
+	"question_text", "help_text", "matrix_rows", "display_logic",
+	"display_logic_config",
+)
+CHOICE_FIELDS = ("choice_label", "choice_value", "sequence")
+
+
+def _norm(value):
+	"""Blank and unset are the same thing for comparison; everything else
+	compares as text, so 0 and "0" off a form do not read as a change."""
+	return None if value is None or value == "" else str(value)
+
+
+def _choice_rows(rows):
+	return [tuple(_norm(r.get(f)) for f in CHOICE_FIELDS) for r in (rows or [])]
+
+
+def presentation_only_change(before, after):
+	"""True if this save changes ONLY presentation fields (and changes something).
+
+	`before` and `after` are anything with .get() - a Frappe Document or a plain
+	dict, which is what makes this testable without a bench.
+
+	Order matters as much as content, so choices are compared as an ordered list:
+	reordering the options of a published question is a content change.
+	Re-parenting is covered too - survey_version is in QUESTION_FIELDS and not in
+	PRESENTATION_FIELDS, so moving a question between versions can never pass.
+	Fails closed: an unrecognised difference is a difference.
+	"""
+	changed = {f for f in QUESTION_FIELDS if _norm(before.get(f)) != _norm(after.get(f))}
+	if _choice_rows(before.get("choices")) != _choice_rows(after.get("choices")):
+		changed.add("choices")
+	return bool(changed) and changed <= PRESENTATION_FIELDS
+
 
 def next_version_number(existing_count, name_exists):
 	"""Smallest free version number (as an int), probing past any gap left by a
@@ -79,9 +129,17 @@ def assert_doc_version_editable(doc):
 	"""Version guard for records that belong to a survey version (questions).
 	Checks the CURRENT version, and — when the record is being re-parented —
 	the PREVIOUS version too, so a record cannot be moved out of a frozen
-	version (the old guard only checked the destination)."""
-	assert_version_editable(doc.survey_version)
+	version (the old guard only checked the destination).
+
+	Presentation-only edits are exempt (decision 2026-07-28): a published survey
+	whose layout reads badly on a phone would otherwise need a whole new version,
+	which orphans the campaign already collecting against the published one.
+	Content stays absolutely frozen - presentation_only_change() returns False
+	the moment anything outside PRESENTATION_FIELDS differs."""
 	before = doc.get_doc_before_save()
+	if before and presentation_only_change(before, doc):
+		return
+	assert_version_editable(doc.survey_version)
 	if before and before.survey_version != doc.survey_version:
 		assert_version_editable(before.survey_version)
 

@@ -288,6 +288,20 @@ campaign not Open, or no token yet.
 **6. Collect.** Open the link in a private window. Submissions land as UCC Survey
 Submission + one UCC Survey Answer per question.
 
+**7. Adjusting layout after publishing.** A published version's *content* is
+frozen, but its *presentation* is not (decision 2026-07-28), so a survey that
+reads badly on a phone can be fixed without spinning a new version and orphaning
+the campaign collecting against it. Two ways, both live on a Published version:
+
+- Inspector → **Width** → **Apply Width**.
+- **Preview → Edit layout**, then drag the grip on a question's right edge.
+  Widths snap to full / two thirds / half / one third.
+
+Wording, type, choices, required, order and display logic all still throw on a
+published version. Every width change is recorded in the Version log
+(`track_changes` was already on for UCC Survey Question), so the edit is
+auditable like any other.
+
 **Known gaps (no UI, Desk form or console only):** publishing a version,
 creating the campaign, and setting the collection window dates. Everything else
 in the path is now reachable from the Builder.

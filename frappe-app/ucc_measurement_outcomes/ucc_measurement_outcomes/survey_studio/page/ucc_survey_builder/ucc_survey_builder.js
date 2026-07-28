@@ -68,6 +68,7 @@ const MULTI_MATRIX_TYPES = new Set(["Checkbox Grid"]);
 // Must match layout_width's Select options and the WIDTHS map in www/survey.html.
 const WIDTHS = ["Full Width", "Two Thirds", "Half", "One Third"];
 const WIDTH_CLASS = { "Two Thirds": "ucc-sb-w8", "Half": "ucc-sb-w6", "One Third": "ucc-sb-w4" };
+const SPAN_OF = { "Full Width": 12, "Two Thirds": 8, "Half": 6, "One Third": 4 };
 
 // Palette icons: [sprite name, text fallback]. Frappe's own sprite first (no new
 // files, no icon library), but the sprite's contents cannot be enumerated
@@ -226,6 +227,18 @@ class SurveyBuilder {
 		.ucc-sb-w6{grid-column:span 6}
 		.ucc-sb-w4{grid-column:span 4}
 		.ucc-sb-sheet.mobile .ucc-sb-pq{grid-column:1/-1}
+		/* Item 1: the grip is always in the DOM but only visible while the
+		   Preview is in layout-edit mode, so the sheet is never accidentally an
+		   editor. Hidden on the mobile viewport too - every width is full there,
+		   so there would be nothing to drag. */
+		.ucc-sb-pq{position:relative}
+		.ucc-sb-grip{display:none;position:absolute;right:-7px;top:12px;width:9px;height:32px;
+			border-radius:3px;background:var(--primary,#4a63e7);opacity:.35;cursor:col-resize;z-index:2}
+		.ucc-sb-grip:hover{opacity:.75}
+		.ucc-sb-editlayout .ucc-sb-grip{display:block}
+		.ucc-sb-editlayout .ucc-sb-pq{outline:1px dashed var(--border-color,#b9c2d0);outline-offset:3px}
+		.ucc-sb-sheet.mobile .ucc-sb-grip{display:none}
+		.ucc-sb-layouthint{font-size:11px;color:#8b95a5;margin-bottom:8px}
 		.ucc-sb-cond{font-size:11px;color:#8b95a5;margin-bottom:6px}
 		.ucc-sb-pq label.q{display:block;font-weight:600;margin-bottom:6px}
 		/* Item 2: same star markup/classes as the public form's, so the preview
@@ -750,6 +763,49 @@ class SurveyBuilder {
 		return kept.length ? kept : [[]];
 	}
 
+	// Spans the 12-column grid actually offers, widest first. Snapping to these
+	// four is the point: there is no pixel width field and there must not be one -
+	// free widths would break the mobile collapse and the "presentation only"
+	// property that lets this be edited after publish.
+	static get SPANS() {
+		return [[12, "Full Width"], [8, "Two Thirds"], [6, "Half"], [4, "One Third"]];
+	}
+
+	_wirePreviewResize() {
+		const $form = this._modal.find(".ucc-sb-previewform");
+		$form.on("mousedown", ".ucc-sb-grip", (e) => {
+			if (e.button !== 0 || !$form.hasClass("ucc-sb-editlayout")) return;
+			e.preventDefault();
+			e.stopPropagation();
+			const $card = $(e.currentTarget).closest(".ucc-sb-pq");
+			const name = $card.data("q");
+			const q = this.questions.find((x) => x.name === name);
+			if (!q) return;
+			const startX = e.clientX;
+			const colWidth = ($card.parent().width() || 1) / 12;
+			const startSpan = SPAN_OF[q.layout_width] || 12;
+			let width = q.layout_width || "Full Width";
+			const move = (ev) => {
+				const wanted = startSpan + (ev.clientX - startX) / colWidth;
+				// Nearest offered span, not the nearest integer column.
+				const [, label] = SurveyBuilder.SPANS.reduce((best, s) =>
+					Math.abs(s[0] - wanted) < Math.abs(best[0] - wanted) ? s : best);
+				if (label === width) return;
+				width = label;
+				$card.removeClass("ucc-sb-w8 ucc-sb-w6 ucc-sb-w4")
+					 .addClass(WIDTH_CLASS[label] || "");
+			};
+			const up = () => {
+				document.removeEventListener("mousemove", move);
+				document.removeEventListener("mouseup", up);
+				// Commit on release, never per pixel - one save per drag.
+				if (width !== (q.layout_width || "Full Width")) this._applyWidth(name, width);
+			};
+			document.addEventListener("mousemove", move);
+			document.addEventListener("mouseup", up);
+		});
+	}
+
 	_preview() {
 		let mobile = false;
 		const pages = this._pages();
@@ -760,7 +816,7 @@ class SurveyBuilder {
 				n += 1;
 				const logic = q.display_logic && q.display_logic !== LOGIC_MODES[0]
 					? `<div class="ucc-sb-cond">${__("Shown only when an earlier answer matches")}</div>` : "";
-				return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}"><label class="q">${n}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${logic}${this._previewInput(q)}</div>`;
+				return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}" data-q="${frappe.utils.escape_html(q.name)}"><span class="ucc-sb-grip" title="${__("Drag to change width")}"></span><label class="q">${n}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${logic}${this._previewInput(q)}</div>`;
 			}).join("");
 			return `<div class="ucc-sb-page${pi === 0 ? " active" : ""}" data-page="${pi}">${body}</div>`;
 		}).join("");
@@ -770,10 +826,27 @@ class SurveyBuilder {
 			<span class="ucc-sb-pagepos"></span></div>` : "";
 		this._sheet(mobile, `<h5>${__("Preview")} — <span class="ucc-sb-vp"></span></h5>
 			<button class="btn btn-xs btn-default ucc-sb-toggle" style="margin-bottom:10px">${__("Toggle desktop / mobile")}</button>
+			<button class="btn btn-xs btn-default ucc-sb-layout" style="margin-bottom:10px">${__("Edit layout")}</button>
+			<div class="ucc-sb-layouthint" style="display:none">${__("Drag the grip on a question's right edge. Widths snap to full, two thirds, half and one third — presentation only, so this works on published versions too.")}</div>
 			<div class="ucc-sb-previewform">${form}</div>${nav}`);
 		const setvp = () => { this._modal.find(".ucc-sb-sheet").toggleClass("mobile", mobile); this._modal.find(".ucc-sb-vp").text(mobile ? __("Mobile") : __("Desktop")); };
 		setvp();
 		this._modal.find(".ucc-sb-toggle").on("click", () => { mobile = !mobile; setvp(); });
+		// Item 1: resize lives HERE, not in the Questions list. Preview is the only
+		// place in the builder that renders the real 12-column grid, so it is the
+		// only place a width handle shows what it is doing - and the Questions
+		// list keeps its 1D index-based drag-reorder untouched, which is the part
+		// that already works. Explicit toggle so the sheet is never accidentally
+		// an editor. Dashboard Studio has no resize handles to lift; the mousedown
+		// -> document mousemove/mouseup shape is node_canvas.js's _makeDraggable.
+		let editing = false;
+		this._modal.find(".ucc-sb-layout").on("click", (e) => {
+			editing = !editing;
+			this._modal.find(".ucc-sb-previewform").toggleClass("ucc-sb-editlayout", editing);
+			this._modal.find(".ucc-sb-layouthint").toggle(editing);
+			$(e.currentTarget).toggleClass("btn-primary", editing).toggleClass("btn-default", !editing);
+		});
+		this._wirePreviewResize();
 		// Real pagination, like the respondent's form: one page at a time. No
 		// required-check on Next here - Preview collects nothing and submits
 		// nothing, so blocking the builder from looking at page 2 would be theatre.
@@ -962,8 +1035,10 @@ class SurveyBuilder {
 			<div class="form-group"><label>${__("Help Text")}</label><textarea class="form-control" data-f="help_text" ${dis}>${frappe.utils.escape_html(q.help_text || "")}</textarea></div>
 			<div class="form-group"><label>${__("Type")}</label><select class="form-control" data-f="question_type" ${dis}>${opt(QUESTION_TYPES, q.question_type)}</select></div>
 			<div class="checkbox"><label><input type="checkbox" data-f="is_required" ${q.is_required ? "checked" : ""} ${dis}> ${__("Required")}</label></div>
-			<div class="form-group"><label>${__("Width")}</label><select class="form-control" data-f="layout_width" ${dis}>${opt(WIDTHS, q.layout_width || WIDTHS[0])}</select>
+			<div class="form-group"><label>${__("Width")}</label><select class="form-control" data-f="layout_width">${opt(WIDTHS, q.layout_width || WIDTHS[0])}</select>
 				<div class="text-muted" style="font-size:11px;margin-top:4px">${__("Side-by-side on a wide screen; always full width on a phone. Preview shows the real result.")}</div></div>
+			${this.editable ? "" : `<button class="btn btn-default btn-sm btn-block ucc-sb-applywidth">${__("Apply Width")}</button>
+			<div class="text-muted" style="font-size:11px;margin-top:4px">${__("Width is presentation only, so it stays editable after publishing. Wording, type and choices are frozen.")}</div>`}
 			<div class="form-group ucc-sb-matrix" style="${MATRIX_TYPES.has(q.question_type) ? "" : "display:none"}"><label>${__("Grid Rows (statements, one per line)")}</label><textarea class="form-control" data-f="matrix_rows" rows="3" ${dis}>${frappe.utils.escape_html(q.matrix_rows || "")}</textarea></div>
 			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label class="ucc-sb-choices-label">${MATRIX_TYPES.has(q.question_type) ? __("Grid Columns (response options, one per line, optional |value)") : __("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
 			${this._logicFields(q, dis, opt)}
@@ -981,6 +1056,23 @@ class SurveyBuilder {
 			);
 		});
 		this.$inspector.find(".ucc-sb-apply").on("click", () => this._apply(q.name));
+		this.$inspector.find(".ucc-sb-applywidth").on("click", () =>
+			this._applyWidth(q.name, this.$inspector.find('[data-f="layout_width"]').val()));
+	}
+
+	// The one edit a frozen version accepts. Sends layout_width ALONE - not the
+	// whole inspector payload - so nothing else can ride along and be rejected
+	// (or, worse, quietly differ). versioning.presentation_only_change() is what
+	// actually decides; this just keeps the request honest.
+	_applyWidth(name, width) {
+		this._call("update_question", { question: name, payload: JSON.stringify({ layout_width: width }) })
+			.then((ok) => {
+				if (!ok) return;
+				const q = this.questions.find((x) => x.name === name);
+				if (q) q.layout_width = width;
+				this._renderQuestions();
+				frappe.show_alert({ message: __("Width updated"), indicator: "green" });
+			});
 	}
 
 	_apply(name) {
