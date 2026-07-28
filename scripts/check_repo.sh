@@ -111,3 +111,31 @@ for fn in ("def public_survey_payload(token):", "def preview_payload(survey_vers
 		sys.exit(1)
 print("submit_survey has no preview branch; both payload gates are separate.")
 PY
+
+# UCCEmptyState must never put .ucc-empty on the element it was handed.
+# That class carries display:flex, and callers clear with .empty() — which
+# removes children but not classes — so a container that once showed an empty
+# state kept flex forever and silently beat its own layout. It cost the Survey
+# Builder its 12-column Questions grid: every card stacked full width while the
+# width classes were perfectly correct.
+python3 - <<'PY'
+import re, sys, pathlib
+
+src = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes"
+                   "/public/js/empty_state.js").read_text()
+if re.search(r'addClass\(\s*["\']ucc-empty', src):
+	print("empty_state.js puts .ucc-empty on the caller's element again - render it "
+		  "as a CHILD so .empty() removes it with the content.", file=sys.stderr)
+	sys.exit(1)
+if '$(\'<div class="ucc-empty"></div>\')' not in src:
+	print("empty_state.js no longer creates its own .ucc-empty child.", file=sys.stderr)
+	sys.exit(1)
+
+# And the layout that bug broke must still be declared.
+builder = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes"
+                       "/survey_studio/page/ucc_survey_builder/ucc_survey_builder.js").read_text()
+if "grid-template-columns:repeat(12,1fr)" not in builder.split(".ucc-sb-list{")[1][:200]:
+	print("The Questions panel is no longer a 12-column grid.", file=sys.stderr)
+	sys.exit(1)
+print("Empty state cannot override a container's layout.")
+PY

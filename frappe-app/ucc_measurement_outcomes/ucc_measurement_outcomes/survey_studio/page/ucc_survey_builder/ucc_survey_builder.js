@@ -159,6 +159,10 @@ class SurveyBuilder {
 		if (document.getElementById("ucc-sb-style")) return;
 		const css = `
 		.ucc-sb-grid{display:grid;grid-template-columns:210px 1fr 320px;gap:14px;align-items:stretch;margin-top:12px}
+		/* Collapsed Inspector: the Questions grid gets its 320px back, which is
+		   what makes a half-width card actually look half-width in this panel. */
+		.ucc-sb-grid.inspector-hidden{grid-template-columns:210px 1fr}
+		.ucc-sb-grid.inspector-hidden .ucc-sb-inspectorpanel{display:none}
 		.ucc-sb-panel{background:var(--card-bg,#fff);border:1px solid var(--border-color,#e2e6ea);border-radius:10px;
 			display:flex;flex-direction:column;overflow:hidden}
 		.ucc-sb-panel h5{margin:0;padding:11px 13px;border-bottom:1px solid var(--border-color,#e2e6ea);font-size:12px;flex:0 0 auto}
@@ -203,7 +207,7 @@ class SurveyBuilder {
 		   linear - CSS Grid only decides where that sequence wraps. If this ever
 		   misbehaves the revert is this one line back to flex. */
 		.ucc-sb-list{min-height:220px;display:grid;grid-template-columns:repeat(12,1fr);gap:9px}
-		.ucc-sb-q,.ucc-sb-empty{grid-column:1/-1}
+		.ucc-sb-q,.ucc-sb-empty,.ucc-sb-list > .ucc-empty{grid-column:1/-1}
 		.ucc-sb-w8{grid-column:span 8}
 		.ucc-sb-w6{grid-column:span 6}
 		.ucc-sb-w4{grid-column:span 4}
@@ -278,6 +282,12 @@ class SurveyBuilder {
 		const $tb = $('<div class="ucc-sb-toolbar"></div>').appendTo($main);
 		$(`<button class="btn btn-default btn-sm">${__("Bulk paste")}</button>`).appendTo($tb).on("click", () => this._openBulk());
 		$(`<button class="btn btn-default btn-sm">${__("Preview")}</button>`).appendTo($tb).on("click", () => this._preview());
+		// No collapse pattern existed anywhere in this app to reuse - checked
+		// Mapping, Index and Dashboard Studio and the shared components. This is
+		// the minimum: one class on the grid container, so the columns are still
+		// declared in one place (CSS) rather than computed in JS.
+		this.$inspectorToggle = $(`<button class="btn btn-default btn-sm" title="${__("Show or hide the Inspector")}">☰</button>`)
+			.appendTo($tb).on("click", () => this._toggleInspector());
 		this.$undo = $(`<button class="btn btn-default btn-sm" disabled>${__("Undo")}</button>`).appendTo($tb).on("click", () => this._undo());
 		this.$redo = $(`<button class="btn btn-default btn-sm" disabled>${__("Redo")}</button>`).appendTo($tb).on("click", () => this._redo());
 		// Item 4: the public link had no UI at all - a published version with an
@@ -290,9 +300,13 @@ class SurveyBuilder {
 		const $grid = $('<div class="ucc-sb-grid"></div>').appendTo($main);
 		this.$palette = $(`<div class="ucc-sb-panel"><h5>${__("Question Types")}</h5><div class="ucc-sb-body"><div class="ucc-sb-palette"></div></div></div>`).appendTo($grid).find(".ucc-sb-palette");
 		this.$list = $(`<div class="ucc-sb-panel"><h5>${__("Questions")}</h5><div class="ucc-sb-body"><div class="ucc-sb-list"></div></div></div>`).appendTo($grid).find(".ucc-sb-list");
-		this.$inspector = $(`<div class="ucc-sb-panel"><h5>${__("Inspector")}</h5><div class="ucc-sb-body"></div></div>`).appendTo($grid).find(".ucc-sb-body");
+		this.$inspectorPanel = $(`<div class="ucc-sb-panel ucc-sb-inspectorpanel"><h5>${__("Inspector")}</h5><div class="ucc-sb-body"></div></div>`).appendTo($grid);
+		this.$inspector = this.$inspectorPanel.find(".ucc-sb-body");
 		this._renderPalette();
 		this._renderInspector();
+		try {
+			if (localStorage.getItem("ucc-sb-inspector-hidden") === "1") this._toggleInspector(true);
+		} catch (e) { /* private mode - just start expanded */ }
 		// Finding 1: before a version is picked, load() never runs, so the list
 		// had no drop handlers and no message — dragging silently did nothing.
 		// Say why instead of looking broken.
@@ -374,6 +388,18 @@ class SurveyBuilder {
 			page: n ? "mapping-studio" : "index-studio",
 			routeOptions: { survey_version: this.version.name },
 		});
+	}
+
+	// Collapsing the Inspector is what makes the Questions grid usable: at
+	// 210px/1fr/320px the middle column is too narrow for a half-width card to
+	// look meaningfully different from a full-width one. Remembered, because a
+	// collapse that resets on every page load is one nobody uses.
+	_toggleInspector(hidden) {
+		if (hidden === undefined) hidden = !this.$grid.hasClass("inspector-hidden");
+		this.$grid.toggleClass("inspector-hidden", hidden);
+		this.$inspectorToggle.toggleClass("btn-primary", hidden).toggleClass("btn-default", !hidden);
+		try { localStorage.setItem("ucc-sb-inspector-hidden", hidden ? "1" : "0"); } catch (e) { /* private mode */ }
+		this._layoutColumns();   // the columns just changed width
 	}
 
 	_renderPalette() {
