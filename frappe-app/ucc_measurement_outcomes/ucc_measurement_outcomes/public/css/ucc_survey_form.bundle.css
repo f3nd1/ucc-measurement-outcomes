@@ -1,0 +1,4 @@
+/* Website-side style bundle for the respondent survey form. Same hashing
+   reason as the JS bundle beside it: a raw /assets/… path is cached for a
+   year. */
+@import "./survey.css";

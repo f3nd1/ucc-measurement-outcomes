@@ -17,6 +17,9 @@ app_license = "mit"
 # never serve a stale copy. Listing the raw files here instead pinned them at
 # fixed urls for a year — see public/js/ucc_measurement_outcomes.bundle.js.
 app_include_js = ["ucc_measurement_outcomes.bundle.js"]
+# The respondent form's stylesheet, so Preview in the Survey Builder is styled
+# by the SAME sheet the respondent gets rather than a .ucc-sb-* lookalike.
+app_include_css = ["ucc_survey_form.bundle.css"]
 
 # D2: Survey Tracking (educ_sg) becomes the campaign. The fields it lacks are
 # added as Custom Fields owned by THIS app and shipped as fixtures, so educ_sg's

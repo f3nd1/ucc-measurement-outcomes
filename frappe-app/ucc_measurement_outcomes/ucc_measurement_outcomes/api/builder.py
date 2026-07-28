@@ -200,6 +200,21 @@ def public_link(survey_version):
 
 
 @frappe.whitelist()
+def preview_link(survey_version):
+	"""The author-facing /survey?preview=… link. Always available - unlike the
+	public link, a preview needs no campaign, no token and no Published status,
+	which is the whole point of it existing for Draft versions.
+
+	Read permission only: this returns a URL, and opening it re-checks the same
+	permission server-side (api.public.preview_payload). The URL is not a
+	credential - it names a version, and anyone without read access on that
+	version gets a permission error, not a survey.
+	"""
+	_require(survey_version, "read")
+	return {"url": frappe.utils.get_url("/survey?preview=" + frappe.utils.quoted(survey_version))}
+
+
+@frappe.whitelist()
 def add_question(survey_version, question_type="Short Text", sequence=None):
 	"""Insert a new question at the given position (defaults to the end)."""
 	doc = frappe.new_doc(QUESTION)

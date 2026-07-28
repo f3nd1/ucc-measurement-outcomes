@@ -23,3 +23,7 @@ import "./filter_bar.js";
 import "./empty_state.js";
 import "./trail.js";
 import "./version_picker.js";
+// The respondent form renderer, so the Survey Builder's Preview renders the
+// real page rather than a parallel approximation of it. Same file the website
+// loads via ucc_survey_form.bundle.js; never on the same page as that one.
+import "./survey_form.js";

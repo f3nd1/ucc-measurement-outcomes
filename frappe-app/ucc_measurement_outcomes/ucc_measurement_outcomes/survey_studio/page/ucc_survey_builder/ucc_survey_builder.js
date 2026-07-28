@@ -69,6 +69,10 @@ const MULTI_MATRIX_TYPES = new Set(["Checkbox Grid"]);
 const WIDTHS = ["Full Width", "Two Thirds", "Half", "One Third"];
 const WIDTH_CLASS = { "Two Thirds": "ucc-sb-w8", "Half": "ucc-sb-w6", "One Third": "ucc-sb-w4" };
 const SPAN_OF = { "Full Width": 12, "Two Thirds": 8, "Half": 6, "One Third": 4 };
+// Spans the 12-column grid actually offers, widest first. Snapping to these
+// four is the point: free widths would break the mobile collapse and the
+// "presentation only" property that lets width be edited after publish.
+const SPANS = [[12, "Full Width"], [8, "Two Thirds"], [6, "Half"], [4, "One Third"]];
 
 // Palette icons: [sprite name, text fallback]. Frappe's own sprite first (no new
 // files, no icon library), but the sprite's contents cannot be enumerated
@@ -184,10 +188,38 @@ class SurveyBuilder {
 		.ucc-sb-link a{word-break:break-all}
 		.ucc-sb-linklabel{font-weight:600;color:var(--text-muted,#8b95a5)}
 		.ucc-sb-linkoff{color:var(--text-muted,#8b95a5)}
+		/* Visually unmistakable against the public link above it: amber, dashed,
+		   with its own pill. Nobody should be able to copy the wrong one at a
+		   glance. The preview PAGE carries the same warning, because that is what
+		   survives the URL being pasted somewhere else. */
+		.ucc-sb-previewlink{background:#fff6e0;border-color:#d8a72a;border-style:dashed}
+		.ucc-sb-previewpill{background:#d8a72a;color:#fff;border-radius:20px;padding:1px 8px;
+			font-size:10px;font-weight:700;letter-spacing:.5px}
 		.ucc-sb-chip:hover{border-color:var(--primary,#4a63e7)}
-		.ucc-sb-list{min-height:220px;display:flex;flex-direction:column;gap:9px}
+		/* Item A: the Questions panel IS the layout. Same 12-column grid the
+		   respondent's page uses, so a width change is manipulated where it is
+		   seen. Reorder is untouched by this: drops still target CARDS, the
+		   handler still passes one integer index, and the sequence is still
+		   linear - CSS Grid only decides where that sequence wraps. If this ever
+		   misbehaves the revert is this one line back to flex. */
+		.ucc-sb-list{min-height:220px;display:grid;grid-template-columns:repeat(12,1fr);gap:9px}
+		.ucc-sb-q,.ucc-sb-empty{grid-column:1/-1}
+		.ucc-sb-w8{grid-column:span 8}
+		.ucc-sb-w6{grid-column:span 6}
+		.ucc-sb-w4{grid-column:span 4}
 		.ucc-sb-empty{border:2px dashed var(--border-color,#cbd4df);border-radius:10px;padding:28px;text-align:center;color:var(--text-muted,#8b95a5)}
-		.ucc-sb-q{border:1px solid var(--border-color,#e2e6ea);border-radius:9px;padding:10px 12px;display:grid;grid-template-columns:18px 20px 1fr auto;gap:9px;align-items:start;background:var(--fg-color,#fff)}
+		.ucc-sb-q{position:relative;border:1px solid var(--border-color,#e2e6ea);border-radius:9px;padding:10px 12px;display:grid;grid-template-columns:18px 20px 1fr auto;gap:9px;align-items:start;background:var(--fg-color,#fff)}
+		/* A card at One Third is ~250px in this panel, where the 4-column card
+		   interior crowds. Below that the checkbox/handle/actions wrap under the
+		   title instead of squeezing it. */
+		.ucc-sb-q.ucc-sb-w4{grid-template-columns:18px 20px 1fr;row-gap:4px}
+		.ucc-sb-q.ucc-sb-w4 .ucc-sb-actions{grid-column:1/-1;justify-content:flex-end}
+		/* The width grip. col-resize cursor, and it sits ON the card edge so the
+		   drag reads as "make this narrower/wider" rather than "move this". */
+		.ucc-sb-grip{position:absolute;right:-5px;top:11px;width:8px;height:30px;border-radius:3px;
+			background:var(--primary,#4a63e7);opacity:0;cursor:col-resize;z-index:2}
+		.ucc-sb-q:hover .ucc-sb-grip{opacity:.3}
+		.ucc-sb-grip:hover,.ucc-sb-grip.dragging{opacity:.75}
 		.ucc-sb-q.selected{border-color:var(--primary,#4a63e7);box-shadow:0 0 0 2px rgba(74,99,231,.12)}
 		.ucc-sb-q.dragging{opacity:.4}
 		.ucc-sb-handle{cursor:grab;color:var(--text-muted,#98a1af)}
@@ -209,68 +241,15 @@ class SurveyBuilder {
 		.ucc-sb-sheet.mobile{width:390px}
 		.ucc-sb-sheet-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-color,#e2e6ea)}
 		.ucc-sb-sheet-body{padding:18px}
-		.ucc-sb-pq{padding:12px 0;border-bottom:1px solid #eee}
-		/* Preview mirrors www/survey.html's grid so what the builder shows is what
-		   the respondent gets. Same rule: never grid-auto-flow:dense. The mobile
-		   toggle is a fixed-width sheet, not a narrow viewport, so the collapse is
-		   keyed off .mobile here rather than a media query. */
-		/* The grid is per PAGE, same as www/survey.html - a survey with no Page
-		   Break is one page, i.e. one grid. Class, not [hidden]: display:grid
-		   would otherwise win. */
-		.ucc-sb-page{display:none}
-		.ucc-sb-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
-		.ucc-sb-pagenav{display:flex;align-items:center;gap:8px;margin-top:14px;
-			padding-top:10px;border-top:1px solid var(--border-color,#e2e6ea)}
-		.ucc-sb-pagepos{font-size:11px;color:#8b95a5;margin-left:auto}
-		.ucc-sb-pq,.ucc-sb-sec{grid-column:1/-1}
-		.ucc-sb-w8{grid-column:span 8}
-		.ucc-sb-w6{grid-column:span 6}
-		.ucc-sb-w4{grid-column:span 4}
-		.ucc-sb-sheet.mobile .ucc-sb-pq{grid-column:1/-1}
-		/* Item 1: the grip is always in the DOM but only visible while the
-		   Preview is in layout-edit mode, so the sheet is never accidentally an
-		   editor. Hidden on the mobile viewport too - every width is full there,
-		   so there would be nothing to drag. */
-		.ucc-sb-pq{position:relative}
-		.ucc-sb-grip{display:none;position:absolute;right:-7px;top:12px;width:9px;height:32px;
-			border-radius:3px;background:var(--primary,#4a63e7);opacity:.35;cursor:col-resize;z-index:2}
-		.ucc-sb-grip:hover{opacity:.75}
-		.ucc-sb-editlayout .ucc-sb-grip{display:block}
-		.ucc-sb-editlayout .ucc-sb-pq{outline:1px dashed var(--border-color,#b9c2d0);outline-offset:3px}
-		.ucc-sb-sheet.mobile .ucc-sb-grip{display:none}
-		.ucc-sb-layouthint{font-size:11px;color:#8b95a5;margin-bottom:8px}
-		.ucc-sb-cond{font-size:11px;color:#8b95a5;margin-bottom:6px}
-		.ucc-sb-pq label.q{display:block;font-weight:600;margin-bottom:6px}
-		/* Item 2: same star markup/classes as the public form's, so the preview
-		   looks like what a respondent actually sees. Real radios underneath
-		   (visually hidden, not display:none) keep native label-click and
-		   keyboard behaviour; only the visual is a star, not the stored value. */
-		.ucc-stars{position:relative;display:flex;gap:2px}
-		.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
-		.ucc-star{font-size:24px;line-height:1;cursor:pointer;color:#d9d9d9;user-select:none}
-		.ucc-star.filled{color:#e0a832}
-		/* Item 3: same widgets as the public form, same reasoning: duplicated
-		   here because a Desk page bundle and a standalone www/ template load
-		   separately, with no shared CSS mechanism to reuse instead. */
-		.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid var(--border-color,#e2e6ea);border-radius:8px;overflow:hidden}
-		.ucc-rank li{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--fg-color,#fff);
-			border-bottom:1px solid var(--border-color,#eef2f7);cursor:grab}
-		.ucc-rank li:last-child{border-bottom:0}
-		.ucc-rank li.dragging{opacity:.4}
-		.ucc-rank-handle{color:var(--text-muted,#98a1af)}
-		.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:360px}
-		.ucc-slider{flex:1}
-		.ucc-slider-out{font-weight:600;min-width:2.4em;text-align:right}
-		.ucc-nps-row{position:relative;display:flex;gap:4px;flex-wrap:wrap}
-		.ucc-nps-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
-		.ucc-nps-btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;
-			border:1px solid var(--border-color,#d9d9d9);border-radius:6px;cursor:pointer;font-size:12px}
-		.ucc-nps-btn.selected{background:var(--primary,#4a63e7);color:#fff;border-color:var(--primary,#4a63e7)}
-		.ucc-nps-ends{display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted,#8b95a5);margin-top:4px;max-width:380px}
-		.ucc-grid{border-collapse:collapse;font-size:12px;width:100%}
-		.ucc-grid th,.ucc-grid td{border:1px solid var(--border-color,#e2e6ea);padding:6px 9px}
-		.ucc-grid th{background:var(--bg-light-gray,#eef2f7);font-size:11px}
-		.ucc-grid td:first-child{text-align:left;font-weight:500}
+		/* Preview's markup and styling are now the respondent page's own:
+		   UCCSurveyForm renders it and public/css/survey.css styles it (loaded
+		   into Desk via app_include_css). The ~45 lines of .ucc-sb-pq / .ucc-sb-page
+		   / .ucc-stars / .ucc-nps / .ucc-grid lookalikes that used to live here
+		   are deleted - there is one stylesheet now, not two that drift.
+		   The mobile toggle stays a Desk concern: the sheet is a fixed-width
+		   modal, not a narrow viewport, so survey.css's @media rule cannot fire.
+		   This reproduces its one effect. */
+		.ucc-sb-sheet.mobile .ucc-survey .ucc-q{grid-column:1/-1}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-sb-style";
@@ -305,6 +284,7 @@ class SurveyBuilder {
 		// open campaign gave no way to see or copy the URL respondents use. It
 		// lives next to the toolbar so it is visible the moment a version loads.
 		this.$link = $('<div class="ucc-sb-link" style="display:none"></div>').appendTo($main);
+		this.$preview = $('<div class="ucc-sb-link ucc-sb-previewlink" style="display:none"></div>').appendTo($main);
 		this.$bulk = $('<div class="ucc-sb-bulkbar"></div>').appendTo($main);
 		this.$banner = $('<div class="ucc-sb-banner" style="display:none"></div>').appendTo($main);
 		const $grid = $('<div class="ucc-sb-grid"></div>').appendTo($main);
@@ -430,6 +410,7 @@ class SurveyBuilder {
 			this._applyPendingQuestion();   // finding 2: arrived via deep link
 			this._loadCoverage();           // finding 3: mapping status
 			this._renderPublicLink();       // item 4: /survey?token=… link surface
+			this._renderPreviewLink();      // item C: /survey?preview=… author link
 			// The banner above just toggled, which moves the grid's top offset.
 			this._layoutColumns();
 			this.picker.setItems(this.versionItems || [], this.version.name);
@@ -462,6 +443,28 @@ class SurveyBuilder {
 					frappe.utils.copy_to_clipboard(r.url);
 				});
 			this.$link.append(more);
+		});
+	}
+
+	// Item C: deliberately unlike the public link. Different colour, dashed
+	// border, its own label, and always present - a preview needs no campaign,
+	// no token and no Published status, so this is the one link a Draft has.
+	//
+	// It is NOT anonymous: opening it needs a Desk login with read permission on
+	// the version, re-checked server-side. That is the point rather than a
+	// limitation - an anonymous preview token would be a second unauthenticated
+	// path to unpublished survey content guarded by nothing but a secret string.
+	_renderPreviewLink() {
+		if (!this.version) return this.$preview.hide();
+		this._call("preview_link", { survey_version: this.version.name }).then((r) => {
+			if (!r || !r.url) return this.$preview.hide();
+			this.$preview.show().empty();
+			this.$preview.append(`<span class="ucc-sb-previewpill">${__("PREVIEW")}</span>`);
+			this.$preview.append(`<span class="ucc-sb-linkoff">${__("Collects nothing. Needs a login — do not send to respondents.")}</span>`);
+			$(`<button class="btn btn-xs btn-default">${__("Copy")}</button>`).appendTo(this.$preview)
+				.on("click", () => frappe.utils.copy_to_clipboard(r.url));
+			$(`<a class="btn btn-xs btn-default" href="${frappe.utils.escape_html(r.url)}" target="_blank" rel="noopener">${__("Open ↗")}</a>`)
+				.appendTo(this.$preview);
 		});
 	}
 
@@ -549,12 +552,15 @@ class SurveyBuilder {
 			// Finding 3: same fact, same flag as Mapping Studio's table and canvas.
 			// Also finding 2: this label is the hop into Mapping Studio.
 			const isGap = this.unmapped && this.unmapped.has(q.name);
+			// Markers are not answerable and have no width of their own.
+			const width = MARKER_TYPES.has(q.question_type) ? "" : (WIDTH_CLASS[q.layout_width] || "");
 			const mapLink = !this.unmapped ? ""
 				: isGap
 					? `<span class="ucc-sb-maplink gap" data-q="${q.name}">${__("Not linked to an objective — link it")} →</span>`
 					: `<span class="ucc-sb-maplink" data-q="${q.name}">${__("Linked to an objective")} →</span>`;
 			const $q = $(`
-				<div class="ucc-sb-q ${this.selected === q.name ? "selected" : ""} ${isGap ? "gap" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
+				<div class="ucc-sb-q ${width} ${this.selected === q.name ? "selected" : ""} ${isGap ? "gap" : ""}" draggable="${this.editable}" data-index="${i}" data-name="${q.name}">
+					<span class="ucc-sb-grip" title="${__("Drag to change width")}"></span>
 					<input type="checkbox" class="ucc-sb-check" ${this.selection.has(q.name) ? "checked" : ""}>
 					<div class="ucc-sb-handle">⋮⋮</div>
 					<div class="ucc-sb-main">
@@ -576,6 +582,7 @@ class SurveyBuilder {
 			$q.find('[data-act="dup"]').on("click", (e) => { e.stopPropagation(); this._duplicate(q.name); });
 			$q.find('[data-act="del"]').on("click", (e) => { e.stopPropagation(); this._delete(q.name); });
 			if (this.editable) this._wireQuestionDrag($q);
+			if (!MARKER_TYPES.has(q.question_type)) this._wireWidthResize($q, q);
 			this.$list.append($q);
 		});
 	}
@@ -745,243 +752,87 @@ class SurveyBuilder {
 		});
 	}
 
-	// Identical to www/survey.html's split: a page is the run of questions
-	// between two Page Break markers, and a survey with no break is one page.
-	// Deliberately a second copy of five lines rather than a shared module: the
-	// only way to literally share it is a JS file loaded on BOTH surfaces, and
-	// the guest form is not allowed to gain an external bundle. Kept
-	// character-for-character alike so a change to one is obvious in the other.
-	// ponytail: 5 duplicated lines; extract only if the public page ever gets a
-	// bundle for another reason.
-	_pages() {
-		const pages = [[]];
-		this.questions.forEach((q) => {
-			if (q.question_type === "Page Break") { pages.push([]); return; }
-			pages[pages.length - 1].push(q);
-		});
-		const kept = pages.filter((p) => p.length);
-		return kept.length ? kept : [[]];
-	}
 
-	// Spans the 12-column grid actually offers, widest first. Snapping to these
-	// four is the point: there is no pixel width field and there must not be one -
-	// free widths would break the mobile collapse and the "presentation only"
-	// property that lets this be edited after publish.
-	static get SPANS() {
-		return [[12, "Full Width"], [8, "Two Thirds"], [6, "Half"], [4, "One Third"]];
-	}
-
-	_wirePreviewResize() {
-		const $form = this._modal.find(".ucc-sb-previewform");
-		$form.on("mousedown", ".ucc-sb-grip", (e) => {
-			if (e.button !== 0 || !$form.hasClass("ucc-sb-editlayout")) return;
+	// Item A: width is dragged HERE, in the Questions panel, on the real grid.
+	//
+	// The collision this has to solve: a mousedown inside a draggable="true"
+	// element starts an HTML5 drag as soon as the pointer moves, so grabbing the
+	// grip would otherwise begin a reorder. Fixed by turning draggable off for
+	// exactly as long as the grip is held. Deliberately NOT fixed by moving
+	// draggable onto the ⋮⋮ handle - that changes how the verified reorder
+	// behaves for a cosmetic gain.
+	//
+	// Reorder is otherwise untouched: this handler stops propagation, so no
+	// dragstart, drop or index arithmetic sees it at all.
+	_wireWidthResize($card, q) {
+		const $grip = $card.find(".ucc-sb-grip");
+		$grip.on("mousedown", (e) => {
+			if (e.button !== 0) return;
 			e.preventDefault();
 			e.stopPropagation();
-			const $card = $(e.currentTarget).closest(".ucc-sb-pq");
-			const name = $card.data("q");
-			const q = this.questions.find((x) => x.name === name);
-			if (!q) return;
+			$card.attr("draggable", false);
+			$grip.addClass("dragging");
 			const startX = e.clientX;
-			const colWidth = ($card.parent().width() || 1) / 12;
+			const colWidth = (this.$list.width() || 1) / 12;
 			const startSpan = SPAN_OF[q.layout_width] || 12;
-			let width = q.layout_width || "Full Width";
+			let width = q.layout_width || WIDTHS[0];
 			const move = (ev) => {
 				const wanted = startSpan + (ev.clientX - startX) / colWidth;
-				// Nearest offered span, not the nearest integer column.
-				const [, label] = SurveyBuilder.SPANS.reduce((best, s) =>
+				// Nearest span the grid actually offers, not the nearest column:
+				// there is no pixel width field and there must not be one.
+				const [, label] = SPANS.reduce((best, s) =>
 					Math.abs(s[0] - wanted) < Math.abs(best[0] - wanted) ? s : best);
 				if (label === width) return;
 				width = label;
-				$card.removeClass("ucc-sb-w8 ucc-sb-w6 ucc-sb-w4")
-					 .addClass(WIDTH_CLASS[label] || "");
+				$card.removeClass("ucc-sb-w8 ucc-sb-w6 ucc-sb-w4").addClass(WIDTH_CLASS[label] || "");
 			};
 			const up = () => {
 				document.removeEventListener("mousemove", move);
 				document.removeEventListener("mouseup", up);
-				// Commit on release, never per pixel - one save per drag.
-				if (width !== (q.layout_width || "Full Width")) this._applyWidth(name, width);
+				$grip.removeClass("dragging");
+				$card.attr("draggable", this.editable);   // hand reorder straight back
+				// One save per drag, on release - never one per pixel.
+				if (width !== (q.layout_width || WIDTHS[0])) this._applyWidth(q.name, width);
 			};
 			document.addEventListener("mousemove", move);
 			document.addEventListener("mouseup", up);
 		});
 	}
 
+	// Preview is the REAL respondent page now: same renderer (UCCSurveyForm),
+	// same stylesheet (public/css/survey.css), same payload shape. What used to
+	// be here - a per-type widget switch, a grid renderer, and a second copy of
+	// the page-split rule - is deleted, not refactored. Layout editing moved to
+	// the Questions panel, so this is pure preview again.
+	//
+	// preview_payload is the AUTHOR's gate (logged in + read permission on the
+	// version), never the respondent's, and it passes no onSubmit - so the form
+	// renders without a submit button and has no token to submit with.
 	_preview() {
+		if (!this.version) return frappe.msgprint(__("Pick a survey version first."));
+		if (!window.UCCSurveyForm) {
+			return frappe.msgprint(__("Preview assets are not loaded. Run: bench build --app ucc_measurement_outcomes && bench restart"));
+		}
 		let mobile = false;
-		const pages = this._pages();
-		let n = 0;   // numbering skips markers and never restarts per page
-		const form = pages.map((page, pi) => {
-			const body = page.map((q) => {
-				if (q.question_type === "Section Heading") return `<h4 class="ucc-sb-sec">${frappe.utils.escape_html(q.question_text || "")}</h4>`;
-				n += 1;
-				const logic = q.display_logic && q.display_logic !== LOGIC_MODES[0]
-					? `<div class="ucc-sb-cond">${__("Shown only when an earlier answer matches")}</div>` : "";
-				return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}" data-q="${frappe.utils.escape_html(q.name)}"><span class="ucc-sb-grip" title="${__("Drag to change width")}"></span><label class="q">${n}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${logic}${this._previewInput(q)}</div>`;
-			}).join("");
-			return `<div class="ucc-sb-page${pi === 0 ? " active" : ""}" data-page="${pi}">${body}</div>`;
-		}).join("");
-		const nav = pages.length > 1 ? `<div class="ucc-sb-pagenav">
-			<button class="btn btn-xs btn-default ucc-sb-back">${__("Back")}</button>
-			<button class="btn btn-xs btn-primary ucc-sb-next">${__("Next")}</button>
-			<span class="ucc-sb-pagepos"></span></div>` : "";
-		this._sheet(mobile, `<h5>${__("Preview")} — <span class="ucc-sb-vp"></span></h5>
-			<button class="btn btn-xs btn-default ucc-sb-toggle" style="margin-bottom:10px">${__("Toggle desktop / mobile")}</button>
-			<button class="btn btn-xs btn-default ucc-sb-layout" style="margin-bottom:10px">${__("Edit layout")}</button>
-			<div class="ucc-sb-layouthint" style="display:none">${__("Drag the grip on a question's right edge. Widths snap to full, two thirds, half and one third — presentation only, so this works on published versions too.")}</div>
-			<div class="ucc-sb-previewform">${form}</div>${nav}`);
-		const setvp = () => { this._modal.find(".ucc-sb-sheet").toggleClass("mobile", mobile); this._modal.find(".ucc-sb-vp").text(mobile ? __("Mobile") : __("Desktop")); };
-		setvp();
-		this._modal.find(".ucc-sb-toggle").on("click", () => { mobile = !mobile; setvp(); });
-		// Item 1: resize lives HERE, not in the Questions list. Preview is the only
-		// place in the builder that renders the real 12-column grid, so it is the
-		// only place a width handle shows what it is doing - and the Questions
-		// list keeps its 1D index-based drag-reorder untouched, which is the part
-		// that already works. Explicit toggle so the sheet is never accidentally
-		// an editor. Dashboard Studio has no resize handles to lift; the mousedown
-		// -> document mousemove/mouseup shape is node_canvas.js's _makeDraggable.
-		let editing = false;
-		this._modal.find(".ucc-sb-layout").on("click", (e) => {
-			editing = !editing;
-			this._modal.find(".ucc-sb-previewform").toggleClass("ucc-sb-editlayout", editing);
-			this._modal.find(".ucc-sb-layouthint").toggle(editing);
-			$(e.currentTarget).toggleClass("btn-primary", editing).toggleClass("btn-default", !editing);
-		});
-		this._wirePreviewResize();
-		// Real pagination, like the respondent's form: one page at a time. No
-		// required-check on Next here - Preview collects nothing and submits
-		// nothing, so blocking the builder from looking at page 2 would be theatre.
-		if (pages.length > 1) {
-			let current = 0;
-			const showPage = (i) => {
-				current = i;
-				this._modal.find(".ucc-sb-page").each((n2, el) => $(el).toggleClass("active", n2 === i));
-				this._modal.find(".ucc-sb-back").prop("disabled", i === 0);
-				this._modal.find(".ucc-sb-next").prop("disabled", i === pages.length - 1);
-				this._modal.find(".ucc-sb-pagepos").text(__("Page {0} of {1}", [i + 1, pages.length]));
-				this._modal.find(".ucc-sb-sheet").scrollTop(0);
-			};
-			this._modal.find(".ucc-sb-back").on("click", () => showPage(current - 1));
-			this._modal.find(".ucc-sb-next").on("click", () => showPage(current + 1));
-			showPage(0);
-		}
-		// Item 2: fill stars up to the checked one. Delegated once per preview
-		// render rather than per-star, since the sheet's HTML is rebuilt fresh
-		// each time _preview() runs.
-		this._modal.find(".ucc-sb-previewform").on("change", ".ucc-star-input", (e) => {
-			const $group = $(e.target).closest(".ucc-stars");
-			const checkedN = +$(e.target).data("n");
-			$group.find(".ucc-star").each((_, el) => $(el).toggleClass("filled", +$(el).data("n") <= checkedN));
-		});
-		// Item 3: Slider live value, same "input" (not "change") reasoning as
-		// the public form — fires continuously while dragging.
-		this._modal.find(".ucc-sb-previewform").on("input", ".ucc-slider", (e) => {
-			$(e.target).siblings(".ucc-slider-out").text(e.target.value);
-		});
-		// NPS: highlight the one checked button, same as the public form.
-		this._modal.find(".ucc-sb-previewform").on("change", ".ucc-nps-input", (e) => {
-			const $group = $(e.target).closest(".ucc-nps-row");
-			$group.find("input.ucc-nps-input").each((_, inp) => {
-				$group.find(`label[for="${inp.id}"]`).toggleClass("selected", inp.checked);
-			});
-		});
-		// Item 3: Ranking reorder. Same live-move-during-dragover approach as
-		// the public form; jQuery delegation here to match this file's style.
-		let $draggedLi = null;
-		const $form = this._modal.find(".ucc-sb-previewform");
-		$form.on("dragstart", ".ucc-rank li", (e) => {
-			$draggedLi = $(e.currentTarget).addClass("dragging");
-			e.originalEvent.dataTransfer.setData("text/plain", "");
-		});
-		$form.on("dragend", ".ucc-rank li", (e) => { $(e.currentTarget).removeClass("dragging"); $draggedLi = null; });
-		$form.on("dragover", ".ucc-rank li", (e) => {
-			e.preventDefault();
-			const $li = $(e.currentTarget);
-			if (!$draggedLi || $li.is($draggedLi)) return;
-			const $items = $li.parent().children();
-			if ($items.index($draggedLi) < $items.index($li)) $draggedLi.insertAfter($li);
-			else $draggedLi.insertBefore($li);
+		frappe.call({
+			method: "ucc_measurement_outcomes.api.public.preview_payload",
+			args: { survey_version: this.version.name },
+			callback: (r) => {
+				if (!r.message) return;
+				this._sheet(mobile, `<h5>${__("Preview")} — <span class="ucc-sb-vp"></span></h5>
+					<button class="btn btn-xs btn-default ucc-sb-toggle" style="margin-bottom:10px">${__("Toggle desktop / mobile")}</button>
+					<div class="ucc-survey ucc-sb-previewform"></div>`);
+				const setvp = () => {
+					this._modal.find(".ucc-sb-sheet").toggleClass("mobile", mobile);
+					this._modal.find(".ucc-sb-vp").text(mobile ? __("Mobile") : __("Desktop"));
+				};
+				setvp();
+				this._modal.find(".ucc-sb-toggle").on("click", () => { mobile = !mobile; setvp(); });
+				window.UCCSurveyForm.render(this._modal.find(".ucc-sb-previewform").get(0), r.message, {});
+			},
 		});
 	}
 
-	_previewInput(q) {
-		const choices = q.choices || [];
-		switch (q.question_type) {
-			case "Paragraph": return '<textarea class="form-control" rows="2"></textarea>';
-			// Item 2: star widget, not numbered radios. Real radios underneath
-			// (visually hidden) so this stays a native, keyboard-operable form
-			// control — only the visual changed, same as the public form.
-			case "Rating":
-				return choices.length
-					? `<div class="ucc-stars">${choices.map((c, i) => {
-						const id = `pv_star_${q.name}_${i}`;
-						return `<input type="radio" class="ucc-star-input" name="pv_${q.name}" id="${id}" data-n="${i + 1}">` +
-							`<label for="${id}" class="ucc-star" data-n="${i + 1}" title="${frappe.utils.escape_html(c.choice_label || "")}">★</label>`;
-					}).join("")}</div>`
-					: '<input class="form-control" disabled placeholder="(no choices configured)">';
-			// Investigation finding: Likert Matrix had no case here either - as
-			// unimplemented as the others were. One shared renderer for all
-			// three grid types; only the per-cell input differs (radio vs
-			// checkbox), matching "reuse B's work" for Checkbox Grid.
-			case "Likert Matrix": case "Multiple Choice Grid": case "Checkbox Grid":
-				return this._renderGridPreview(q, choices);
-			case "Single Choice": case "Yes / No":
-				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="radio" name="pv_${q.name}"> ${frappe.utils.escape_html(c.choice_label)}</label>`).join("") || '<input class="form-control">';
-			case "Multiple Choice":
-				return choices.map((c) => `<label style="display:block;font-weight:400"><input type="checkbox"> ${frappe.utils.escape_html(c.choice_label)}</label>`).join("");
-			case "Dropdown":
-				return `<select class="form-control"><option></option>${choices.map((c) => `<option>${frappe.utils.escape_html(c.choice_label)}</option>`).join("")}</select>`;
-			case "Date": return '<input type="date" class="form-control">';
-			case "Number": return '<input type="number" class="form-control">';
-			case "Email": return '<input type="email" class="form-control">';
-			// NPS: had no case at all, so it fell through to the generic default
-			// (a free-text box) - same broken pattern Ranking/Slider/File Upload
-			// had. A real 0-10 button row, fixed scale (not driven by choices,
-			// same as Slider - NPS is not in CHOICE_TYPES).
-			case "NPS":
-				return `<div class="ucc-nps">
-					<div class="ucc-nps-row">${Array.from({ length: 11 }, (_, n) => {
-						const id = `pv_nps_${q.name}_${n}`;
-						return `<input type="radio" class="ucc-nps-input" name="pv_${q.name}" id="${id}"><label for="${id}" class="ucc-nps-btn">${n}</label>`;
-					}).join("")}</div>
-					<div class="ucc-nps-ends"><span>${__("Not at all likely")}</span><span>${__("Extremely likely")}</span></div>
-				</div>`;
-			// Item 3: a real range input, matching the public form's widget.
-			case "Slider":
-				return `<div class="ucc-slider-wrap"><input type="range" class="ucc-slider" min="0" max="100" step="1" value="50">
-					<output class="ucc-slider-out">50</output></div>`;
-			// Item 3: a real drag-to-reorder list. Same interaction the public
-			// form uses; this preview never submits anywhere so there is no
-			// value to read back, only the reordering itself.
-			case "Ranking":
-				return choices.length
-					? `<ul class="ucc-rank">${choices.map((c) => `<li draggable="true"><span class="ucc-rank-handle">⠿</span> ${frappe.utils.escape_html(c.choice_label)}</li>`).join("")}</ul>`
-					: '<p class="text-muted" style="font-size:12px">(no choices configured)</p>';
-			// Item 3: a real file picker (harmless here - Preview never submits
-			// anywhere). The public form deliberately does NOT get this yet; see
-			// the file-upload security note before this checkpoint's report.
-			case "File Upload":
-				return '<input type="file" class="form-control">';
-			default: return '<input class="form-control">';
-		}
-	}
-
-	// Shared by Likert Matrix, Multiple Choice Grid and Checkbox Grid: rows
-	// (matrix_rows, one statement per line) down the side, columns (choices,
-	// the SAME table every simple choice type already uses) across the top.
-	// Preview never submits anywhere, so this is visual only - no name/value
-	// wiring needed the way the public form's version requires.
-	_renderGridPreview(q, columns) {
-		const rows = (q.matrix_rows || "").split("\n").map((s) => s.trim()).filter(Boolean);
-		if (!rows.length || !columns.length) {
-			return `<p class="text-muted" style="font-size:12px">${__("(configure grid rows and columns in the Inspector)")}</p>`;
-		}
-		const multi = MULTI_MATRIX_TYPES.has(q.question_type);
-		const head = columns.map((c) => `<th>${frappe.utils.escape_html(c.choice_label)}</th>`).join("");
-		const body = rows.map((r, ri) => `<tr><td>${frappe.utils.escape_html(r)}</td>${
-			columns.map(() => `<td style="text-align:center"><input type="${multi ? "checkbox" : "radio"}" name="pv_${q.name}_r${ri}"></td>`).join("")
-		}</tr>`).join("");
-		return `<table class="ucc-grid"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table>`;
-	}
 
 	_sheet(mobile, html) {
 		const $s = this._modal.find(".ucc-sb-sheet").toggleClass("mobile", !!mobile);

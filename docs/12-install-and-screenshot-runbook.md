@@ -302,6 +302,19 @@ published version. Every width change is recorded in the Version log
 (`track_changes` was already on for UCC Survey Question), so the edit is
 auditable like any other.
 
+**Preview link.** Under the public link sits an amber, dashed **PREVIEW**
+control: `/survey?preview=<version>`. It is present for every version including
+Draft — no campaign, no token and no Published status required — and it renders
+the real respondent page with a sticky "nothing is saved" banner and no Submit
+button.
+
+It is **not anonymous**: opening it needs a Desk login with read permission on
+the version, re-checked server-side. Colleagues without an account get a login
+page. That is deliberate — an anonymous preview token would be a second
+unauthenticated route to unpublished survey content guarded by nothing but a
+secret string. If external reviewers need access, give them a read-only Frappe
+user or export a print format.
+
 **Known gaps (no UI, Desk form or console only):** publishing a version,
 creating the campaign, and setting the collection window dates. Everything else
 in the path is now reachable from the Builder.

@@ -90,24 +90,24 @@ if missing or extra:
 print("Palette icons cover all %d question types." % len(types))
 PY
 
-# The two copies of the page-split rule must stay identical - the builder's
-# Preview and the respondent's form paginate the same survey the same way, and
-# they are separate copies only because the guest page may not gain a bundle.
+# submit_survey must never learn about preview. The preview route deliberately
+# renders with an empty token so a previewed form has nothing to submit with;
+# that guarantee evaporates the moment the endpoint grows a preview branch.
 python3 - <<'PY'
 import sys, pathlib
 
-pairs = {
-	"frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes/www/survey.html":
-		'if (q.question_type === "Page Break") { pages.push([]); return; }',
-	"frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes/survey_studio/page"
-	"/ucc_survey_builder/ucc_survey_builder.js":
-		'if (q.question_type === "Page Break") { pages.push([]); return; }',
-}
-bad = [f for f, snippet in pairs.items() if snippet not in pathlib.Path(f).read_text()]
+src = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes"
+                   "/api/public.py").read_text()
+submit = src[src.index("def submit_survey("):]
+bad = [w for w in ("preview", "is_preview", "dry_run") if w in submit]
 if bad:
-	print("Page-split rule missing or diverged in:", file=sys.stderr)
-	for f in bad:
-		print("  - " + f, file=sys.stderr)
+	print("submit_survey mentions %s - the write path must know nothing about "
+		  "preview (see www/survey.py's module docstring)." % ", ".join(bad), file=sys.stderr)
 	sys.exit(1)
-print("Page-split rule matches in both renderers.")
+# The two payload gates must stay two FUNCTIONS, not one with a flag.
+for fn in ("def public_survey_payload(token):", "def preview_payload(survey_version):"):
+	if fn not in src:
+		print("Missing payload gate: %s" % fn, file=sys.stderr)
+		sys.exit(1)
+print("submit_survey has no preview branch; both payload gates are separate.")
 PY

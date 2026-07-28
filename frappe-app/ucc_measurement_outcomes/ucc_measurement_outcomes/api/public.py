@@ -136,12 +136,15 @@ def _choices_by_question(names):
 	return out
 
 
-def public_survey_payload(token):
-	"""Core: published questions for a campaign token. Plain function (no rate
-	limit / whitelist) so the public web page can render it server-side without
-	going through the API layer."""
-	campaign = _get_open_campaign(token)
-	version = campaign.get("ucc_survey_version")
+def _version_payload(version):
+	"""The questions of one version, in the shape UCCSurveyForm renders.
+
+	NO GATES HERE ON PURPOSE. This is the shared body; the gates are the two
+	callers below, and they are separate FUNCTIONS rather than a flag on one,
+	because a flag is how unpublished content eventually reaches a guest - one
+	wrong caller and the gate inverts. Two functions cannot be called wrongly.
+	Never call this directly from a whitelisted method.
+	"""
 	header = frappe.db.get_value(
 		VERSION, version, ["title_snapshot", "version_number"], as_dict=True
 	)
@@ -164,6 +167,46 @@ def public_survey_payload(token):
 		"version_number": header.version_number if header else None,
 		"questions": questions,
 	}
+
+
+def public_survey_payload(token):
+	"""GATE 1 - the respondent's. Anonymous, so everything is checked: the token
+	resolves, the campaign is Open and in its window, the version is Published,
+	the survey is not Archived (all inside _get_open_campaign). Plain function
+	(no rate limit / whitelist) so the public web page can render it server-side
+	without going through the API layer."""
+	campaign = _get_open_campaign(token)
+	return _version_payload(campaign.get("ucc_survey_version"))
+
+
+@frappe.whitelist()
+def preview_payload(survey_version):
+	"""GATE 2 - the author's. A different gate for a different audience, not a
+	relaxation of gate 1: an authenticated user who may READ this version, which
+	is strictly stronger than the anonymous path, in exchange for the one thing
+	it relaxes - the content is not required to be Published. That is the whole
+	point: a Draft version has no campaign and no token, and its author still
+	needs to see it.
+
+	It relaxes NOTHING about writing. Preview never mints a token, and
+	submit_survey's first act is to resolve one, so a previewed form has nothing
+	to submit with. submit_survey has no preview parameter and no preview branch,
+	and must never grow one: if a preview ever needs to exercise submission, that
+	is a new decision, not an extension of this.
+	"""
+	if frappe.session.user == "Guest":
+		# Belt and braces - @frappe.whitelist() without allow_guest already
+		# refuses Guest. Stated here too because this is the one function that
+		# serves unpublished survey content, and that must never turn on a
+		# decorator argument being read correctly.
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if not frappe.has_permission(VERSION, "read", doc=survey_version):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if not frappe.db.exists(VERSION, survey_version):
+		frappe.throw(_("Survey Version {0} not found").format(survey_version))
+	return _version_payload(survey_version)
+
+
 
 
 @frappe.whitelist(allow_guest=True)
