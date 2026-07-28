@@ -249,3 +249,70 @@ if problems:
 	sys.exit(1)
 print("Both /survey branches serve the same assets.")
 PY
+
+# Every dotted path in hooks.py must resolve to something that exists.
+#
+# Generic on purpose. This is the third "a reference points at something that
+# isn't there" failure in one session — a CSS @import to a missing file, a
+# bundle name with no entry point, and a doc_events hook naming a function that
+# had been moved. Each one only surfaced on a live bench, and each looked like a
+# different bug (broken build, dead Desk page, AttributeError on save). One
+# check for the whole class, rather than a patch per instance.
+#
+# Parsed with ast, never imported: this repo has no bench, so importing hooks.py
+# or anything it names would fail on `import frappe` long before the reference
+# could be checked.
+python3 - <<'PY'
+import ast, sys, pathlib
+
+APP = "ucc_measurement_outcomes"
+root = pathlib.Path("frappe-app") / APP / APP
+tree = ast.parse((root / "hooks.py").read_text())
+
+# Every string constant anywhere in hooks.py that names something in this app.
+refs = sorted({
+	n.value for n in ast.walk(tree)
+	if isinstance(n, ast.Constant) and isinstance(n.value, str)
+	and n.value.startswith(APP + ".") and " " not in n.value
+	and not n.value.endswith((".js", ".css"))          # bundles: checked above
+})
+
+
+def defined_names(path):
+	out = set()
+	for node in ast.parse(path.read_text()).body:
+		if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+			out.add(node.name)
+		elif isinstance(node, ast.Assign):
+			out.update(t.id for t in node.targets if isinstance(t, ast.Name))
+	return out
+
+
+def module_path(dotted):
+	rel = pathlib.Path(*dotted.split(".")[1:])          # drop the app prefix
+	for candidate in (root / rel.with_suffix(".py"), root / rel / "__init__.py"):
+		if candidate.exists():
+			return candidate
+	return None
+
+
+problems = []
+for ref in refs:
+	if module_path(ref):
+		continue                                        # a module, not an attribute
+	mod, _, attr = ref.rpartition(".")
+	path = module_path(mod)
+	if not path:
+		problems.append("%s -> no module %s" % (ref, mod))
+	elif attr not in defined_names(path):
+		problems.append("%s -> %s has no %s" % (ref, path, attr))
+
+if problems:
+	print("hooks.py references something that does not exist:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	print("  (on a bench this surfaces as AttributeError on save, and survives a "
+	      "restart: app hooks are cached, so it needs bench clear-cache too)", file=sys.stderr)
+	sys.exit(1)
+print("All %d hooks.py references resolve." % len(refs))
+PY

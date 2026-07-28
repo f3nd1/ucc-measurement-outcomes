@@ -56,10 +56,17 @@ Rule of thumb for what a pull needs:
 |---|---|
 | Page JSON, DocType JSON, Custom Field fixtures | `bench --site <site> migrate` |
 | Any `.js` under `public/` or a Studio page | `bench build --app ucc_measurement_outcomes` |
-| Python (controllers, `api/*`, hooks) | `bench restart` |
+| Python (controllers, `api/*`) | `bench restart` |
+| **`hooks.py`** | `bench --site <site> clear-cache` **and** `bench restart` |
 | A `www/` web page template | `bench --site <site> clear-website-cache` |
 
 When in doubt, all four in that order.
+
+**`hooks.py` needs `clear-cache`, not just `restart`.** App hooks are cached, so
+a restart alone keeps serving the old map. If a hook's target has moved, the
+stale map calls a function that no longer exists and every save of that DocType
+fails with `AttributeError: module … has no attribute …` — pointing at code that
+is correct on disk. This blocked Survey Tracking creation entirely once.
 
 **Always read the tail of `bench build`.** JS and CSS bundle in one run, and a
 CSS failure exits non-zero *after* the JS has built — so `sites/assets/assets.json`

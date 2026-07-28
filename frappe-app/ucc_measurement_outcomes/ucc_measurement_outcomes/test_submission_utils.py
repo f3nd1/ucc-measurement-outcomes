@@ -6,6 +6,7 @@ from submission_utils import (
 	allowed_choice_values,
 	campaign_window_open,
 	has_value,
+	should_mint_token,
 	to_text,
 	value_allowed,
 )
@@ -67,6 +68,24 @@ def test_to_text_on_grid_answers():
 	multi = {"row_0": ["col_a", "col_c"], "row_1": ["col_b"]}
 	assert json.loads(to_text(multi)) == multi
 	assert to_text({}) == "{}"
+
+
+def test_should_mint_token():
+	# No collection status = not a campaign. Historical Survey Tracking rows are
+	# post-hoc consolidation records and must never get a public link.
+	assert not should_mint_token("", None)
+	assert not should_mint_token(None, None)
+	# Becoming a campaign mints one...
+	assert should_mint_token("Draft", None)
+	assert should_mint_token("Open", "")
+	# ...and this is the case that was broken when minting lived in
+	# before_insert: the row already existed, the status is set on a LATER save,
+	# and validate runs on every save so the token still appears.
+	assert should_mint_token("Open", None)
+	# Never re-mint: a token in the wild keeps working, and rotating it silently
+	# would break every link already sent to respondents.
+	assert not should_mint_token("Open", "abc123")
+	assert not should_mint_token("Closed", "abc123")
 
 
 def test_campaign_window_open():
@@ -206,6 +225,7 @@ if __name__ == "__main__":
 	test_to_text()
 	test_to_text_on_grid_answers()
 	test_campaign_window_open()
+	test_should_mint_token()
 	test_allowed_choice_values()
 	test_value_allowed_empty_is_always_allowed()
 	test_value_allowed_single_choice()

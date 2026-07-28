@@ -39,6 +39,25 @@ def campaign_window_open(status, opens_on, closes_on, today):
 	return True
 
 
+def should_mint_token(collection_status, existing_token):
+	"""Does this Survey Tracking row need a public token minted?
+
+	Pure so the rule has a test without a bench - the same reason
+	campaign_window_open() lives here. It has already been wrong once: minting
+	used to run only in before_insert, so creating the row and THEN setting its
+	collection status left it permanently token-less with nothing saying why.
+	Called from validate, which runs on insert and on every save, so the token
+	appears the moment the row becomes a campaign.
+
+	Only rows actually being used as a campaign get one: historical Survey
+	Tracking rows are post-hoc consolidation records with no collection status,
+	and must never be handed a public collection link.
+	"""
+	if not collection_status:
+		return False
+	return not existing_token
+
+
 def has_value(v):
 	"""True if an answer counts as provided (used for required-question checks).
 

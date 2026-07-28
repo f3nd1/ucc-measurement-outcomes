@@ -17,21 +17,23 @@ Campaign controller.
 import frappe
 from frappe import _
 
+from ucc_measurement_outcomes.submission_utils import should_mint_token
+
 TOKEN_LENGTH = 24
 
 
 def validate(doc, method=None):
 	if not doc.get("ucc_collection_status"):
 		return
-	# Mint the token here, not in before_insert. before_insert only fires on
-	# creation, so the obvious workflow - create the tracking row, then set its
-	# collection status - left the row permanently token-less and its public link
-	# unreachable, with nothing saying why. validate runs on insert AND on every
-	# save, so the token appears the moment the row becomes a campaign.
-	# Only rows actually being used as a campaign get one: historical Survey
-	# Tracking rows are post-hoc consolidation records with no collection status,
-	# and must never be handed a public collection link.
-	if not doc.get("ucc_public_token"):
+	# Minting runs HERE, not in before_insert, and the rule itself is pure so it
+	# can be tested without a bench - see should_mint_token's docstring for what
+	# went wrong when it was before_insert-only.
+	#
+	# NOTE for anyone moving this again: hooks.py must be changed in the same
+	# commit, and a bench needs `clear-cache` as well as `restart` afterwards -
+	# app hooks are cached, so a stale doc_events map keeps calling a function
+	# that no longer exists and fails with AttributeError on every save.
+	if should_mint_token(doc.get("ucc_collection_status"), doc.get("ucc_public_token")):
 		doc.ucc_public_token = frappe.generate_hash(length=TOKEN_LENGTH)
 	if not doc.get("ucc_survey_version"):
 		frappe.throw(
