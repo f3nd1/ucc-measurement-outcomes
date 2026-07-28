@@ -12,43 +12,71 @@
 </div>
 
 <style>
+	/* Colours are CSS custom properties with today's values as fallbacks, so this
+	   page changes nothing until a variable is actually set. Set them ONCE for the
+	   whole portal in Website Theme's custom CSS (Website Settings -> Theme):
+
+	       :root{--ucc-accent:#003a70;--ucc-star:#c8a02e}
+
+	   Deliberately NOT a per-survey theme editor and deliberately not a free-text
+	   CSS field: this is the one guest-reachable page in the app, and staff-editable
+	   CSS rendered into it is a stored-injection surface. One college, one brand,
+	   one place to set it - and the survey then matches the rest of the portal
+	   instead of drifting from it.
+
+	   --ucc-accent        selected NPS button (the one brand colour that shows)
+	   --ucc-star          filled rating star
+	   --ucc-required      the required asterisk
+	   --ucc-muted         help text, hints, secondary labels
+	   --ucc-border        question separators, grid and list borders
+	   --ucc-border-strong unselected control outlines, empty stars
+	   --ucc-border-soft   inner separators inside the ranking list
+	   --ucc-surface       grid header background */
 	/* Layout: a 12-column grid whose ROWS are derived from document order plus
 	   each question's span - so there is no 2D coordinate anywhere in the data
 	   model, and reorder/resequence/answer storage are all untouched.
 	   grid-auto-flow stays the default (row), never dense: dense back-fills
 	   earlier gaps with later items, which would show question 7 above question
 	   6 while the numbering still said otherwise. */
-	#ucc-form{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
+	/* The grid is per PAGE, not on #ucc-form: the error box and the nav buttons
+	   are siblings of the pages and so can never be pulled into the grid flow
+	   alongside a half-width question. A survey with no Page Break has exactly
+	   one page, i.e. today's single grid. Class, not the hidden attribute, to
+	   switch pages - display:grid here would otherwise beat [hidden]. */
+	.ucc-page{display:none}
+	.ucc-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
 	/* Mobile first: everything full width, widths only apply once there is room.
 	   Avoids !important overrides and means a phone needs no JS at all. */
 	.ucc-q,.ucc-sec{grid-column:1/-1}
-	#ucc-error,#ucc-submit{grid-column:1/-1}
+	.ucc-q[hidden]{display:none}
+	#ucc-nav{display:flex;align-items:center;gap:10px;margin-top:18px}
+	#ucc-progress{font-size:12px;margin-left:auto;color:var(--ucc-muted,#8b95a5)}
 	@media (min-width:600px){
 		.ucc-w-8{grid-column:span 8}
 		.ucc-w-6{grid-column:span 6}
 		.ucc-w-4{grid-column:span 4}
 	}
-	.ucc-q{padding:14px 0;border-bottom:1px solid #e2e6ea}
+	.ucc-q{padding:14px 0;border-bottom:1px solid var(--ucc-border,#e2e6ea)}
 	.ucc-q > label{display:block;font-weight:600;margin-bottom:6px}
-	.ucc-q .help{font-size:12px;color:#8b95a5;margin-bottom:8px}
+	.ucc-q .help{font-size:12px;color:var(--ucc-muted,#8b95a5);margin-bottom:8px}
 	.ucc-opt{display:block;margin:4px 0;font-weight:400}
-	.ucc-req{color:#b94848}
+	.ucc-req{color:var(--ucc-required,#b94848)}
 	.ucc-thanks{padding:30px;text-align:center}
 	/* Item 2: real radios underneath, visually hidden (not display:none, so
 	   label-click and keyboard tabbing/arrow-keys still work natively) — only
 	   the visual is a star, the stored/submitted value is unchanged. */
 	.ucc-stars{position:relative;display:flex;gap:2px}
 	.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
-	.ucc-star{font-size:28px;line-height:1;cursor:pointer;color:#d9d9d9;user-select:none}
-	.ucc-star.filled{color:#e0a832}
+	.ucc-star{font-size:28px;line-height:1;cursor:pointer;color:var(--ucc-border-strong,#d9d9d9);user-select:none}
+	.ucc-star.filled{color:var(--ucc-star,#e0a832)}
 	/* Item 3: Ranking - native HTML5 drag-and-drop reorder, same mechanics the
 	   Survey Builder already uses to reorder questions. */
-	.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid #e2e6ea;border-radius:8px;overflow:hidden}
+	.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid var(--ucc-border,#e2e6ea);border-radius:8px;overflow:hidden}
 	.ucc-rank li{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;
-		border-bottom:1px solid #eef2f7;cursor:grab}
+		border-bottom:1px solid var(--ucc-border-soft,#eef2f7);cursor:grab}
 	.ucc-rank li:last-child{border-bottom:0}
 	.ucc-rank li.dragging{opacity:.4}
-	.ucc-rank-handle{color:#98a1af}
+	.ucc-rank-handle{color:var(--ucc-muted,#98a1af)}
 	/* Item 3: Slider - native range input, value shown live. */
 	.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:420px}
 	.ucc-slider{flex:1}
@@ -57,14 +85,14 @@
 	.ucc-nps-row{display:flex;gap:4px;flex-wrap:wrap}
 	.ucc-nps-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
 	.ucc-nps-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
-		border:1px solid #d9d9d9;border-radius:6px;cursor:pointer;font-size:13px}
-	.ucc-nps-btn.selected{background:#4a63e7;color:#fff;border-color:#4a63e7}
-	.ucc-nps-ends{display:flex;justify-content:space-between;font-size:11px;color:#8b95a5;margin-top:4px;max-width:400px}
+		border:1px solid var(--ucc-border-strong,#d9d9d9);border-radius:6px;cursor:pointer;font-size:13px}
+	.ucc-nps-btn.selected{background:var(--ucc-accent,#4a63e7);color:#fff;border-color:var(--ucc-accent,#4a63e7)}
+	.ucc-nps-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--ucc-muted,#8b95a5);margin-top:4px;max-width:400px}
 	/* Grid: Likert Matrix / Multiple Choice Grid / Checkbox Grid - plain native
 	   radios/checkboxes in table cells, no custom styling needed. */
 	.ucc-grid{border-collapse:collapse;width:100%;font-size:13px}
-	.ucc-grid th,.ucc-grid td{border:1px solid #e2e6ea;padding:8px 10px}
-	.ucc-grid th{background:#f7f9fc;font-size:12px}
+	.ucc-grid th,.ucc-grid td{border:1px solid var(--ucc-border,#e2e6ea);padding:8px 10px}
+	.ucc-grid th{background:var(--ucc-surface,#f7f9fc);font-size:12px}
 	.ucc-grid td:first-child{text-align:left}
 </style>
 
@@ -241,21 +269,46 @@
 	// to the outer one - which is how a Submit button ended up doing a native
 	// GET reload while our submit listener was bound to an element that no
 	// longer existed. A div with a type="button" trigger cannot navigate at all.
+	// Pages are the runs between "Page Break" markers - the same marker-type
+	// mechanism sectioning already uses (decision V5), so multi-page needs no
+	// page field, no page doctype and no change to sequence. A survey with no
+	// Page Break is simply one page, which is exactly what it renders today.
+	var pages = [[]];
+	survey.questions.forEach(function (q) {
+		if (q.question_type === "Page Break") { pages.push([]); return; }
+		pages[pages.length - 1].push(q);
+	});
+	pages = pages.filter(function (p) { return p.length; });
+	if (!pages.length) pages = [[]];
+
 	var html = "<h2>" + esc(survey.title) + "</h2>";
 	html += '<div id="ucc-form">';
-	survey.questions.forEach(function (q, i) {
-		if (q.question_type === "Section Heading") {
-			html += '<h4 class="ucc-sec" style="margin-top:18px">' + esc(q.question_text) + "</h4>";
-			return;
-		}
-		html += '<div class="ucc-q ' + widthClass(q) + '" data-question="' + esc(q.name) + '" data-type="' + esc(q.question_type) + '" data-required="' + (q.is_required ? 1 : 0) + '">';
-		html += "<label>" + (i + 1) + ". " + esc(q.question_text) + (q.is_required ? ' <span class="ucc-req">*</span>' : "") + "</label>";
-		if (q.help_text) html += '<div class="help">' + esc(q.help_text) + "</div>";
-		html += field(q);
+	var n = 0;  // question numbering skips markers, and never restarts per page
+	pages.forEach(function (page, pi) {
+		html += '<div class="ucc-page' + (pi === 0 ? " active" : "") + '" data-page="' + pi + '">';
+		page.forEach(function (q) {
+			if (q.question_type === "Section Heading") {
+				html += '<h4 class="ucc-sec" style="margin-top:18px">' + esc(q.question_text) + "</h4>";
+				return;
+			}
+			n += 1;
+			html += '<div class="ucc-q ' + widthClass(q) + '" data-question="' + esc(q.name) + '" data-type="' + esc(q.question_type) + '" data-required="' + (q.is_required ? 1 : 0) + '">';
+			html += "<label>" + n + ". " + esc(q.question_text) + (q.is_required ? ' <span class="ucc-req">*</span>' : "") + "</label>";
+			if (q.help_text) html += '<div class="help">' + esc(q.help_text) + "</div>";
+			html += field(q);
+			html += "</div>";
+		});
 		html += "</div>";
 	});
 	html += '<div id="ucc-error" class="alert alert-warning" style="display:none;margin-top:14px"></div>';
-	html += '<button type="button" id="ucc-submit" class="btn btn-primary" style="margin-top:18px">Submit</button></div>';
+	html += '<div id="ucc-nav">';
+	if (pages.length > 1) {
+		html += '<button type="button" id="ucc-back" class="btn btn-default">Back</button>';
+		html += '<button type="button" id="ucc-next" class="btn btn-primary">Next</button>';
+		html += '<span id="ucc-progress" class="text-muted"></span>';
+	}
+	html += '<button type="button" id="ucc-submit" class="btn btn-primary">Submit</button>';
+	html += "</div></div>";
 	root.innerHTML = html;
 
 	// Item 2: fill stars up to whichever one is checked. Delegated on root (one
@@ -367,6 +420,100 @@
 		return input ? input.value : null;
 	}
 
+	// ---- conditional display -------------------------------------------------
+	// A mirror of display_logic.py, deliberately: this copy decides what the
+	// respondent SEES, that one decides what counts. submit_survey recomputes
+	// visibility from the submitted answers and never trusts this, so the worst
+	// a tampered browser can do is show itself questions it then has to answer.
+	// Every rule below is the same rule, made the same way, including failing
+	// closed on a broken one - so the two cannot disagree in normal use.
+	var MARKERS = ["Section Heading", "Page Break"];
+
+	// Mirrors has_value(): a grid counts as answered only when EVERY row is.
+	function answered(v) {
+		if (v == null) return false;
+		if (typeof v === "string") return v.trim() !== "";
+		if (Array.isArray(v)) return v.length > 0;
+		if (typeof v === "object") {
+			var ks = Object.keys(v);
+			return ks.length > 0 && ks.every(function (k) { return answered(v[k]); });
+		}
+		return true;
+	}
+
+	function asList(v) {
+		if (v == null) return [];
+		if (Array.isArray(v)) return v.map(String);
+		if (typeof v === "object") {
+			return Object.keys(v).reduce(function (acc, k) { return acc.concat(asList(v[k])); }, []);
+		}
+		return [String(v)];
+	}
+
+	function ruleMatches(op, ans, val) {
+		// An unanswered controlling question never satisfies a rule - not even
+		// "not equals", which would otherwise show every negative branch on a
+		// blank form.
+		if (!answered(ans)) return false;
+		var picked = asList(ans);
+		var want = val == null ? "" : String(val);
+		if (op === "contains") return picked.indexOf(want) !== -1;
+		var isEq = picked.length === 1 && picked[0] === want;
+		return op === "not equals" ? !isEq : isEq;
+	}
+
+	function parseRule(config) {
+		if (!config) return null;
+		try { config = typeof config === "string" ? JSON.parse(config) : config; } catch (e) { return null; }
+		if (!config || !config.question) return null;
+		return { question: config.question, operator: config.operator || "equals", value: config.value };
+	}
+
+	function currentAnswers() {
+		var out = {};
+		Array.prototype.slice.call(root.querySelectorAll(".ucc-q")).forEach(function (qEl) {
+			out[qEl.getAttribute("data-question")] = collect(qEl);
+		});
+		return out;
+	}
+
+	// Returns the set of visible question names and applies it to the DOM.
+	// Questions resolve in order and a rule may only point backwards, so one
+	// pass settles a whole chain - and a question whose controller is itself
+	// hidden goes with it rather than being left orphaned on the page.
+	function applyLogic() {
+		var answers = currentAnswers();
+		var visible = {};
+		survey.questions.forEach(function (q) {
+			var vis;
+			if (MARKERS.indexOf(q.question_type) !== -1) {
+				vis = true;
+			} else if (!q.display_logic || q.display_logic === "Always Show") {
+				vis = true;
+			} else {
+				var rule = parseRule(q.display_logic_config);
+				vis = !!(rule && visible[rule.question] &&
+					ruleMatches(rule.operator, answers[rule.question], rule.value));
+			}
+			visible[q.name] = vis;
+			var el = root.querySelector('.ucc-q[data-question="' + q.name + '"]');
+			if (el) el.hidden = !vis;
+		});
+		return visible;
+	}
+
+	// Recompute on any interaction. One delegated listener on root covers every
+	// input type on the form, including the ones wired above.
+	root.addEventListener("change", applyLogic);
+	root.addEventListener("input", applyLogic);
+	applyLogic();
+
+	// ---- paging --------------------------------------------------------------
+	var pageEls = Array.prototype.slice.call(root.querySelectorAll(".ucc-page"));
+	var current = 0;
+	var backBtn = document.getElementById("ucc-back");
+	var nextBtn = document.getElementById("ucc-next");
+	var progressEl = document.getElementById("ucc-progress");
 	var btn = document.getElementById("ucc-submit");
 	var errEl = document.getElementById("ucc-error");
 	function showError(msg) {
@@ -376,29 +523,51 @@
 		btn.textContent = "Submit";
 	}
 
+	// A required question that is currently hidden is not missing - that is the
+	// whole point of the logic-aware check, and the server applies the same rule.
+	function firstMissing(scope) {
+		return Array.prototype.slice.call(scope.querySelectorAll(".ucc-q")).filter(function (qEl) {
+			return !qEl.hidden && qEl.getAttribute("data-required") === "1" && !answered(collect(qEl));
+		})[0];
+	}
+
+	function showPage(i) {
+		current = i;
+		pageEls.forEach(function (el, n) { el.classList.toggle("active", n === i); });
+		if (backBtn) backBtn.style.display = i > 0 ? "" : "none";
+		if (nextBtn) nextBtn.style.display = i < pageEls.length - 1 ? "" : "none";
+		btn.style.display = i === pageEls.length - 1 ? "" : "none";
+		if (progressEl) progressEl.textContent = "Page " + (i + 1) + " of " + pageEls.length;
+		errEl.style.display = "none";
+		window.scrollTo(0, 0);
+	}
+	if (pageEls.length > 1) {
+		backBtn.addEventListener("click", function () { showPage(current - 1); });
+		nextBtn.addEventListener("click", function () {
+			// Validate the page being left: at submit time the respondent can no
+			// longer see the page an unanswered required question is on.
+			if (firstMissing(pageEls[current])) {
+				return showError("Please answer all required questions on this page.");
+			}
+			showPage(current + 1);
+		});
+	}
+	showPage(0);
+
 	btn.addEventListener("click", function () {
 		errEl.style.display = "none";
+		var visible = applyLogic();
 		var answers = [];
 		var missing = false;
 		Array.prototype.slice.call(root.querySelectorAll(".ucc-q")).forEach(function (qEl) {
+			var name = qEl.getAttribute("data-question");
+			// A hidden question's answer is not an answer: not sent, not required.
+			// The server drops it too, so no metric can aggregate a value from a
+			// branch the respondent never saw.
+			if (!visible[name]) return;
 			var val = collect(qEl);
-			var required = qEl.getAttribute("data-required") === "1";
-			var empty;
-			if (val && typeof val === "object" && !Array.isArray(val)) {
-				// Grid: required means EVERY row answered (Google Forms' own
-				// semantics, which the grid-type request was modelled on) -
-				// some(), not every(), so a partially-filled grid still counts
-				// as incomplete rather than only an entirely-blank one.
-				var rowKeys = Object.keys(val);
-				empty = !rowKeys.length || rowKeys.some(function (k) {
-					var rowVal = val[k];
-					return rowVal == null || (Array.isArray(rowVal) && !rowVal.length);
-				});
-			} else {
-				empty = val == null || val === "" || (Array.isArray(val) && !val.length);
-			}
-			if (required && empty) missing = true;
-			answers.push({ question: qEl.getAttribute("data-question"), value: val });
+			if (qEl.getAttribute("data-required") === "1" && !answered(val)) missing = true;
+			answers.push({ question: name, value: val });
 		});
 		if (missing) return showError("Please answer all required questions.");
 

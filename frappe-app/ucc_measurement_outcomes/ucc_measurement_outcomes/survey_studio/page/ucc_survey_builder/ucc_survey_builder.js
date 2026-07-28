@@ -40,9 +40,15 @@ const VERSION_STATUS_COLOR = { Draft: "gray", "In Review": "orange", Published: 
 const QUESTION_TYPES = [
 	"Short Text", "Paragraph", "Email", "Number", "Date", "Rating",
 	"Single Choice", "Multiple Choice", "Dropdown", "Yes / No", "Likert Matrix",
-	"NPS", "Ranking", "Slider", "File Upload", "Section Heading",
+	"NPS", "Ranking", "Slider", "File Upload", "Section Heading", "Page Break",
 	"Multiple Choice Grid", "Checkbox Grid",
 ];
+// Markers, not questions: no answer, so nothing to make conditional and nothing
+// to widen. Page Break splits the public form into pages - the same marker-type
+// mechanism sectioning already uses, so multi-page needs no page field at all.
+const MARKER_TYPES = new Set(["Section Heading", "Page Break"]);
+const LOGIC_MODES = ["Always Show", "Show If Previous Answer Matches"];
+const LOGIC_OPERATORS = ["equals", "not equals", "contains"];
 const CHOICE_TYPES = new Set([
 	"Rating", "Single Choice", "Multiple Choice", "Dropdown", "Yes / No",
 	"Likert Matrix", "Ranking", "Multiple Choice Grid", "Checkbox Grid",
@@ -162,6 +168,9 @@ class SurveyBuilder {
 		.ucc-sb-w6{grid-column:span 6}
 		.ucc-sb-w4{grid-column:span 4}
 		.ucc-sb-sheet.mobile .ucc-sb-pq{grid-column:1/-1}
+		.ucc-sb-pagebreak{border-top:2px dashed #b9c2d0;text-align:center;font-size:11px;
+			color:#8b95a5;text-transform:uppercase;letter-spacing:.5px;padding-top:6px;margin-top:10px}
+		.ucc-sb-cond{font-size:11px;color:#8b95a5;margin-bottom:6px}
 		.ucc-sb-pq label.q{display:block;font-weight:600;margin-bottom:6px}
 		/* Item 2: same star markup/classes as the public form's, so the preview
 		   looks like what a respondent actually sees. Real radios underneath
@@ -641,7 +650,12 @@ class SurveyBuilder {
 		let mobile = false;
 		const form = this.questions.map((q, i) => {
 			if (q.question_type === "Section Heading") return `<h4 class="ucc-sb-sec">${frappe.utils.escape_html(q.question_text || "")}</h4>`;
-			return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}"><label class="q">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${this._previewInput(q)}</div>`;
+			// Preview shows where the page splits, but does not paginate: it is a
+			// layout check, and the respondent-facing form is the real one.
+			if (q.question_type === "Page Break") return `<div class="ucc-sb-sec ucc-sb-pagebreak">${__("Page break")}</div>`;
+			const logic = q.display_logic && q.display_logic !== LOGIC_MODES[0]
+				? `<div class="ucc-sb-cond">${__("Shown only when an earlier answer matches")}</div>` : "";
+			return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}"><label class="q">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${logic}${this._previewInput(q)}</div>`;
 		}).join("");
 		this._sheet(mobile, `<h5>${__("Preview")} — <span class="ucc-sb-vp"></span></h5>
 			<button class="btn btn-xs btn-default ucc-sb-toggle" style="margin-bottom:10px">${__("Toggle desktop / mobile")}</button>
@@ -778,6 +792,37 @@ class SurveyBuilder {
 
 	_select(name) { this.selected = name; this._renderQuestions(); this._renderInspector(); }
 
+	// Conditional display. Only questions EARLIER in the list are offered as the
+	// controller, which is what makes a cycle impossible - there is nothing to
+	// detect, because a backwards-only rule cannot form one. Markers get no
+	// controls at all: they have no answer to hide.
+	_logicFields(q, dis, opt) {
+		if (MARKER_TYPES.has(q.question_type)) return "";
+		const earlier = this.questions
+			.slice(0, this.questions.findIndex((x) => x.name === q.name))
+			.filter((x) => !MARKER_TYPES.has(x.question_type));
+		if (!earlier.length) {
+			return `<div class="text-muted" style="font-size:11px;margin-top:10px">${__("The first question cannot depend on an earlier answer.")}</div>`;
+		}
+		let rule = {};
+		try { rule = JSON.parse(q.display_logic_config || "{}") || {}; } catch (e) { rule = {}; }
+		const mode = q.display_logic || LOGIC_MODES[0];
+		const qOpts = earlier.map((x, i) => {
+			const label = `${i + 1}. ${(x.question_text || "").slice(0, 60)}`;
+			return `<option value="${frappe.utils.escape_html(x.name)}" ${x.name === rule.question ? "selected" : ""}>${frappe.utils.escape_html(label)}</option>`;
+		}).join("");
+		return `
+			<hr style="margin:14px 0">
+			<div class="form-group"><label>${__("Show This Question")}</label>
+				<select class="form-control" data-f="display_logic" ${dis}>${opt(LOGIC_MODES, mode)}</select></div>
+			<div class="ucc-sb-logic" style="${mode === LOGIC_MODES[0] ? "display:none" : ""}">
+				<div class="form-group"><label>${__("When")}</label><select class="form-control" data-f="logic_question" ${dis}>${qOpts}</select></div>
+				<div class="form-group"><label>${__("Is")}</label><select class="form-control" data-f="logic_operator" ${dis}>${opt(LOGIC_OPERATORS, rule.operator || "equals")}</select></div>
+				<div class="form-group"><label>${__("This Value")}</label><input type="text" class="form-control" data-f="logic_value" value="${frappe.utils.escape_html(rule.value == null ? "" : String(rule.value))}" ${dis}></div>
+				<div class="text-muted" style="font-size:11px">${__("Hidden questions are never required and their answers are not stored. The server re-checks this at submit time.")}</div>
+			</div>`;
+	}
+
 	_renderInspector() {
 		const q = this.questions.find((x) => x.name === this.selected);
 		if (!q) { this.$inspector.html(`<p class="text-muted" style="font-size:12px">${__("Select a question to edit its wording, type, options and display logic.")}</p>`); return; }
@@ -793,8 +838,12 @@ class SurveyBuilder {
 				<div class="text-muted" style="font-size:11px;margin-top:4px">${__("Side-by-side on a wide screen; always full width on a phone. Preview shows the real result.")}</div></div>
 			<div class="form-group ucc-sb-matrix" style="${MATRIX_TYPES.has(q.question_type) ? "" : "display:none"}"><label>${__("Grid Rows (statements, one per line)")}</label><textarea class="form-control" data-f="matrix_rows" rows="3" ${dis}>${frappe.utils.escape_html(q.matrix_rows || "")}</textarea></div>
 			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label class="ucc-sb-choices-label">${MATRIX_TYPES.has(q.question_type) ? __("Grid Columns (response options, one per line, optional |value)") : __("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
+			${this._logicFields(q, dis, opt)}
 			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-sb-apply">${__("Apply Changes")}</button>` : ""}
 		`);
+		this.$inspector.find('[data-f="display_logic"]').on("change", (e) => {
+			this.$inspector.find(".ucc-sb-logic").toggle(e.target.value !== LOGIC_MODES[0]);
+		});
 		this.$inspector.find('[data-f="question_type"]').on("change", (e) => {
 			const isMatrix = MATRIX_TYPES.has(e.target.value);
 			this.$inspector.find(".ucc-sb-choices").toggle(CHOICE_TYPES.has(e.target.value));
@@ -819,6 +868,15 @@ class SurveyBuilder {
 			choices, matrix_rows: val("matrix_rows").val(),
 			layout_width: val("layout_width").val(),
 		};
+		const mode = val("display_logic").val();
+		if (mode) {
+			payload.display_logic = mode;
+			payload.display_logic_config = mode === LOGIC_MODES[0] ? null : JSON.stringify({
+				question: val("logic_question").val(),
+				operator: val("logic_operator").val(),
+				value: val("logic_value").val(),
+			});
+		}
 		this._call("update_question", { question: name, payload: JSON.stringify(payload) }).then(() => {
 			frappe.show_alert({ message: __("Question updated"), indicator: "green" });
 			this.load(this.version.name);

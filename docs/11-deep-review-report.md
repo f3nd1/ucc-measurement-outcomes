@@ -44,10 +44,13 @@ one-modal-per-session. Removed: tracked `.DS_Store`. Unused-import sweep: clean.
 
 Full table in `frappe-app/BENCH_VERIFY.md` (Pass 3 section). Sharpest three:
 
-- **V1 Display logic is inert** — stored and rendered in the inspector, consumed
-  by nothing. Landmine: if a logic engine ever ships client-side only, a hidden
-  *required* question makes submission impossible; the server's required check
-  must become logic-aware in the same change.
+- **V1 Display logic is inert** — ~~stored and rendered in the inspector,
+  consumed by nothing~~. **RESOLVED 2026-07-28.** `display_logic.py` evaluates
+  the rule, `submit_survey` recomputes visibility from the submitted answers and
+  enforces `is_required` only on visible questions (dropping answers to hidden
+  ones). The landmine was defused in the same change, exactly as this entry
+  demanded: the client copy in `www/survey.html` decides what is *shown*, the
+  server decides what *counts*.
 - **V2 Archiving does not stop collection** — campaign status + dates are the
   only submission gate; Archived surveys and Closed versions still collect.
 - **V7 Multi-select answers are comma-joined** — irrecoverable if a choice label

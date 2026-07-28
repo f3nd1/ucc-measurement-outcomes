@@ -241,6 +241,35 @@ link-field selection is brittle and not worth it for a one-off.
 
 ---
 
+## Part D2 — Branding the public survey page (optional)
+
+`/survey?token=…` extends `templates/web.html`, so it already inherits the
+site's Website Theme — navbar, logo, base font, link colour. Only the form's own
+controls were hardcoded; they are now CSS custom properties with the current
+values as fallbacks, so **nothing changes until a variable is set**.
+
+Set them once for the whole portal in **Website Settings → Theme → custom CSS**
+(not per survey — one college, one brand):
+
+```css
+:root{
+  --ucc-accent: #003a70;   /* selected NPS button — the brand colour that shows */
+  --ucc-star: #c8a02e;     /* filled rating star */
+  --ucc-required: #b94848; /* the required asterisk */
+  --ucc-muted: #8b95a5;    /* help text, hints, secondary labels */
+  --ucc-border: #e2e6ea;   /* question separators, grid and list borders */
+  --ucc-border-strong: #d9d9d9; /* unselected control outlines, empty stars */
+  --ucc-border-soft: #eef2f7;   /* inner separators in the ranking list */
+  --ucc-surface: #f7f9fc;  /* grid header background */
+}
+```
+
+There is deliberately **no per-survey theme editor and no free-text CSS field**.
+`/survey` is the only guest-reachable page in this app; staff-editable CSS
+rendered into it would be a stored-injection surface (CSS alone can exfiltrate
+via attribute selectors and `url()`). If per-survey styling is ever genuinely
+needed, it must be a closed set of validated values, never a CSS blob.
+
 ## Part E — Report
 
 List each file with a one-line note on what it shows and whether it rendered

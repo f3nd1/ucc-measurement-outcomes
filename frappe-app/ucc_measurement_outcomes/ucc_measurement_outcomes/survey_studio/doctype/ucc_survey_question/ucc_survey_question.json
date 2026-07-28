@@ -51,7 +51,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Question Type",
-   "options": "Short Text\nParagraph\nEmail\nNumber\nDate\nRating\nSingle Choice\nMultiple Choice\nDropdown\nYes / No\nLikert Matrix\nNPS\nRanking\nSlider\nFile Upload\nSection Heading\nMultiple Choice Grid\nCheckbox Grid",
+   "options": "Short Text\nParagraph\nEmail\nNumber\nDate\nRating\nSingle Choice\nMultiple Choice\nDropdown\nYes / No\nLikert Matrix\nNPS\nRanking\nSlider\nFile Upload\nSection Heading\nPage Break\nMultiple Choice Grid\nCheckbox Grid",
    "reqd": 1
   },
   {
@@ -107,24 +107,21 @@
   {
    "fieldname": "section_break_logic",
    "fieldtype": "Section Break",
-   "hidden": 1,
    "label": "Display Logic"
   },
   {
    "default": "Always Show",
-   "description": "Hidden per decision V1: no logic engine executes this yet. Unhide together with the engine, which must include a server-side logic-aware required check.",
+   "description": "Whether this question is shown at all. Evaluated in the browser as the respondent answers, and re-decided on the server at submit time - a hidden question is never required and its answer is never stored.",
    "fieldname": "display_logic",
    "fieldtype": "Select",
-   "hidden": 1,
    "label": "Display Logic",
-   "options": "Always Show\nShow If Previous Answer Matches\nSkip To Section\nEnd Survey"
+   "options": "Always Show\nShow If Previous Answer Matches"
   },
   {
    "depends_on": "eval:doc.display_logic && doc.display_logic != 'Always Show'",
-   "description": "Condition detail for the selected display logic (e.g. which question/answer triggers it).",
+   "description": "The condition, as JSON: {\"question\": \"<question name>\", \"operator\": \"equals|not equals|contains\", \"value\": \"...\"}. Set this from the Survey Builder inspector rather than by hand - it only offers questions earlier in the survey, which is what stops a rule pointing at itself.",
    "fieldname": "display_logic_config",
    "fieldtype": "Small Text",
-   "hidden": 1,
    "label": "Display Logic Config"
   }
  ],

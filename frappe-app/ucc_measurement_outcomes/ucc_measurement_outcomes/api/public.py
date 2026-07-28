@@ -24,6 +24,7 @@ from frappe import _
 # refuses to load.
 from frappe.rate_limiter import rate_limit
 
+from ucc_measurement_outcomes.display_logic import MARKER_TYPES, visible_questions
 from ucc_measurement_outcomes.submission_utils import (
 	campaign_window_open,
 	has_value,
@@ -146,7 +147,14 @@ def public_survey_payload(token):
 	)
 	questions = _published_questions(
 		version,
-		["name", "question_text", "question_type", "help_text", "is_required", "sequence", "matrix_rows", "layout_width"],
+		[
+			"name", "question_text", "question_type", "help_text", "is_required",
+			"sequence", "matrix_rows", "layout_width",
+			# The rules go to the browser so it can show/hide as the respondent
+			# types. They are survey structure, not secrets - and the browser's
+			# verdict is never trusted: submit_survey re-decides visibility.
+			"display_logic", "display_logic_config",
+		],
 	)
 	by_question = _choices_by_question([q["name"] for q in questions])
 	for q in questions:
@@ -207,7 +215,10 @@ def submit_survey(token, answers, respondent_key=None):
 		q["name"]: q
 		for q in _published_questions(
 			version,
-			["name", "question_type", "is_required", "question_text", "matrix_rows"],
+			[
+				"name", "question_type", "is_required", "question_text", "matrix_rows",
+				"display_logic", "display_logic_config",
+			],
 		)
 	}
 	choices = _choices_by_question(list(valid))
@@ -233,9 +244,33 @@ def submit_survey(token, answers, respondent_key=None):
 			frappe.throw(_("{0}: {1}.").format(valid[qid]["question_text"], reason))
 		provided[qid] = value
 
-	missing = [qid for qid, q in valid.items() if q["is_required"] and not has_value(provided.get(qid))]
+	# Decision V1's landmine, defused: visibility is recomputed HERE from the
+	# answers that were actually submitted, never taken from the browser. So a
+	# hidden required question cannot block a submission, and a crafted POST
+	# cannot dodge a branch's required check by omitting the branch - omitting
+	# the controlling answer hides the branch, and answering it into existence
+	# makes its required questions enforceable again.
+	# _published_questions orders by sequence, and a rule may only point at an
+	# earlier question, so one pass resolves the whole chain.
+	visible = visible_questions(list(valid.values()), provided)
+
+	def answerable(qid):
+		"""Section Heading and Page Break are layout markers - the form never
+		collects one, so an answer to one only ever arrives from a crafted POST.
+		Not required, not stored."""
+		return qid in visible and valid[qid]["question_type"] not in MARKER_TYPES
+
+	missing = [
+		qid for qid, q in valid.items()
+		if q["is_required"] and answerable(qid) and not has_value(provided.get(qid))
+	]
 	if missing:
 		frappe.throw(_("Please answer all required questions."))
+
+	# An answer to a question the respondent could not see is not an answer.
+	# Dropped rather than stored, so no metric ever aggregates a value from a
+	# branch that was never shown.
+	provided = {qid: v for qid, v in provided.items() if answerable(qid)}
 
 	submission = frappe.get_doc({
 		"doctype": "UCC Survey Submission",
