@@ -10,6 +10,7 @@ on insert/save/delete.
 """
 
 import json
+from urllib.parse import quote
 
 import frappe
 from frappe import _
@@ -211,7 +212,10 @@ def preview_link(survey_version):
 	version gets a permission error, not a survey.
 	"""
 	_require(survey_version, "read")
-	return {"url": frappe.utils.get_url("/survey?preview=" + frappe.utils.quoted(survey_version))}
+	# stdlib quote, not frappe.utils.quoted: one less unverified Frappe symbol on
+	# a path this session has already been bitten by four times. Question names
+	# are hashes today, so the escaping is belt and braces.
+	return {"url": frappe.utils.get_url("/survey?preview=" + quote(survey_version, safe=""))}
 
 
 @frappe.whitelist()

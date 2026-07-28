@@ -316,3 +316,43 @@ if problems:
 	sys.exit(1)
 print("All %d hooks.py references resolve." % len(refs))
 PY
+
+# No code may construct an asset URL pointing at the app's public/ SOURCE.
+#
+# /assets/<app>/ is the app's public/ directory — raw esbuild input, `import`
+# statements and all. Serving it hands the browser a module as a classic script:
+# "SyntaxError: Cannot use import statement outside a module", and the survey
+# page dies. Built output only ever lives at /assets/<app>/dist/…, under a
+# content-hashed name that cannot be written by hand — so the only correct way
+# to reference a bundle is to resolve it through assets.json, and a "fallback"
+# to the plain path is not a degraded mode, it is a broken one.
+python3 - <<'PY'
+import re, sys, pathlib
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+# The dot must be in the character class: every real bundle is named
+# <thing>.bundle.js, and a pattern of [\w/]* could not reach past the first dot -
+# so the first version of this check passed cleanly while looking straight at the
+# source path it exists to reject.
+bad_url = re.compile(r'["\']/assets/ucc_measurement_outcomes/(?!dist/)[\w/.]*\.(?:js|css)')
+problems = []
+for path in list(app.rglob("*.py")) + list(app.rglob("*.html")) + list(app.rglob("*.js")):
+	if "/public/" in str(path) and path.suffix == ".js":
+		continue                      # bundle sources, not URL builders
+	for m in bad_url.finditer(path.read_text()):
+		problems.append("%s builds an asset URL from the source path: %s" % (path, m.group(0)))
+
+# The resolver must verify what it got back, not just that a call returned.
+survey_py = (app / "www/survey.py").read_text()
+if "def _bundle_url" in survey_py and '"/dist/" in url' not in survey_py:
+	problems.append("www/survey.py:_bundle_url no longer checks that the resolved "
+	                "URL is a built (dist/) asset - bundled_asset returns its input "
+	                "unchanged when handed a path, which is how raw source shipped")
+
+if problems:
+	print("Asset URLs must point at built output:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	sys.exit(1)
+print("No asset URL is built from the public/ source path.")
+PY

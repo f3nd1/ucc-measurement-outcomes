@@ -8,8 +8,8 @@
    loaded and the page reported a failed build that had actually succeeded.
    Emitted here, above the inline bootstrap, so ordering is guaranteed by the
    parser rather than by which block the base template renders first. #}
-<link rel="stylesheet" href="{{ survey_css }}">
-<script src="{{ survey_js }}"></script>
+{% if survey_css %}<link rel="stylesheet" href="{{ survey_css }}">{% endif %}
+{% if survey_js %}<script src="{{ survey_js }}"></script>{% endif %}
 {# The banner is on the PAGE, not just in the Builder's link bar: the point is
    that it survives someone pasting the preview URL somewhere, which is exactly
    when the distinction matters and the Builder's styling is not there to help. #}

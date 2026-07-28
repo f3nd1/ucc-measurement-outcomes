@@ -476,6 +476,15 @@ from the cause. If a Studio page reports a missing UCC global, read the tail of
 `bench build` before debugging the page. `scripts/check_repo.sh` now catches the
 repo-side version of this before it reaches a bench.
 
-Also unverified without a bench: `frappe.utils.quoted` (used by
-`api.builder.preview_link`) and `frappe.utils.copy_to_clipboard` (used by both
-link controls).
+`bundled_asset` must be given the BARE bundle name, not a path: it only consults
+assets.json `if ".bundle." in path and not path.startswith("/assets")`, so an
+`/assets/…` argument is returned unchanged and the caller cannot tell the lookup
+never happened. `_bundle_url` now checks the result contains `/dist/` rather than
+trusting the call, and there is no fallback — `/assets/<app>/js/…` is the raw
+esbuild SOURCE, and serving it gives "Cannot use import statement outside a
+module".
+
+Both remaining unverified Frappe symbols are gone: `frappe.utils.quoted` is now
+stdlib `urllib.parse.quote`, and `frappe.utils.copy_to_clipboard` is behind
+`copyLink()`, which tries the native Clipboard API first and falls back to a
+`prompt()` the user can copy from.

@@ -32,24 +32,59 @@ from ucc_measurement_outcomes.api.public import preview_payload, public_survey_p
 # real site. Anonymous access model here assumes a public campaign token in the URL.
 
 
-def _bundle_url(path):
-	"""A bundle's content-hashed URL, falling back to the plain asset path.
+# The bundle NAMES, exactly as they appear as keys in sites/assets/assets.json -
+# which is also why app_include_js takes this form. NOT paths.
+ASSET_ERROR = ("This survey cannot be displayed right now. (Its assets are not built - "
+               "run: bench build --app ucc_measurement_outcomes)")
 
-	Bundle names, never a raw /assets/… path by choice: esbuild content-hashes
-	*.bundle.*, and a raw path is served with a one-year cache, which has already
-	caused a stale-asset bug in this app. The fallback still beats a blank page -
-	it loads, it just caches badly - and it is logged rather than silent.
+SURVEY_JS = "ucc_survey_form.bundle.js"
+SURVEY_CSS = "ucc_survey_form.bundle.css"
+
+
+def _bundle_url(name):
+	"""The content-hashed URL of a built bundle, or None.
+
+	There is NO fallback to /assets/<app>/js/<name>, and there must never be one.
+	That path is the app's public/ directory - the raw esbuild SOURCE, complete
+	with `import` statements - so serving it hands the browser a module as a
+	classic script and it dies on "Cannot use import statement outside a module".
+	A missing bundle has no safe substitute; the only honest options are the real
+	built file or a clear failure.
+
+	Why the previous attempt resolved to that source path every single time:
+	frappe.utils.jinja_globals.bundled_asset only consults assets.json when the
+	argument does NOT already start with "/assets" -
+
+	    if ".bundle." in path and not path.startswith("/assets"):
+	        path = get_assets_json().get(path) or path
+	    return abs_url(path)
+
+	- and it was being handed "/assets/ucc_measurement_outcomes/js/…". The lookup
+	was skipped and the input came straight back, so the guard-plus-fallback
+	never fired: from the caller's side it looked like a successful resolution.
+	Hence the bare name here, and hence the /dist/ check below, which verifies the
+	RESULT rather than trusting that the call did what it was asked.
 	"""
-	full = "/assets/ucc_measurement_outcomes/" + path
+	url = None
 	try:
 		from frappe.utils.jinja_globals import bundled_asset
 
-		return bundled_asset(full) or full
-	except Exception:
-		frappe.logger("ucc_public", allow_site=True).warning(
-			"bundled_asset unavailable; serving %s unhashed (it will cache for a year)" % full
+		url = bundled_asset(name)
+	except Exception as e:
+		frappe.logger("ucc_public", allow_site=True).error(
+			"bundled_asset unavailable (%s: %s) - cannot resolve %s" % (type(e).__name__, e, name)
 		)
-		return full
+		return None
+	# Every built bundle lands in dist/ under a content-hashed filename. Anything
+	# else is a lookup that quietly did nothing, which is precisely the failure
+	# that shipped a raw source file to the browser.
+	if url and "/dist/" in url:
+		return url
+	frappe.logger("ucc_public", allow_site=True).error(
+		"%s did not resolve to a built asset (got %r). Run: bench build --app "
+		"ucc_measurement_outcomes" % (name, url)
+	)
+	return None
 
 
 def get_context(context):
@@ -67,8 +102,12 @@ def get_context(context):
 	# Set BEFORE either branch, so preview and token render identically. That was
 	# already true when this broke - both branches were equally broken, preview
 	# was simply opened first - and check_repo.sh now asserts it stays true.
-	context.survey_js = _bundle_url("js/ucc_survey_form.bundle.js")
-	context.survey_css = _bundle_url("css/ucc_survey_form.bundle.css")
+	context.survey_js = _bundle_url(SURVEY_JS)
+	context.survey_css = _bundle_url(SURVEY_CSS)
+	# Unresolvable assets are a broken deployment, not a survey problem. Say so
+	# here rather than rendering a form whose JS can never run - both routes, one
+	# check, because both are equally dead without it.
+	context.assets_missing = not (context.survey_js and context.survey_css)
 	# Frappe's CSRF check runs in auth.py BEFORE any whitelisted method body and
 	# throws CSRFTokenError - a ValidationError subclass, so HTTP 400 with the
 	# message "Invalid Request". window.csrf_token is set for logged-in desk
@@ -91,7 +130,7 @@ def get_context(context):
 		context.preview = 1
 		context.token = ""          # never a token in preview - see the module docstring
 		context.survey = None
-		context.error = None
+		context.error = None if not context.assets_missing else ASSET_ERROR
 		try:
 			context.survey = preview_payload(preview)
 		except frappe.PermissionError:
@@ -104,7 +143,7 @@ def get_context(context):
 	token = frappe.form_dict.get("token")
 	context.token = token or ""
 	context.survey = None
-	context.error = None
+	context.error = None if not context.assets_missing else ASSET_ERROR
 	if not token:
 		context.error = "This survey link is missing its token."
 		return context

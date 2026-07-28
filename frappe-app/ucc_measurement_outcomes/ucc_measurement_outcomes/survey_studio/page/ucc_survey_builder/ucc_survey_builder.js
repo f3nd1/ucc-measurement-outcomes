@@ -102,6 +102,22 @@ const TYPE_ICON = {
 	"Checkbox Grid": ["grid", "▣"],
 };
 
+// Copy, without assuming frappe.utils.copy_to_clipboard exists. It is not
+// documented API and this session has already lost four rounds to unverified
+// symbols; a Copy button that throws would leave no way to get the link at all.
+// Native clipboard first, Frappe's helper second, and a prompt() the user can
+// copy out of as the floor - every branch ends with the link reachable.
+function copyLink(url) {
+	const done = () => frappe.show_alert({ message: __("Link copied"), indicator: "green" });
+	if (navigator.clipboard && navigator.clipboard.writeText) {
+		return navigator.clipboard.writeText(url).then(done, () => window.prompt(__("Copy this link:"), url));
+	}
+	if (frappe.utils && frappe.utils.copy_to_clipboard) {
+		return frappe.utils.copy_to_clipboard(url);
+	}
+	window.prompt(__("Copy this link:"), url);
+}
+
 // Frappe injects its sprite inline, so every available icon really is an element
 // with id="icon-<name>". That makes "is this icon real?" a one-line DOM lookup
 // rather than a guess against a file this session cannot read.
@@ -463,11 +479,7 @@ class SurveyBuilder {
 			this.$link.append(`<span class="ucc-sb-linklabel">${__("Public link")}</span>`);
 			this.$link.append($(`<a href="${frappe.utils.escape_html(r.url)}" target="_blank" rel="noopener">${frappe.utils.escape_html(r.url)}</a>`));
 			$(`<button class="btn btn-xs btn-default">${__("Copy")}</button>`).appendTo(this.$link)
-				.on("click", () => {
-					// frappe.utils.copy_to_clipboard already handles the
-					// clipboard API + textarea fallback and shows its own alert.
-					frappe.utils.copy_to_clipboard(r.url);
-				});
+				.on("click", () => copyLink(r.url));
 			this.$link.append(more);
 		});
 	}
@@ -488,7 +500,7 @@ class SurveyBuilder {
 			this.$preview.append(`<span class="ucc-sb-previewpill">${__("PREVIEW")}</span>`);
 			this.$preview.append(`<span class="ucc-sb-linkoff">${__("Collects nothing. Needs a login — do not send to respondents.")}</span>`);
 			$(`<button class="btn btn-xs btn-default">${__("Copy")}</button>`).appendTo(this.$preview)
-				.on("click", () => frappe.utils.copy_to_clipboard(r.url));
+				.on("click", () => copyLink(r.url));
 			$(`<a class="btn btn-xs btn-default" href="${frappe.utils.escape_html(r.url)}" target="_blank" rel="noopener">${__("Open ↗")}</a>`)
 				.appendTo(this.$preview);
 		});
