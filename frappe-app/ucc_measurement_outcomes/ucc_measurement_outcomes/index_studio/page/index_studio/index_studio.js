@@ -140,12 +140,18 @@ class IndexStudio {
 		this.$create = $(`<button class="btn btn-default btn-sm">${__("Create")}</button>`).appendTo($bar);
 		this.$create.on("click", () => this._createFromTemplate());
 		$('<span style="width:10px"></span>').appendTo($bar);
-		this.$validate = $(`<button class="btn btn-default btn-sm">${__("Validate")}</button>`).appendTo($bar).on("click", () => this._validate());
+		// Born disabled. this.version is only set in load()'s callback, so on a
+		// cold page these two were live with nothing loaded: clicking Validate
+		// sent index_version: undefined, frappe.call dropped the undefined key,
+		// and the endpoint got {} and raised a TypeError. Publish had exactly the
+		// same hole (its disabled state was also only ever set inside load()).
+		// load() re-enables them.
+		this.$validate = $(`<button class="btn btn-default btn-sm" disabled>${__("Validate")}</button>`).appendTo($bar).on("click", () => this._validate());
 		// Item 4: Publish is the page's consequential action, but it is not
 		// destructive — btn-danger read as "this deletes something". btn-primary
 		// gives it the weight; irreversibility is carried by _publish()'s confirm.
 		// Create drops to btn-default so the primary slot is not contested.
-		this.$publish = $(`<button class="btn btn-primary btn-sm">${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
+		this.$publish = $(`<button class="btn btn-primary btn-sm" disabled>${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
 		this.$badge = $('<span style="margin-left:6px;font-size:12px"></span>').appendTo($bar);
 		frappe.call({
 			method: IAPI + "list_index_templates",
@@ -272,7 +278,8 @@ class IndexStudio {
 				this.metrics = r.message.metrics || [];
 				this.editable = !!r.message.editable;
 				this.selectedKey = null;
-				this.$publish.prop("disabled", !this.editable);
+				this.$validate.prop("disabled", false);
+			this.$publish.prop("disabled", !this.editable);
 				this.$badge.text(this.editable ? "" : __("Published (read-only)"));
 				// (a) The template picker is a CREATE-NEW control and never
 				// describes what is loaded, but it sits next to the version field
@@ -538,7 +545,17 @@ class IndexStudio {
 		});
 	}
 
+	// Same guard Mapping Studio already uses before its version-scoped calls.
+	// The disabled buttons are the affordance; this is the invariant, and it also
+	// covers _validate()'s internal caller in _removeNode().
+	_needVersion() {
+		if (this.version) return true;
+		frappe.msgprint(__("Pick or create an index version first."));
+		return false;
+	}
+
 	_validate() {
+		if (!this._needVersion()) return;
 		frappe.call({
 			method: IAPI + "validate_index",
 			args: { index_version: this.version },
@@ -559,6 +576,7 @@ class IndexStudio {
 	}
 
 	_publish() {
+		if (!this._needVersion()) return;
 		frappe.confirm(__("Publish this index version? It becomes immutable."), () => {
 			frappe.call({
 				method: IAPI + "publish_version",
