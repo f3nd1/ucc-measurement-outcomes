@@ -91,6 +91,7 @@ bench --site <site> run-tests --module ucc_measurement_outcomes.test_integration
 - State material assumptions before major work; anything bench-dependent goes in `frappe-app/BENCH_VERIFY.md` with a `# TODO: bench-verify` marker, not a guess.
 - Keep changes focused and reviewable; do not give Guest access to internal APIs; do not allow arbitrary SQL from Data Explorer.
 - Record architecture/scope/data-model decisions in `docs/09-decision-log.md`.
+- **Bump `__version__` in `frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes/__init__.py` on every release or checkpoint batch**, so bench's Installed Applications list shows what is actually deployed instead of sitting at 0.0.1 forever. That file is the only place to edit: `pyproject.toml` declares `dynamic = ["version"]` and flit reads it from there.
 - Every completed feature: observable behaviour, permission checks, server-side validation, error/empty states, a focused test, a docs update, verification notes.
 
 ## Documentation to read first
