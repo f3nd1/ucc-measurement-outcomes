@@ -203,3 +203,49 @@ if problems:
 	sys.exit(1)
 print("All %d bundle entry points resolve, and every referenced file is tracked." % len(entries))
 PY
+
+# /survey's two branches (?token= and ?preview=) must serve the SAME assets.
+# Guaranteed structurally rather than by comparing two lists: the assets are set
+# once, before any branch can return. When survey_form.js failed to load on the
+# preview route this was already true — both branches were equally broken, the
+# preview one was just opened first — and the fix would be worthless if a later
+# edit moved the assignment inside a branch.
+python3 - <<'PY'
+import re, sys, pathlib
+
+src = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes"
+                   "/www/survey.py").read_text()
+body = src[src.index("def get_context(context):"):]
+lines = body.split("\n")
+
+
+def first(pattern):
+	for i, line in enumerate(lines):
+		if re.search(pattern, line):
+			return i
+	return None
+
+
+assets = [first(r"context\.survey_js\s*="), first(r"context\.survey_css\s*=")]
+ret = first(r"^\t(?:return|if)\b")          # the first branch or early return
+problems = []
+if None in assets:
+	problems.append("get_context no longer sets context.survey_js / survey_css")
+elif ret is not None and max(assets) > ret:
+	problems.append("assets are set AFTER the first branch, so one route renders "
+	                "without them - set them before any branch can return")
+
+# Both must actually reach the template.
+tpl = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes"
+                   "/www/survey.html").read_text()
+for var in ("survey_css", "survey_js"):
+	if "{{ %s }}" % var not in tpl:
+		problems.append("survey.html does not render %s" % var)
+
+if problems:
+	print("Asset wiring on /survey:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	sys.exit(1)
+print("Both /survey branches serve the same assets.")
+PY

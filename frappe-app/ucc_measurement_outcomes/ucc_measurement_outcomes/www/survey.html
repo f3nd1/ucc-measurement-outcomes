@@ -3,6 +3,13 @@
 {% block title %}{{ (survey.title if survey else "Survey") }}{% endblock %}
 
 {% block page_content %}
+{# Explicit tags, not context.include_js/include_css: those are rendered for a
+   Web Page document, not for a www/ template page, so the form's own JS never
+   loaded and the page reported a failed build that had actually succeeded.
+   Emitted here, above the inline bootstrap, so ordering is guaranteed by the
+   parser rather than by which block the base template renders first. #}
+<link rel="stylesheet" href="{{ survey_css }}">
+<script src="{{ survey_js }}"></script>
 {# The banner is on the PAGE, not just in the Builder's link bar: the point is
    that it survives someone pasting the preview URL somewhere, which is exactly
    when the distinction matters and the Builder's styling is not there to help. #}

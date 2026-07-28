@@ -446,10 +446,19 @@ raw paths are served with a one-year cache, which already caused a real
 stale-asset bug in this app (see the comment in
 `public/js/ucc_measurement_outcomes.bundle.js`).
 
+**RESOLVED 2026-07-28.** `context.include_js` / `include_css` are rendered for a
+Web Page *document*, not for a `www/` *template* page — so the form's JS never
+loaded, on either route. `survey.py` now resolves the hashed URL itself
+(`frappe.utils.jinja_globals.bundled_asset`, falling back to the plain asset path
+and logging if that import ever moves) and `survey.html` emits explicit
+`<link>`/`<script>` tags above the inline bootstrap.
+
 **Verify:** `bench build --app ucc_measurement_outcomes && bench restart`, then
-open `/survey?token=…` and confirm the form renders styled. The page fails
-loudly rather than silently if the JS did not load — it replaces itself with
-"This survey could not be loaded" and logs the build command to the console.
+open `/survey?token=…` **and** `/survey?preview=<version>` and confirm both
+render styled. The page fails loudly rather than silently if the JS did not load
+— it replaces itself with "This survey could not be loaded" and logs the build
+command to the console. That message means *the global is absent*, which is not
+the same as the build having failed.
 
 If `templates/web.html` on this Frappe version does not render
 `context.include_js`/`include_css` for a **www** page (it does for Web Page),

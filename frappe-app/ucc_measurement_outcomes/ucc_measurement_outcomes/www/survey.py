@@ -32,19 +32,43 @@ from ucc_measurement_outcomes.api.public import preview_payload, public_survey_p
 # real site. Anonymous access model here assumes a public campaign token in the URL.
 
 
+def _bundle_url(path):
+	"""A bundle's content-hashed URL, falling back to the plain asset path.
+
+	Bundle names, never a raw /assets/… path by choice: esbuild content-hashes
+	*.bundle.*, and a raw path is served with a one-year cache, which has already
+	caused a stale-asset bug in this app. The fallback still beats a blank page -
+	it loads, it just caches badly - and it is logged rather than silent.
+	"""
+	full = "/assets/ucc_measurement_outcomes/" + path
+	try:
+		from frappe.utils.jinja_globals import bundled_asset
+
+		return bundled_asset(full) or full
+	except Exception:
+		frappe.logger("ucc_public", allow_site=True).warning(
+			"bundled_asset unavailable; serving %s unhashed (it will cache for a year)" % full
+		)
+		return full
+
+
 def get_context(context):
 	context.no_cache = 1
-	# Per-page assets, not web_include_js/css hooks: those would load the survey
-	# form onto every website page in the site for no reason. Bundle names, not
-	# raw /assets/… paths - esbuild content-hashes *.bundle.*, and a raw path is
-	# served with a one-year cache that has already caused a stale-asset bug in
-	# this app. bundled_asset() resolves the name to the hashed file.
-	# TODO: bench-verify - confirm templates/web.html on this Frappe version
-	# renders context.include_js/include_css for a www page (it does for Web
-	# Page). If not, fall back to explicit <script>/<link> tags in the template;
-	# the page bootstraps on DOMContentLoaded either way, so load order is safe.
-	context.include_js = ["ucc_survey_form.bundle.js"]
-	context.include_css = ["ucc_survey_form.bundle.css"]
+	# The page's own assets, resolved to a URL here and rendered as explicit tags
+	# by the template.
+	#
+	# This used to set context.include_js / include_css, which is the documented
+	# mechanism for a Web Page DOCUMENT but is not rendered for a www/ TEMPLATE
+	# page - the exact thing the TODO here warned about. The symptom was
+	# survey_form.js never loading and the page saying "run bench build", which
+	# is what it says whenever the global is absent, so it pointed at a build
+	# that had in fact succeeded.
+	#
+	# Set BEFORE either branch, so preview and token render identically. That was
+	# already true when this broke - both branches were equally broken, preview
+	# was simply opened first - and check_repo.sh now asserts it stays true.
+	context.survey_js = _bundle_url("js/ucc_survey_form.bundle.js")
+	context.survey_css = _bundle_url("css/ucc_survey_form.bundle.css")
 	# Frappe's CSRF check runs in auth.py BEFORE any whitelisted method body and
 	# throws CSRFTokenError - a ValidationError subclass, so HTTP 400 with the
 	# message "Invalid Request". window.csrf_token is set for logged-in desk
