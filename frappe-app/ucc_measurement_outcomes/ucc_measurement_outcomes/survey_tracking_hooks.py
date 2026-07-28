@@ -20,17 +20,19 @@ from frappe import _
 TOKEN_LENGTH = 24
 
 
-def before_insert(doc, method=None):
-	# Only mint a token for rows actually being used as a campaign. Historical
-	# Survey Tracking rows are post-hoc consolidation records and must not be
-	# handed a public collection link.
-	if doc.get("ucc_collection_status") and not doc.get("ucc_public_token"):
-		doc.ucc_public_token = frappe.generate_hash(length=TOKEN_LENGTH)
-
-
 def validate(doc, method=None):
 	if not doc.get("ucc_collection_status"):
 		return
+	# Mint the token here, not in before_insert. before_insert only fires on
+	# creation, so the obvious workflow - create the tracking row, then set its
+	# collection status - left the row permanently token-less and its public link
+	# unreachable, with nothing saying why. validate runs on insert AND on every
+	# save, so the token appears the moment the row becomes a campaign.
+	# Only rows actually being used as a campaign get one: historical Survey
+	# Tracking rows are post-hoc consolidation records with no collection status,
+	# and must never be handed a public collection link.
+	if not doc.get("ucc_public_token"):
+		doc.ucc_public_token = frappe.generate_hash(length=TOKEN_LENGTH)
 	if not doc.get("ucc_survey_version"):
 		frappe.throw(
 			_("A Survey Tracking record used for collection needs a UCC Survey Version - "

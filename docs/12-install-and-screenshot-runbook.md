@@ -241,6 +241,57 @@ link-field selection is brittle and not worth it for a one-off.
 
 ---
 
+## Part D1 — Draft → collecting responses (the click path)
+
+The whole path, and every step of it that still has no purpose-built UI.
+
+**0. Reach the Survey Builder.** `/app/measurement-outcomes` — the Measurement
+Outcomes workspace, which lists all seven Desk pages and the main record types.
+The awesomebar also finds it: type "UCC Survey Builder". *(The workspace ships in
+`survey_studio/workspace/` and appears after `bench migrate`; see
+BENCH_VERIFY.md — it was authored without a bench.)*
+
+**1. Build the questions.** Pick a Draft version in the picker, drag types from
+the palette, edit in the Inspector. Preview paginates exactly as respondents see
+it.
+
+**2. Draft → Published.** ⚠️ **No Publish button exists in the Builder.** Click
+the pencil on the version in the picker (that routes to the UCC Survey Version
+form), set **Status = Published**, Save. The version freezes on save: status
+*and* content, permanently.
+
+**3. The campaign is a Survey Tracking record.** ⚠️ **No create-campaign UI
+exists in the Builder either.** New → Survey Tracking (educ_sg's DocType; it
+requires an existing Survey Management record — decision 2026-07-26). In the
+**UCC Campaign** section this app adds:
+
+| Field | Set it to |
+|---|---|
+| UCC Survey Version | the version you just published |
+| Collection Status | `Open` |
+| Access Mode | `Anonymous Link` |
+| Allow Multiple Responses | tick only if one person may answer more than once |
+
+**4. The token mints itself.** `ucc_public_token` is generated on save by
+`survey_tracking_hooks.validate` as soon as Collection Status is set — including
+when you set it on a row that already existed. (It used to mint only in
+`before_insert`, so creating the row first and setting the status afterwards left
+it permanently token-less with nothing saying why. Fixed 2026-07-28.) Historical
+Survey Tracking rows have no collection status and never get a token.
+
+**5. The link appears in the Builder.** Reload the Survey Builder on that
+version: a **Public link** bar sits under the toolbar with the full
+`/survey?token=…` URL and a Copy button. If it instead shows a sentence, that
+sentence is the reason — version not Published, no campaign pointing at it, the
+campaign not Open, or no token yet.
+
+**6. Collect.** Open the link in a private window. Submissions land as UCC Survey
+Submission + one UCC Survey Answer per question.
+
+**Known gaps (no UI, Desk form or console only):** publishing a version,
+creating the campaign, and setting the collection window dates. Everything else
+in the path is now reachable from the Builder.
+
 ## Part D2 — Branding the public survey page (optional)
 
 `/survey?token=…` extends `templates/web.html`, so it already inherits the

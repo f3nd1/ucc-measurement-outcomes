@@ -32,7 +32,6 @@ fixtures = [
 # fields that need behaviour get it here rather than in educ_sg.
 doc_events = {
 	"Survey Tracking": {
-		"before_insert": "ucc_measurement_outcomes.survey_tracking_hooks.before_insert",
 		"validate": "ucc_measurement_outcomes.survey_tracking_hooks.validate",
 	},
 }

@@ -1,0 +1,185 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"ucc_hdr_studios\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\">Measurement Outcomes</span>\", \"col\": 12}}, {\"id\": \"ucc_card_studios\", \"type\": \"card\", \"data\": {\"card_name\": \"Studios\", \"col\": 4}}, {\"id\": \"ucc_card_records\", \"type\": \"card\", \"data\": {\"card_name\": \"Records\", \"col\": 4}}]",
+ "creation": "2026-07-28 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "tool",
+ "idx": 0,
+ "indicator_color": "",
+ "is_hidden": 0,
+ "label": "Measurement Outcomes",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Studios",
+   "link_count": 7,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Survey Builder",
+   "link_count": 0,
+   "link_to": "ucc-survey-builder",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Mapping Studio",
+   "link_count": 0,
+   "link_to": "mapping-studio",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Index Studio",
+   "link_count": 0,
+   "link_to": "index-studio",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Dashboard Studio",
+   "link_count": 0,
+   "link_to": "ucc-dashboard-studio",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Data Explorer",
+   "link_count": 0,
+   "link_to": "data-explorer",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Campaign Analytics",
+   "link_count": 0,
+   "link_to": "ucc-campaign-analytics",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Lineage Report",
+   "link_count": 0,
+   "link_to": "ucc-lineage-report",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Records",
+   "link_count": 7,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Survey",
+   "link_count": 0,
+   "link_to": "UCC Survey",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Survey Version",
+   "link_count": 0,
+   "link_to": "UCC Survey Version",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Survey Submission",
+   "link_count": 0,
+   "link_to": "UCC Survey Submission",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Objective",
+   "link_count": 0,
+   "link_to": "UCC Objective",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Metric Definition",
+   "link_count": 0,
+   "link_to": "UCC Metric Definition",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Index Definition",
+   "link_count": 0,
+   "link_to": "UCC Index Definition",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "UCC Index Result",
+   "link_count": 0,
+   "link_to": "UCC Index Result",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "Measurement Outcomes",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [],
+ "title": "Measurement Outcomes"
+}

@@ -68,6 +68,46 @@ const MULTI_MATRIX_TYPES = new Set(["Checkbox Grid"]);
 // Must match layout_width's Select options and the WIDTHS map in www/survey.html.
 const WIDTHS = ["Full Width", "Two Thirds", "Half", "One Third"];
 const WIDTH_CLASS = { "Two Thirds": "ucc-sb-w8", "Half": "ucc-sb-w6", "One Third": "ucc-sb-w4" };
+
+// Palette icons: [sprite name, text fallback]. Frappe's own sprite first (no new
+// files, no icon library), but the sprite's contents cannot be enumerated
+// without a bench - so instead of guessing and shipping invisible chips, each
+// entry carries a glyph and iconFor() checks whether the symbol is actually in
+// the page before using it. A wrong or missing sprite name costs nothing.
+// name === null means "no sprite icon fits, use the glyph" (NPS, Slider).
+const TYPE_ICON = {
+	"Short Text": ["edit", "Aa"],
+	"Paragraph": ["small-message", "¶"],
+	"Email": ["mail", "@"],
+	"Number": ["number", "#"],
+	"Date": ["calendar", "31"],
+	"Rating": ["star", "★"],
+	"Single Choice": ["circle", "◉"],
+	"Multiple Choice": ["check-square", "☑"],
+	"Dropdown": ["select", "▾"],
+	"Yes / No": ["check", "✓"],
+	"Likert Matrix": ["grid", "▦"],
+	"NPS": [null, "0–10"],
+	"Ranking": ["sort-ascending", "↕"],
+	"Slider": [null, "⇔"],
+	"File Upload": ["attachment", "⇧"],
+	"Section Heading": ["text", "§"],
+	"Page Break": ["insert-below", "⏎"],
+	"Multiple Choice Grid": ["grid", "▤"],
+	"Checkbox Grid": ["grid", "▣"],
+};
+
+// Frappe injects its sprite inline, so every available icon really is an element
+// with id="icon-<name>". That makes "is this icon real?" a one-line DOM lookup
+// rather than a guess against a file this session cannot read.
+function iconFor(type) {
+	const [name, glyph] = TYPE_ICON[type] || [null, "?"];
+	if (name && document.getElementById("icon-" + name) && frappe.utils.icon) {
+		return frappe.utils.icon(name, "sm");
+	}
+	return `<span class="ucc-sb-glyph">${frappe.utils.escape_html(glyph)}</span>`;
+}
+
 // Display-logic UI removed per decision V1: the fields exist in the schema but
 // nothing executes them yet. Re-add the controls together with the logic
 // engine (which must include a server-side logic-aware required check).
@@ -132,6 +172,17 @@ class SurveyBuilder {
 		.ucc-sb-bulkbar.show{display:flex}
 		.ucc-sb-palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 		.ucc-sb-chip{border:1px solid var(--border-color,#e2e6ea);border-radius:8px;padding:8px 6px;font-size:11px;text-align:center;cursor:grab;user-select:none;background:var(--fg-color,#fff)}
+		/* Icon ABOVE the label, never instead of it: the sprite name for a given
+		   type is unverified without a bench, so a chip must still read if its
+		   icon never resolves. */
+		.ucc-sb-chip .icon{display:block;margin:0 auto 4px;color:var(--text-muted,#8b95a5)}
+		.ucc-sb-glyph{display:block;font-size:14px;line-height:1;margin-bottom:4px;color:var(--text-muted,#8b95a5)}
+		.ucc-sb-chiplabel{display:block;line-height:1.25}
+		.ucc-sb-link{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;
+			background:var(--card-bg,#f7f9fc);border:1px solid var(--border-color,#e2e6ea);border-radius:8px;padding:7px 10px}
+		.ucc-sb-link a{word-break:break-all}
+		.ucc-sb-linklabel{font-weight:600;color:var(--text-muted,#8b95a5)}
+		.ucc-sb-linkoff{color:var(--text-muted,#8b95a5)}
 		.ucc-sb-chip:hover{border-color:var(--primary,#4a63e7)}
 		.ucc-sb-list{min-height:220px;display:flex;flex-direction:column;gap:9px}
 		.ucc-sb-empty{border:2px dashed var(--border-color,#cbd4df);border-radius:10px;padding:28px;text-align:center;color:var(--text-muted,#8b95a5)}
@@ -162,14 +213,19 @@ class SurveyBuilder {
 		   the respondent gets. Same rule: never grid-auto-flow:dense. The mobile
 		   toggle is a fixed-width sheet, not a narrow viewport, so the collapse is
 		   keyed off .mobile here rather than a media query. */
-		.ucc-sb-previewform{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
+		/* The grid is per PAGE, same as www/survey.html - a survey with no Page
+		   Break is one page, i.e. one grid. Class, not [hidden]: display:grid
+		   would otherwise win. */
+		.ucc-sb-page{display:none}
+		.ucc-sb-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
+		.ucc-sb-pagenav{display:flex;align-items:center;gap:8px;margin-top:14px;
+			padding-top:10px;border-top:1px solid var(--border-color,#e2e6ea)}
+		.ucc-sb-pagepos{font-size:11px;color:#8b95a5;margin-left:auto}
 		.ucc-sb-pq,.ucc-sb-sec{grid-column:1/-1}
 		.ucc-sb-w8{grid-column:span 8}
 		.ucc-sb-w6{grid-column:span 6}
 		.ucc-sb-w4{grid-column:span 4}
 		.ucc-sb-sheet.mobile .ucc-sb-pq{grid-column:1/-1}
-		.ucc-sb-pagebreak{border-top:2px dashed #b9c2d0;text-align:center;font-size:11px;
-			color:#8b95a5;text-transform:uppercase;letter-spacing:.5px;padding-top:6px;margin-top:10px}
 		.ucc-sb-cond{font-size:11px;color:#8b95a5;margin-bottom:6px}
 		.ucc-sb-pq label.q{display:block;font-weight:600;margin-bottom:6px}
 		/* Item 2: same star markup/classes as the public form's, so the preview
@@ -232,6 +288,10 @@ class SurveyBuilder {
 		$(`<button class="btn btn-default btn-sm">${__("Preview")}</button>`).appendTo($tb).on("click", () => this._preview());
 		this.$undo = $(`<button class="btn btn-default btn-sm" disabled>${__("Undo")}</button>`).appendTo($tb).on("click", () => this._undo());
 		this.$redo = $(`<button class="btn btn-default btn-sm" disabled>${__("Redo")}</button>`).appendTo($tb).on("click", () => this._redo());
+		// Item 4: the public link had no UI at all - a published version with an
+		// open campaign gave no way to see or copy the URL respondents use. It
+		// lives next to the toolbar so it is visible the moment a version loads.
+		this.$link = $('<div class="ucc-sb-link" style="display:none"></div>').appendTo($main);
 		this.$bulk = $('<div class="ucc-sb-bulkbar"></div>').appendTo($main);
 		this.$banner = $('<div class="ucc-sb-banner" style="display:none"></div>').appendTo($main);
 		const $grid = $('<div class="ucc-sb-grid"></div>').appendTo($main);
@@ -326,7 +386,7 @@ class SurveyBuilder {
 	_renderPalette() {
 		this.$palette.empty();
 		QUESTION_TYPES.forEach((t) => {
-			const $c = $(`<div class="ucc-sb-chip" draggable="true">${frappe.utils.escape_html(t)}</div>`);
+			const $c = $(`<div class="ucc-sb-chip" draggable="true" title="${frappe.utils.escape_html(t)}">${iconFor(t)}<span class="ucc-sb-chiplabel">${frappe.utils.escape_html(t)}</span></div>`);
 			$c.on("dragstart", (e) => e.originalEvent.dataTransfer.setData("newType", t));
 			this.$palette.append($c);
 		});
@@ -356,6 +416,7 @@ class SurveyBuilder {
 			this._renderTrail();
 			this._applyPendingQuestion();   // finding 2: arrived via deep link
 			this._loadCoverage();           // finding 3: mapping status
+			this._renderPublicLink();       // item 4: /survey?token=… link surface
 			// The banner above just toggled, which moves the grid's top offset.
 			this._layoutColumns();
 			this.picker.setItems(this.versionItems || [], this.version.name);
@@ -366,6 +427,31 @@ class SurveyBuilder {
 	// right after "+ New Version" — same stale-list defect fixed earlier this
 	// session in Mapping/Dashboard Studio (a list built once in a constructor
 	// never reflects anything created afterwards).
+	// Reason-or-link, never a dead control: a Draft version, a version with no
+	// campaign, and a campaign that is Closed each say what is missing.
+	_renderPublicLink() {
+		if (!this.version) return this.$link.hide();
+		this._call("public_link", { survey_version: this.version.name }).then((r) => {
+			if (!r) return this.$link.hide();
+			this.$link.show().empty();
+			if (!r.url) {
+				return this.$link.append(
+					$(`<span class="ucc-sb-linkoff">${frappe.utils.escape_html(r.reason || "")}</span>`)
+				);
+			}
+			const more = r.more ? ` <span class="ucc-sb-linkoff">${__("(+{0} more open campaign)", [r.more])}</span>` : "";
+			this.$link.append(`<span class="ucc-sb-linklabel">${__("Public link")}</span>`);
+			this.$link.append($(`<a href="${frappe.utils.escape_html(r.url)}" target="_blank" rel="noopener">${frappe.utils.escape_html(r.url)}</a>`));
+			$(`<button class="btn btn-xs btn-default">${__("Copy")}</button>`).appendTo(this.$link)
+				.on("click", () => {
+					// frappe.utils.copy_to_clipboard already handles the
+					// clipboard API + textarea fallback and shows its own alert.
+					frappe.utils.copy_to_clipboard(r.url);
+				});
+			this.$link.append(more);
+		});
+	}
+
 	_loadVersionList() {
 		frappe.call({
 			method: API + "list_versions",
@@ -646,23 +732,65 @@ class SurveyBuilder {
 		});
 	}
 
+	// Identical to www/survey.html's split: a page is the run of questions
+	// between two Page Break markers, and a survey with no break is one page.
+	// Deliberately a second copy of five lines rather than a shared module: the
+	// only way to literally share it is a JS file loaded on BOTH surfaces, and
+	// the guest form is not allowed to gain an external bundle. Kept
+	// character-for-character alike so a change to one is obvious in the other.
+	// ponytail: 5 duplicated lines; extract only if the public page ever gets a
+	// bundle for another reason.
+	_pages() {
+		const pages = [[]];
+		this.questions.forEach((q) => {
+			if (q.question_type === "Page Break") { pages.push([]); return; }
+			pages[pages.length - 1].push(q);
+		});
+		const kept = pages.filter((p) => p.length);
+		return kept.length ? kept : [[]];
+	}
+
 	_preview() {
 		let mobile = false;
-		const form = this.questions.map((q, i) => {
-			if (q.question_type === "Section Heading") return `<h4 class="ucc-sb-sec">${frappe.utils.escape_html(q.question_text || "")}</h4>`;
-			// Preview shows where the page splits, but does not paginate: it is a
-			// layout check, and the respondent-facing form is the real one.
-			if (q.question_type === "Page Break") return `<div class="ucc-sb-sec ucc-sb-pagebreak">${__("Page break")}</div>`;
-			const logic = q.display_logic && q.display_logic !== LOGIC_MODES[0]
-				? `<div class="ucc-sb-cond">${__("Shown only when an earlier answer matches")}</div>` : "";
-			return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}"><label class="q">${i + 1}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${logic}${this._previewInput(q)}</div>`;
+		const pages = this._pages();
+		let n = 0;   // numbering skips markers and never restarts per page
+		const form = pages.map((page, pi) => {
+			const body = page.map((q) => {
+				if (q.question_type === "Section Heading") return `<h4 class="ucc-sb-sec">${frappe.utils.escape_html(q.question_text || "")}</h4>`;
+				n += 1;
+				const logic = q.display_logic && q.display_logic !== LOGIC_MODES[0]
+					? `<div class="ucc-sb-cond">${__("Shown only when an earlier answer matches")}</div>` : "";
+				return `<div class="ucc-sb-pq ${WIDTH_CLASS[q.layout_width] || ""}"><label class="q">${n}. ${frappe.utils.escape_html(q.question_text || "")} ${q.is_required ? '<span class="ucc-sb-req">*</span>' : ""}</label>${logic}${this._previewInput(q)}</div>`;
+			}).join("");
+			return `<div class="ucc-sb-page${pi === 0 ? " active" : ""}" data-page="${pi}">${body}</div>`;
 		}).join("");
+		const nav = pages.length > 1 ? `<div class="ucc-sb-pagenav">
+			<button class="btn btn-xs btn-default ucc-sb-back">${__("Back")}</button>
+			<button class="btn btn-xs btn-primary ucc-sb-next">${__("Next")}</button>
+			<span class="ucc-sb-pagepos"></span></div>` : "";
 		this._sheet(mobile, `<h5>${__("Preview")} — <span class="ucc-sb-vp"></span></h5>
 			<button class="btn btn-xs btn-default ucc-sb-toggle" style="margin-bottom:10px">${__("Toggle desktop / mobile")}</button>
-			<div class="ucc-sb-previewform">${form}</div>`);
+			<div class="ucc-sb-previewform">${form}</div>${nav}`);
 		const setvp = () => { this._modal.find(".ucc-sb-sheet").toggleClass("mobile", mobile); this._modal.find(".ucc-sb-vp").text(mobile ? __("Mobile") : __("Desktop")); };
 		setvp();
 		this._modal.find(".ucc-sb-toggle").on("click", () => { mobile = !mobile; setvp(); });
+		// Real pagination, like the respondent's form: one page at a time. No
+		// required-check on Next here - Preview collects nothing and submits
+		// nothing, so blocking the builder from looking at page 2 would be theatre.
+		if (pages.length > 1) {
+			let current = 0;
+			const showPage = (i) => {
+				current = i;
+				this._modal.find(".ucc-sb-page").each((n2, el) => $(el).toggleClass("active", n2 === i));
+				this._modal.find(".ucc-sb-back").prop("disabled", i === 0);
+				this._modal.find(".ucc-sb-next").prop("disabled", i === pages.length - 1);
+				this._modal.find(".ucc-sb-pagepos").text(__("Page {0} of {1}", [i + 1, pages.length]));
+				this._modal.find(".ucc-sb-sheet").scrollTop(0);
+			};
+			this._modal.find(".ucc-sb-back").on("click", () => showPage(current - 1));
+			this._modal.find(".ucc-sb-next").on("click", () => showPage(current + 1));
+			showPage(0);
+		}
 		// Item 2: fill stars up to the checked one. Delegated once per preview
 		// render rather than per-star, since the sheet's HTML is rebuilt fresh
 		// each time _preview() runs.

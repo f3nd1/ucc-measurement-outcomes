@@ -149,6 +149,56 @@ def get_survey_builder(survey_version):
 	return {"version": version, "questions": questions, "editable": not version["is_immutable"]}
 
 
+TRACKING = "Survey Tracking"
+
+
+@frappe.whitelist()
+def public_link(survey_version):
+	"""The respondent-facing /survey?token=… link for a version, or why there
+	isn't one yet.
+
+	Until now the token existed only in the database: a published version with an
+	open campaign gave no way to see its link from any UI. Always returns a
+	reason rather than an empty string, so the builder can say what is missing
+	instead of showing a dead control.
+	"""
+	_require(survey_version, "read")
+	status = frappe.db.get_value(VERSION, survey_version, "status")
+	if status != "Published":
+		return {"url": None, "reason": _("This version is {0}. Publish it before it can collect responses.").format(_(status or "Draft"))}
+	if not frappe.has_permission(TRACKING, "read"):
+		# The token is the whole access control on a public survey - never hand
+		# it to someone who cannot read the campaign it belongs to.
+		return {"url": None, "reason": _("You do not have permission to see this survey's campaign.")}
+
+	rows = frappe.get_all(
+		TRACKING,
+		filters={"ucc_survey_version": survey_version},
+		fields=["name", "ucc_collection_status", "ucc_public_token"],
+		order_by="modified desc",
+	)
+	if not rows:
+		return {"url": None, "reason": _("No campaign points at this version yet. Create a Survey Tracking record for it to start collecting.")}
+	open_rows = [r for r in rows if r.ucc_collection_status == "Open" and r.ucc_public_token]
+	if not open_rows:
+		r = rows[0]
+		if not r.ucc_public_token:
+			return {"url": None, "campaign": r.name,
+					"reason": _("Campaign {0} has no public token yet.").format(r.name)}
+		return {"url": None, "campaign": r.name,
+				"reason": _("Campaign {0} is {1}, not Open, so the link would not accept responses.").format(
+					r.name, _(r.ucc_collection_status or "not set"))}
+	r = open_rows[0]
+	# ponytail: newest open campaign wins when a version has several. Return a
+	# list here if UCC ever runs parallel campaigns off one version.
+	return {
+		"url": frappe.utils.get_url("/survey?token=" + r.ucc_public_token),
+		"campaign": r.name,
+		"reason": None,
+		"more": len(open_rows) - 1,
+	}
+
+
 @frappe.whitelist()
 def add_question(survey_version, question_type="Short Text", sequence=None):
 	"""Insert a new question at the given position (defaults to the end)."""
