@@ -3,7 +3,7 @@
  * Extracted from www/survey.html so the Survey Builder's Preview renders the
  * REAL page instead of a parallel approximation of it - which is what forced a
  * second copy of the page-split rule and still could not show real styling.
- * One renderer, one stylesheet (public/css/survey.css), two callers.
+ * One renderer, one stylesheet (public/css/ucc_survey_form.bundle.css), two callers.
  *
  * The seam is deliberate: SUBMISSION IS NOT IN HERE. The fetch, the CSRF header
  * and the form-encoded body stay inline in www/survey.html and arrive as

@@ -246,12 +246,12 @@ class SurveyBuilder {
 		.ucc-sb-sheet-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-color,#e2e6ea)}
 		.ucc-sb-sheet-body{padding:18px}
 		/* Preview's markup and styling are now the respondent page's own:
-		   UCCSurveyForm renders it and public/css/survey.css styles it (loaded
+		   UCCSurveyForm renders it and public/css/ucc_survey_form.bundle.css styles it (loaded
 		   into Desk via app_include_css). The ~45 lines of .ucc-sb-pq / .ucc-sb-page
 		   / .ucc-stars / .ucc-nps / .ucc-grid lookalikes that used to live here
 		   are deleted - there is one stylesheet now, not two that drift.
 		   The mobile toggle stays a Desk concern: the sheet is a fixed-width
-		   modal, not a narrow viewport, so survey.css's @media rule cannot fire.
+		   modal, not a narrow viewport, so the sheet's @media rule cannot fire.
 		   This reproduces its one effect. */
 		.ucc-sb-sheet.mobile .ucc-survey .ucc-q{grid-column:1/-1}
 		`;
@@ -826,7 +826,7 @@ class SurveyBuilder {
 	}
 
 	// Preview is the REAL respondent page now: same renderer (UCCSurveyForm),
-	// same stylesheet (public/css/survey.css), same payload shape. What used to
+	// same stylesheet (public/css/ucc_survey_form.bundle.css), same payload shape. What used to
 	// be here - a per-type widget switch, a grid renderer, and a second copy of
 	// the page-split rule - is deleted, not refactored. Layout editing moved to
 	// the Questions panel, so this is pure preview again.

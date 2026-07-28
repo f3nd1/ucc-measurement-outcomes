@@ -439,7 +439,7 @@ awesomebar indexes Page records, so typing "UCC Survey Builder" reaches it.
 ## Per-page assets on /survey (`www/survey.py`)
 
 The respondent form's JS/CSS moved out of the template into
-`public/js/survey_form.js` + `public/css/survey.css`, loaded through
+`public/js/survey_form.js` + `public/css/ucc_survey_form.bundle.css`, loaded through
 `context.include_js` / `context.include_css` with **bundle** names
 (`ucc_survey_form.bundle.js` / `.css`) rather than raw `/assets/…` paths —
 raw paths are served with a one-year cache, which already caused a real
@@ -456,6 +456,16 @@ If `templates/web.html` on this Frappe version does not render
 the fallback is explicit `<script>`/`<link>` tags in `survey.html` pointing at
 the same bundles. Load order is safe either way: the page bootstraps on
 `DOMContentLoaded`, which fires after every non-deferred script has run.
+
+**A broken asset reference takes the whole app down, silently.** `bench build`
+bundles JS and CSS in one run; a CSS failure exits non-zero, so
+`sites/assets/assets.json` is never regenerated even though the JS bundles built
+fine. assets.json keeps naming the *previous* content hash, which no longer
+exists, so every asset 404s and no `UCC*` global is defined. The first symptom is
+a Desk page dying on `window.UCCVersionPicker is not a constructor` — four steps
+from the cause. If a Studio page reports a missing UCC global, read the tail of
+`bench build` before debugging the page. `scripts/check_repo.sh` now catches the
+repo-side version of this before it reaches a bench.
 
 Also unverified without a bench: `frappe.utils.quoted` (used by
 `api.builder.preview_link`) and `frappe.utils.copy_to_clipboard` (used by both

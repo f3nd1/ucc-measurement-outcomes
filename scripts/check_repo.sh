@@ -139,3 +139,67 @@ if "grid-template-columns:repeat(12,1fr)" not in builder.split(".ucc-sb-list{")[
 	sys.exit(1)
 print("Empty state cannot override a container's layout.")
 PY
+
+# Every file a bundle entry point references must exist on disk AND be tracked
+# in git, and every bundle name referenced from hooks.py / a www controller must
+# exist as a real entry point.
+#
+# This is the check that was missing when ucc_survey_form.bundle.css did
+# @import "./survey.css": Frappe's postcss step could not resolve it and exited
+# non-zero, so sites/assets/assets.json was never regenerated. The JS bundles had
+# already built, but assets.json still named the previous hash - so every asset
+# 404'd, no UCC* global was defined, and the first symptom was a Desk page dying
+# on "window.UCCVersionPicker is not a constructor", four steps from the cause.
+# A broken asset reference takes the whole app down and says nothing useful.
+python3 - <<'PY'
+import re, subprocess, sys, pathlib
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+tracked = set(subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                             check=True).stdout.split("\n"))
+problems = []
+
+entries = sorted(app.glob("public/**/*.bundle.js")) + sorted(app.glob("public/**/*.bundle.css"))
+if not entries:
+	problems.append("no bundle entry points found at all - did public/ move?")
+
+def code_only(text):
+	"""Comments are prose, not directives. This file's own header explains the
+	@import that broke the build by quoting it - the first run of this check
+	flagged that quote, which is exactly how a guard earns a reputation for
+	crying wolf and gets switched off."""
+	text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+	return re.sub(r"^\s*//.*$", "", text, flags=re.M)
+
+
+for entry in entries:
+	src = code_only(entry.read_text())
+	refs = re.findall(r'(?:^|\s)import\s+["\']([^"\']+)["\']', src)
+	refs += re.findall(r'@import\s+["\']([^"\']+)["\']', src)
+	for ref in refs:
+		if not ref.startswith("."):
+			continue          # a package import, not a file in this repo
+		target = (entry.parent / ref).resolve()
+		rel = target.relative_to(pathlib.Path.cwd())
+		if not target.exists():
+			problems.append("%s references %s, which does not exist" % (entry, ref))
+		elif str(rel) not in tracked:
+			problems.append("%s references %s, which exists but is NOT tracked in git "
+			                "(it would be missing on every other machine)" % (entry, ref))
+
+# Bundle names referenced from Python must resolve to an entry point.
+names = {e.name for e in entries}
+for py in (pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes/hooks.py"),
+           app / "www/survey.py"):
+	for name in re.findall(r'["\']([\w.]+\.bundle\.(?:js|css))["\']', py.read_text()):
+		if name not in names:
+			problems.append("%s references bundle %s, which has no entry point in public/"
+			                % (py, name))
+
+if problems:
+	print("Broken asset references:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	sys.exit(1)
+print("All %d bundle entry points resolve, and every referenced file is tracked." % len(entries))
+PY

@@ -61,6 +61,14 @@ Rule of thumb for what a pull needs:
 
 When in doubt, all four in that order.
 
+**Always read the tail of `bench build`.** JS and CSS bundle in one run, and a
+CSS failure exits non-zero *after* the JS has built — so `sites/assets/assets.json`
+is never regenerated and keeps naming the previous content hash. Every asset then
+404s and no `UCC*` global is defined. The symptom is a Desk page dying on
+something like `window.UCCVersionPicker is not a constructor`, which points four
+steps away from the cause. A green-looking page load is not evidence the build
+succeeded.
+
 `qrcode` is a declared dependency (used by the Campaign QR button) — `get-app`
 should pull it; if the QR button later errors, `./env/bin/pip install qrcode`.
 

@@ -1,4 +1,108 @@
-/* Website-side style bundle for the respondent survey form. Same hashing
-   reason as the JS bundle beside it: a raw /assets/… path is cached for a
-   year. */
-@import "./survey.css";
+/* Respondent-facing survey form styles.
+ *
+ * ONE FILE ON PURPOSE. This was briefly survey.css plus a bundle that did
+ * @import "./survey.css" - the JS bundle pattern copied where it does not
+ * apply. A JS bundle aggregates several modules; there is exactly one
+ * stylesheet, so the indirection bought nothing and cost a broken build:
+ * Frappe's postcss step could not resolve the relative import and exited
+ * non-zero, which meant sites/assets/assets.json was never regenerated. The JS
+ * bundles had already built fine, but assets.json still named the previous
+ * hash, so EVERY asset 404'd and no UCC* global was defined - a dead Desk page
+ * whose stack trace pointed at UCCVersionPicker, four steps from the cause.
+ *
+ * Loaded per page on the website (survey.py's context.include_css) and into the
+ * Desk via app_include_css, so the Survey Builder's Preview is styled by the
+ * same sheet the respondent gets rather than a .ucc-sb-* lookalike.
+ *
+ * Colours are CSS custom properties with today's values as fallbacks; see
+ * docs/12-install-and-screenshot-runbook.md Part D2 for the variable names and
+ * why there is no per-survey theme editor.
+ */
+/* Colours are CSS custom properties with today's values as fallbacks, so this
+   page changes nothing until a variable is actually set. Set them ONCE for the
+   whole portal in Website Theme's custom CSS (Website Settings -> Theme):
+
+       :root{--ucc-accent:#003a70;--ucc-star:#c8a02e}
+
+   Deliberately NOT a per-survey theme editor and deliberately not a free-text
+   CSS field: this is the one guest-reachable page in the app, and staff-editable
+   CSS rendered into it is a stored-injection surface. One college, one brand,
+   one place to set it - and the survey then matches the rest of the portal
+   instead of drifting from it.
+
+   --ucc-accent        selected NPS button (the one brand colour that shows)
+   --ucc-star          filled rating star
+   --ucc-required      the required asterisk
+   --ucc-muted         help text, hints, secondary labels
+   --ucc-border        question separators, grid and list borders
+   --ucc-border-strong unselected control outlines, empty stars
+   --ucc-border-soft   inner separators inside the ranking list
+   --ucc-surface       grid header background */
+/* Layout: a 12-column grid whose ROWS are derived from document order plus
+   each question's span - so there is no 2D coordinate anywhere in the data
+   model, and reorder/resequence/answer storage are all untouched.
+   grid-auto-flow stays the default (row), never dense: dense back-fills
+   earlier gaps with later items, which would show question 7 above question
+   6 while the numbering still said otherwise. */
+/* The grid is per PAGE, not on #ucc-form: the error box and the nav buttons
+   are siblings of the pages and so can never be pulled into the grid flow
+   alongside a half-width question. A survey with no Page Break has exactly
+   one page, i.e. today's single grid. Class, not the hidden attribute, to
+   switch pages - display:grid here would otherwise beat [hidden]. */
+.ucc-page{display:none}
+.ucc-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
+/* Mobile first: everything full width, widths only apply once there is room.
+   Avoids !important overrides and means a phone needs no JS at all. */
+.ucc-q,.ucc-sec{grid-column:1/-1}
+.ucc-q[hidden]{display:none}
+#ucc-nav{display:flex;align-items:center;gap:10px;margin-top:18px}
+#ucc-progress{font-size:12px;margin-left:auto;color:var(--ucc-muted,#8b95a5)}
+@media (min-width:600px){
+	.ucc-w-8{grid-column:span 8}
+	.ucc-w-6{grid-column:span 6}
+	.ucc-w-4{grid-column:span 4}
+}
+.ucc-q{padding:14px 0;border-bottom:1px solid var(--ucc-border,#e2e6ea)}
+.ucc-q > label{display:block;font-weight:600;margin-bottom:6px}
+.ucc-q .help{font-size:12px;color:var(--ucc-muted,#8b95a5);margin-bottom:8px}
+.ucc-opt{display:block;margin:4px 0;font-weight:400}
+.ucc-req{color:var(--ucc-required,#b94848)}
+.ucc-thanks{padding:30px;text-align:center}
+/* Item 2: real radios underneath, visually hidden (not display:none, so
+   label-click and keyboard tabbing/arrow-keys still work natively) — only
+   the visual is a star, the stored/submitted value is unchanged. */
+.ucc-stars{position:relative;display:flex;gap:2px}
+.ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+.ucc-star{font-size:28px;line-height:1;cursor:pointer;color:var(--ucc-border-strong,#d9d9d9);user-select:none}
+.ucc-star.filled{color:var(--ucc-star,#e0a832)}
+/* Item 3: Ranking - native HTML5 drag-and-drop reorder, same mechanics the
+   Survey Builder already uses to reorder questions. */
+.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid var(--ucc-border,#e2e6ea);border-radius:8px;overflow:hidden}
+.ucc-rank li{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;
+	border-bottom:1px solid var(--ucc-border-soft,#eef2f7);cursor:grab}
+.ucc-rank li:last-child{border-bottom:0}
+.ucc-rank li.dragging{opacity:.4}
+.ucc-rank-handle{color:var(--ucc-muted,#98a1af)}
+/* Item 3: Slider - native range input, value shown live. */
+.ucc-slider-wrap{display:flex;align-items:center;gap:12px;max-width:420px}
+.ucc-slider{flex:1}
+.ucc-slider-out{font-weight:600;min-width:2.4em;text-align:right}
+/* NPS: real hidden radios (same technique as stars), visible buttons. */
+.ucc-nps-row{display:flex;gap:4px;flex-wrap:wrap}
+.ucc-nps-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
+.ucc-nps-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+	border:1px solid var(--ucc-border-strong,#d9d9d9);border-radius:6px;cursor:pointer;font-size:13px}
+.ucc-nps-btn.selected{background:var(--ucc-accent,#4a63e7);color:#fff;border-color:var(--ucc-accent,#4a63e7)}
+.ucc-nps-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--ucc-muted,#8b95a5);margin-top:4px;max-width:400px}
+/* Grid: Likert Matrix / Multiple Choice Grid / Checkbox Grid - plain native
+   radios/checkboxes in table cells, no custom styling needed. */
+.ucc-grid{border-collapse:collapse;width:100%;font-size:13px}
+.ucc-grid th,.ucc-grid td{border:1px solid var(--ucc-border,#e2e6ea);padding:8px 10px}
+.ucc-grid th{background:var(--ucc-surface,#f7f9fc);font-size:12px}
+.ucc-grid td:first-child{text-align:left}
+
+/* Preview mode: unmistakable, and sticky so it stays on screen while scrolling
+   a long form. Amber rather than the form's own palette - it must not look like
+   part of the survey. */
+.ucc-preview-banner{position:sticky;top:0;z-index:20;background:#fff6e0;
+	border-bottom:2px dashed #d8a72a;color:#6b4e0a;padding:9px 16px;font-size:13px;text-align:center}
