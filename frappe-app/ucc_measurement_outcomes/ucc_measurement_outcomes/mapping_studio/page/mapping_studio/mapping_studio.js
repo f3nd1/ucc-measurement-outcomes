@@ -131,6 +131,8 @@ class MappingStudio {
 		   which is what opens the objective editor. The deep link is now the ↗
 		   at the end of the row, and the row body selects. */
 		.ucc-map-qtext{flex:1}
+		.ucc-map-cfilter{font-size:11px;color:#6b7684;margin:0 0 0 10px;font-weight:400;cursor:pointer}
+		.ucc-map-cfilter input{vertical-align:-1px;margin-right:3px}
 		.ucc-map-q-link{font-size:11px;color:#8b95a5;padding:0 2px;cursor:pointer}
 		.ucc-map-qrow:hover .ucc-map-q-link{color:#3d55d4}
 		.ucc-map-also{font-size:10px;color:#6f58a8;background:#f1edf9;border-radius:20px;padding:1px 8px;white-space:nowrap}
@@ -173,11 +175,28 @@ class MappingStudio {
 			.appendTo($views).on("click", () => this._setView("list"));
 		this.$viewCanvas = $(`<button class="btn btn-default btn-xs">${__("Canvas")}</button>`)
 			.appendTo($views).on("click", () => this._setView("canvas"));
+		// Its own filter, not this.filter: the list's filter is a drill-down from
+		// the coverage header and switching views should not silently rewrite it.
+		// Defaults ON — the canvas is a fix-the-gaps surface, and a survey's full
+		// question list on it is a wall rather than a tool.
+		this.canvasUnmappedOnly = true;
+		this.$canvasFilter = $(`<label class="ucc-map-cfilter"><input type="checkbox" checked> ${
+			__("Unmapped only")}</label>`).appendTo($views).hide();
+		this.$canvasFilter.find("input").on("change", (e) => {
+			this.canvasUnmappedOnly = e.target.checked;
+			this._renderMap();
+		});
 		this.$table = $('<div class="ucc-map-table"></div>').appendTo($left);
 		this.$canvas = $('<div style="height:420px;display:none"></div>').appendTo($left);
 		this.$inspector = $('<div class="ucc-map-inspector"><p class="text-muted" style="font-size:12px">' +
 			__("Select a question to edit its objective and metric mapping.") + "</p></div>").appendTo($grid);
-		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {});
+		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {
+			// Selecting a node on the canvas drives the same inspector the list
+			// drives, so the canvas is a second way in and never a second editor.
+			onSelect: (n) => { if (n.id.startsWith("q:")) this._select(n.id.slice(2)); },
+			onConnect: (a, b) => this._connect(a, b),
+			onEdgeClick: (a, b) => this._disconnect(a, b),
+		});
 		// Finding 2: say what to do instead of a bare "No nodes to show".
 		this.canvas.setEmpty({ message: __("Pick a survey to see how its questions map to objectives.") });
 		this.$next = $('<div></div>').appendTo($main);   // item 2
@@ -325,10 +344,9 @@ class MappingStudio {
 				this.rows = r.message.questions || [];
 				this.selected = null;
 				this._renderTable();
-				this.canvas.setGraph([], []);
-				this.canvas.setEmpty({
-					message: __("Pick a question to see what it feeds."),
-				});
+				// The canvas is rebuilt from _loadCoverage below, not here: its
+				// gap flags come from coverage, so building it now would draw the
+				// previous version's gaps for one frame.
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
 				this._loadCoverage();
@@ -347,6 +365,7 @@ class MappingStudio {
 				this.coverage = r.message;
 				this._renderCoverage();
 				this._renderTable();   // finding 3: table flags depend on coverage
+				this._renderMap();     // ...and the canvas's gap nodes come from it too
 				this._renderTrail();   // finding 5: badge reflects the same count
 			},
 		});
@@ -536,37 +555,76 @@ class MappingStudio {
 		this.view = v;
 		this.$viewList.toggleClass("active", v === "list");
 		this.$viewCanvas.toggleClass("active", v === "canvas");
+		this.$canvasFilter.toggle(v === "canvas");
 		this._renderTable();
 		// Edges are drawn from getBoundingClientRect, which is all zeros while
-		// the canvas is display:none - so a lineage built in list view lands with
-		// degenerate connectors. Redraw once it is actually visible.
-		if (v === "canvas" && this.selected) {
-			const q = this.rows.find((x) => x.name === this.selected);
-			if (q) this._renderLineage(q);
+		// the canvas is display:none - so a graph built in list view lands with
+		// degenerate connectors. Build it once it is actually visible.
+		if (v === "canvas") this._renderMap();
+	}
+
+	// The canvas: every question on the left, every objective on the right, one
+	// edge per real mapping. Built server-side (api.mapping.mapping_canvas) so
+	// the node ids the browser drops are ids the server issued - this is a write
+	// surface, not a picture of one.
+	_renderMap() {
+		if (this.view !== "canvas") return;
+		if (!this.version) {
+			return this.canvas.setEmpty({ message: __("Pick a survey version to map its questions.") });
 		}
+		frappe.call({
+			method: MAPI + "mapping_canvas",
+			args: { survey_version: this.version, unmapped_only: this.canvasUnmappedOnly ? 1 : 0 },
+			callback: (r) => {
+				if (!r.message) return;
+				this.canvas.setGraph(r.message.nodes, r.message.edges);
+				if (!r.message.nodes.length) {
+					this.canvas.setEmpty({ message: this.canvasUnmappedOnly
+						? __("Every question has an objective. Untick “Unmapped only” to see the whole map.")
+						: __("This version has no questions yet.") });
+				}
+			},
+		});
+	}
+
+	_connect(a, b) {
+		frappe.call({
+			method: MAPI + "connect_nodes",
+			args: { a, b },
+			callback: (r) => {
+				// null = that pair was already mapped. Saying "mapping created"
+				// there would be a lie about a row that already existed.
+				frappe.show_alert(r.message
+					? { indicator: "green", message: __("Mapping created") }
+					: { indicator: "blue", message: __("Already mapped") });
+				this.load(this.version);
+			},
+		});
+	}
+
+	_disconnect(a, b) {
+		// Deleting the row discards whatever clause and notes it carried, which
+		// is not recoverable and not visible on the connector being clicked.
+		frappe.confirm(__("Remove this mapping? Any clause and notes on it go too."), () => {
+			frappe.call({
+				method: MAPI + "disconnect_nodes",
+				args: { a, b },
+				callback: () => {
+					frappe.show_alert({ indicator: "green", message: __("Mapping removed") });
+					this.load(this.version);
+				},
+			});
+		});
 	}
 
 	_select(name) {
 		this.selected = name;
 		const q = this.rows.find((x) => x.name === name);
 		if (!q) return;
-		this._renderLineage(q);
 		this._renderInspector(q);
-		// Selection is what the canvas shows, so keep the list highlight in sync.
+		// Selection is what the list highlights; the canvas is the whole map now,
+		// so selecting on it must NOT rebuild the graph underneath the pointer.
 		if (this.view === "list") this._renderTable();
-	}
-
-	_renderLineage(q) {
-		// question -> objective, question -> clause, question -> metric(s).
-		// Unmapped questions (no objective) render as a red "gap" node.
-		const qType = this._isUnmapped(q.name) ? "gap" : "question";
-		const qSub = this._isUnmapped(q.name) ? __("Not linked to an objective") : q.question_type;
-		const nodes = [{ id: "q", type: qType, title: (q.question_text || "").slice(0, 40), sub: qSub, x: 40, y: 150 }];
-		const edges = [];
-		if (q.objective) { nodes.push({ id: "obj", type: "objective", title: q.objective, sub: __("Objective"), x: 300, y: 40 }); edges.push(["q", "obj"]); }
-		if (q.primary_clause) { nodes.push({ id: "cl", type: "clause", title: q.primary_clause, sub: q.standard || "", x: 300, y: 150 }); edges.push(["q", "cl"]); }
-		(q.metrics || []).forEach((m, i) => { nodes.push({ id: "m" + i, type: "metric", title: m, sub: __("Metric"), x: 300, y: 260 + i * 90 }); edges.push(["q", "m" + i]); });
-		this.canvas.setGraph(nodes, edges);
 	}
 
 	_renderInspector(q) {

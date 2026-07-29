@@ -7,10 +7,16 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 	// container: a DOM element to render into.
 	// opts.onSelect(node): called when a node is clicked.
 	// opts.onMove(node): called after a node is dragged (optional).
+	// opts.onConnect(fromId, toId): called when a node's port is dragged onto
+	//   another node. Only nodes with `port: true` grow a port, so a canvas
+	//   without this callback behaves exactly as it did before.
+	// opts.onEdgeClick(a, b): called when a connector is clicked.
 	constructor(container, opts = {}) {
 		this.container = container;
 		this.onSelect = opts.onSelect || function () {};
 		this.onMove = opts.onMove || function () {};
+		this.onConnect = opts.onConnect || null;
+		this.onEdgeClick = opts.onEdgeClick || null;
 		this.nodes = [];
 		this.edges = [];
 		this.scale = 1;
@@ -22,7 +28,11 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 	_injectStyle() {
 		if (document.getElementById("ucc-nc-style")) return;
 		const css = `
-		.ucc-nc-shell{position:relative;height:600px;overflow:hidden;border-radius:8px;
+		/* auto, not hidden: a column of 40 question nodes is taller than any
+		   canvas, and with no pan control the overflow was simply unreachable.
+		   render() sizes the stage to its content so this has something to
+		   scroll. Nothing moves for a canvas whose nodes already fit. */
+		.ucc-nc-shell{position:relative;height:600px;overflow:auto;border-radius:8px;
 			background:radial-gradient(circle at 1px 1px,var(--border-color,#dbe1e8) 1px,transparent 0);background-size:20px 20px}
 		.ucc-nc-stage{position:absolute;inset:0;transform-origin:0 0}
 		.ucc-nc-edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -43,6 +53,21 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		.ucc-nc-tools{position:absolute;right:10px;top:10px;display:flex;gap:5px;z-index:5}
 		.ucc-nc-tools button{width:30px;height:30px;border-radius:7px;border:1px solid var(--border-color,#e2e6ea);background:var(--card-bg,#fff);cursor:pointer}
 		.ucc-nc-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted,#8b95a5);font-size:12px}
+		/* The port is a CHILD of the node, and the node's whole surface starts a
+		   move on mousedown. One stopPropagation on the port settles it — the
+		   same collision the Questions panel's width grip has, but easier here
+		   because these are ordinary bubbling mouse events rather than the HTML5
+		   drag-and-drop the reorder uses. */
+		.ucc-nc-port{position:absolute;right:-7px;top:50%;margin-top:-7px;width:14px;height:14px;
+			border-radius:50%;background:var(--card-bg,#fff);border:2px solid #2f8196;cursor:crosshair;z-index:2}
+		.ucc-nc-port:hover{background:#2f8196}
+		.ucc-nc-node.droptarget{outline:2px dashed #2f8196;outline-offset:2px}
+		/* The visible connector is 2px, which is not a click target. A second
+		   transparent path under it carries the click. Both selectors are
+		   class+element so the hit path wins on specificity rather than order. */
+		.ucc-nc-edges path{pointer-events:none}
+		.ucc-nc-edges path.ucc-nc-edge-hit{stroke:transparent;stroke-width:14;fill:none;
+			pointer-events:stroke;cursor:pointer}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-nc-style";
@@ -108,6 +133,13 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 			el.innerHTML = `<div class="ucc-nc-type">${frappe.utils.escape_html(n.type || "")}</div>
 				<b>${frappe.utils.escape_html(n.title || "")}</b>
 				${n.sub ? `<small>${frappe.utils.escape_html(n.sub)}</small>` : ""}`;
+			if (this.onConnect && n.port) {
+				const port = document.createElement("div");
+				port.className = "ucc-nc-port";
+				port.title = __("Drag to connect");
+				el.appendChild(port);
+				this._makeConnectable(port, n);
+			}
 			this._makeDraggable(el, n);
 			el.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -118,6 +150,14 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 			});
 			this.stage.appendChild(el);
 		});
+		// The stage is position:absolute;inset:0, so absolutely-positioned
+		// children never grow it and the shell had nothing to scroll. Explicit
+		// width/height win over right/bottom when over-constrained, and the
+		// scale() transform is accounted for by the browser's own overflow
+		// calculation, so this needs no scale arithmetic of its own.
+		const extent = (axis, pad) => this.nodes.reduce((m, n) => Math.max(m, (n[axis] || 0) + pad), 0);
+		this.stage.style.width = this.nodes.length ? extent("x", 200) + "px" : "";
+		this.stage.style.height = this.nodes.length ? extent("y", 120) + "px" : "";
 		requestAnimationFrame(() => this._drawEdges());
 	}
 
@@ -144,6 +184,55 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 			path.setAttribute("stroke-width", "2");
 			path.setAttribute("marker-end", "url(#ucc-nc-arrow)");
 			this.svg.appendChild(path);
+			if (!this.onEdgeClick) return;
+			const hit = path.cloneNode();
+			hit.setAttribute("class", "ucc-nc-edge-hit");
+			hit.removeAttribute("marker-end");
+			hit.addEventListener("click", () => this.onEdgeClick(a, b));
+			this.svg.appendChild(hit);
+		});
+	}
+
+	// Drag from a port onto another node. elementFromPoint rather than hit-testing
+	// rects by hand: the stage is scaled by a transform, and the browser already
+	// knows where things visually are.
+	_makeConnectable(port, node) {
+		port.addEventListener("mousedown", (e) => {
+			if (e.button !== 0) return;
+			e.preventDefault();
+			e.stopPropagation();          // ...or the node starts a move instead
+			const box = this.stage.getBoundingClientRect();
+			const at = (ev) => [(ev.clientX - box.left) / this.scale,
+								(ev.clientY - box.top) / this.scale];
+			const [x1, y1] = at(e);
+			const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+			line.setAttribute("fill", "none");
+			line.setAttribute("stroke", "#2f8196");
+			line.setAttribute("stroke-width", "2");
+			line.setAttribute("stroke-dasharray", "5 4");
+			this.svg.appendChild(line);
+			let target = null;
+
+			const move = (ev) => {
+				const [x2, y2] = at(ev);
+				line.setAttribute("d", `M ${x1} ${y1} L ${x2} ${y2}`);
+				const over = document.elementFromPoint(ev.clientX, ev.clientY);
+				const el = over && over.closest(".ucc-nc-node");
+				const id = el && el.dataset.id !== node.id ? el.dataset.id : null;
+				if (id === target) return;
+				this.stage.querySelectorAll(".droptarget").forEach((x) => x.classList.remove("droptarget"));
+				target = id;
+				if (el && id) el.classList.add("droptarget");
+			};
+			const up = () => {
+				document.removeEventListener("mousemove", move);
+				document.removeEventListener("mouseup", up);
+				line.remove();
+				this.stage.querySelectorAll(".droptarget").forEach((x) => x.classList.remove("droptarget"));
+				if (target) this.onConnect(node.id, target);
+			};
+			document.addEventListener("mousemove", move);
+			document.addEventListener("mouseup", up);
 		});
 	}
 

@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 
 from ucc_measurement_outcomes.coverage import coverage_summary
+from ucc_measurement_outcomes.map_graph import build_map_graph, connection_pair
 
 QUESTION = "UCC Survey Question"
 MAPPING = "UCC Question Mapping"
@@ -69,6 +70,16 @@ def get_mapping_overview(survey_version):
 	return {"survey_version": survey_version, "questions": questions}
 
 
+def _writable_question(question):
+	"""The version a question belongs to, once write permission on it is proven.
+	Shared by every mapping write so there is one gate, not three."""
+	survey_version = frappe.db.get_value(QUESTION, question, "survey_version")
+	if not survey_version:
+		frappe.throw(_("Question not found."))
+	_require(survey_version, "write")
+	return survey_version
+
+
 @frappe.whitelist()
 def upsert_question_mapping(question, objective, standard=None, primary_clause=None, related_clauses=None):
 	"""Create or update this question's objective mapping.
@@ -78,10 +89,7 @@ def upsert_question_mapping(question, objective, standard=None, primary_clause=N
 	row, because the inspector it serves has one objective field - so when a
 	question already has several it refuses rather than picking one of them at
 	random and overwriting it."""
-	survey_version = frappe.db.get_value(QUESTION, question, "survey_version")
-	if not survey_version:
-		frappe.throw(_("Question not found."))
-	_require(survey_version, "write")
+	_writable_question(question)
 	names = frappe.get_all(MAPPING, filters={"question": question},
 						   order_by="creation asc", pluck="name")
 	if len(names) > 1:
@@ -101,17 +109,97 @@ def upsert_question_mapping(question, objective, standard=None, primary_clause=N
 
 
 @frappe.whitelist()
+def add_question_mapping(question, objective):
+	"""Add ONE question -> objective mapping, leaving any others alone.
+
+	Not a variant of upsert_question_mapping and not a second write path: they
+	are different VERBS on the same document. upsert serves a form with one
+	objective field, so it edits one row and refuses when there are several -
+	correct there, wrong for a canvas, where dragging a second line means "and
+	also this", never "instead of that". Both go through _writable_question, so
+	there is still one permission gate.
+
+	Idempotent: dropping a line onto an objective that is already connected is a
+	no-op rather than a duplicate row.
+	"""
+	_writable_question(question)
+	if not objective:
+		frappe.throw(_("No objective given."))
+	if frappe.db.exists(MAPPING, {"question": question, "objective": objective}):
+		return None
+	# survey_version is not set here on purpose: the field carries
+	# fetch_from question.survey_version, so Frappe fills it on save and there is
+	# one source of truth for which version a mapping belongs to.
+	return frappe.get_doc({
+		"doctype": MAPPING, "question": question, "objective": objective,
+	}).insert().name
+
+
+@frappe.whitelist()
+def remove_question_mapping(question, objective):
+	"""Delete the question -> objective mapping(s) for exactly this pair.
+
+	Returns how many rows went, so the caller can say "nothing to remove"
+	instead of claiming a success it did not have. This DOES discard whatever
+	clause and notes that row carried - the caller confirms first.
+	"""
+	_writable_question(question)
+	names = frappe.get_all(
+		MAPPING, filters={"question": question, "objective": objective}, pluck="name")
+	for name in names:
+		frappe.delete_doc(MAPPING, name)
+	return len(names)
+
+
+@frappe.whitelist()
+def mapping_canvas(survey_version, unmapped_only=1):
+	"""Nodes + edges for Mapping Studio's canvas.
+
+	Built HERE rather than in the browser so the layout, the id scheme and the
+	gap flags come from the same place the writes are validated against - the
+	canvas is a write surface, and a client that invents its own node ids is a
+	client that can post a pair the server never offered. Permission comes from
+	the two methods this delegates to.
+	"""
+	overview = get_mapping_overview(survey_version)
+	cov = mapping_coverage(survey_version)
+	nodes, edges = build_map_graph(
+		overview["questions"],
+		frappe.get_all("UCC Objective", fields=["name"], order_by="name asc"),
+		unmapped_only=bool(frappe.utils.cint(unmapped_only)),
+		unmapped=cov["questions_without_objective"],
+	)
+	return {"nodes": nodes, "edges": edges}
+
+
+def _pair(a, b):
+	pair = connection_pair(a, b)
+	if not pair:
+		frappe.throw(_("A mapping joins a question to an objective. Drag from a "
+					   "question's dot onto an objective, or the other way round."))
+	return pair
+
+
+@frappe.whitelist()
+def connect_nodes(a, b):
+	"""A connection drawn on the canvas becomes a real mapping."""
+	return add_question_mapping(*_pair(a, b))
+
+
+@frappe.whitelist()
+def disconnect_nodes(a, b):
+	"""...and clicking it removes one."""
+	return remove_question_mapping(*_pair(a, b))
+
+
+@frappe.whitelist()
 def set_question_metric(question, metric_code, normalisation=None):
 	"""Add the question as a source of the given metric (metric mapping).
 
 	Creates the metric definition if it does not exist yet. Idempotent: a
 	question is not added twice to the same metric.
 	"""
-	survey_version = frappe.db.get_value(QUESTION, question, "survey_version")
-	if not survey_version:
-		frappe.throw(_("Question not found."))
-	_require(survey_version, "write")
-
+	_writable_question(question)
 	metric = (
 		frappe.get_doc(METRIC, metric_code)
 		if frappe.db.exists(METRIC, metric_code)

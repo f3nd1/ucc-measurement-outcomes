@@ -592,3 +592,23 @@ report the element rather than guessing, given how many unverified selectors hav
 cost this project already.
 
 Nothing is at risk either way: with no colour set no rule is emitted at all.
+
+## Mapping Studio canvas (verify live)
+
+Written without a bench. Four things to try on `ucc-sms-v2.orb.local`, in order:
+
+1. **Ports appear on question nodes only.** Objectives are drop targets, not
+   sources. If a port is missing entirely, `onConnect` was not passed and the
+   canvas silently degraded to read-only.
+2. **Drag a port onto an objective.** The node should outline dashed while
+   hovered, and release should alert "Mapping created". Dropping onto the same
+   objective twice gives "Already mapped" — one row, not two.
+3. **Click a connector.** The visible line is 2px; a transparent 14px path
+   under it carries the click. If clicking does nothing, check that
+   `.ucc-nc-edges path.ucc-nc-edge-hit` is beating the `pointer-events:none`
+   rule on its siblings.
+4. **Scrolling.** `.ucc-nc-shell` is now `overflow:auto` and `render()` sizes
+   the stage from node extents. On a long survey the question column must
+   scroll; if it clips instead, the stage's explicit width/height is losing to
+   `inset:0`. This also affects **Index Studio**, which shares the component —
+   check a large index still renders as it did.
