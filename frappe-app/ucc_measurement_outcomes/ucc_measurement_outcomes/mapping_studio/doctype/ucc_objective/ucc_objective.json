@@ -13,7 +13,7 @@
  ],
  "fields": [
   {
-   "description": "e.g. OBJ-0403. TODO: bench-verify - real objective codes come from the existing Survey Objective-Question Mapping; import rather than invent.",
+   "description": "e.g. OBJ-0403. Use the codes from the official objective\u2013question mapping rather than inventing new ones, or results will not reconcile against it.",
    "fieldname": "objective_code",
    "fieldtype": "Data",
    "in_list_view": 1,

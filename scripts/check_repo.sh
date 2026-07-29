@@ -560,3 +560,42 @@ if problems:
 	sys.exit(1)
 print("Navbar/footer suppression is scoped to the survey page.")
 PY
+
+# No developer scaffolding in text a user reads.
+#
+# A DocType field's `description` is rendered under the input on the real form.
+# Seven of them shipped carrying "TODO: bench-verify - …" notes, including one on
+# the New Survey form that a first-time user hit immediately. Bench-dependent
+# uncertainty belongs in frappe-app/BENCH_VERIFY.md; the form says what the field
+# is for.
+python3 - <<'PY'
+import json, sys, pathlib
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+LEAKS = ("TODO", "bench-verify", "FIXME", "XXX", "HACK")
+problems = []
+for path in app.rglob("*/doctype/*/*.json"):
+	if path.stem != path.parent.name:
+		continue
+	doc = json.loads(path.read_text())
+	texts = [("description", f.get("description"), f.get("fieldname"))
+	         for f in doc.get("fields", [])]
+	texts += [("label", f.get("label"), f.get("fieldname")) for f in doc.get("fields", [])]
+	texts += [("options (HTML)", f.get("options") if f.get("fieldtype") == "HTML" else None,
+	           f.get("fieldname")) for f in doc.get("fields", [])]
+	for kind, text, fieldname in texts:
+		if not text:
+			continue
+		hit = [w for w in LEAKS if w in text]
+		if hit:
+			problems.append("%s.%s %s contains %s" % (doc["name"], fieldname, kind, "/".join(hit)))
+
+if problems:
+	print("Developer notes visible in the UI:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	print("  Put bench-dependent uncertainty in BENCH_VERIFY.md; the form text is "
+	      "for the person filling it in.", file=sys.stderr)
+	sys.exit(1)
+print("No developer scaffolding in user-visible DocType text.")
+PY

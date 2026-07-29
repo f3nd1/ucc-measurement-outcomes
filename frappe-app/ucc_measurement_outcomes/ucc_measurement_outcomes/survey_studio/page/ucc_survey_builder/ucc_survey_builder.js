@@ -159,6 +159,11 @@ class SurveyBuilder {
 		if (opts.question) this._pendingQuestion = opts.question;
 		if (opts.survey_version) {
 			this.load(opts.survey_version);
+		} else if (opts.new_version_for) {
+			// Arrived from the UCC Survey form (ucc_survey.js) right after the
+			// survey was created. It has no versions yet, so there is nothing to
+			// load — mint the first draft instead of showing an empty picker.
+			this._createVersion(opts.new_version_for);
 		} else {
 			this._applyPendingQuestion();
 		}
@@ -531,8 +536,11 @@ class SurveyBuilder {
 	// docstring): "Copy to version..." already exists for bringing questions
 	// across, so auto-copying here would duplicate content nobody asked to
 	// duplicate.
-	_createVersion() {
-		const survey = this.version ? this.version.survey : null;
+	// forSurvey: supplied by applyRouteOptions when we were sent here for a
+	// specific survey. Same path as "a version is already loaded" — known
+	// survey, no prompt.
+	_createVersion(forSurvey) {
+		const survey = forSurvey || (this.version ? this.version.survey : null);
 		const go = (surveyName) => {
 			frappe.call({
 				method: API + "new_version",

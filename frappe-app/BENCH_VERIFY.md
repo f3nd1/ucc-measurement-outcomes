@@ -200,6 +200,18 @@ Per scope lock, these are plain `Data` fields, not `Link`s, until confirmed:
 Core Frappe DocTypes are safe to link and **are** linked: `User`
 (`ucc_survey_version.published_by`).
 
+**#4 is now invisible to users, but it is not resolved.** Its `# TODO:
+bench-verify` note used to sit in the field's `description`, i.e. printed under
+the input on the New UCC Survey form, which is how Felix found it. The
+description now reads as help text ("Free text for now — used for filtering and
+reporting, not linked to any other record"), so the open question lives only
+here. On a bench: confirm the real Department/Cost Center DocType and key field,
+then either convert `owner_department` to a `Link` (and update that description,
+which currently promises it is *not* linked) or record the decision to keep it
+free text. `check_repo.sh` now fails if any `TODO`/`bench-verify`/`FIXME` string
+reappears in a DocType field description, label or HTML options — this file is
+where those notes belong.
+
 ## Snapshot completeness
 
 | # | Assumption | Where |

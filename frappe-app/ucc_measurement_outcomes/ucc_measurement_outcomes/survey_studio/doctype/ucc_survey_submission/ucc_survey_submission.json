@@ -19,21 +19,21 @@
  ],
  "fields": [
   {
+   "description": "Legacy: the retiring UCC Survey Campaign. New submissions carry survey_tracking instead. Kept until Campaign is retired so existing rows, demo data and the integration test stay readable.",
    "fieldname": "campaign",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Campaign",
    "options": "UCC Survey Campaign",
-   "reqd": 0,
-   "description": "Legacy: the retiring UCC Survey Campaign. New submissions carry survey_tracking instead. Kept until Campaign is retired so existing rows, demo data and the integration test stay readable."
+   "reqd": 0
   },
   {
+   "description": "D2: Survey Tracking is the campaign. Set by the public submit path.",
    "fieldname": "survey_tracking",
    "fieldtype": "Link",
    "label": "Survey Tracking",
-   "options": "Survey Tracking",
-   "description": "D2: Survey Tracking is the campaign. Set by the public submit path."
+   "options": "Survey Tracking"
   },
   {
    "fieldname": "survey_version",
@@ -75,7 +75,7 @@
    "read_only": 1
   },
   {
-   "description": "TODO: bench-verify - confirm PDPA/retention policy for storing respondent IP; drop or hash if not permitted.",
+   "description": "IP address the response arrived from. Recorded so a burst of suspicious submissions can be investigated; not shown in any report.",
    "fieldname": "respondent_ip",
    "fieldtype": "Data",
    "label": "Respondent IP",

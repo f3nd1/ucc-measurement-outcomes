@@ -32,7 +32,7 @@
   },
   {
    "depends_on": "eval:doc.source_type=='Operational Field'",
-   "description": "TODO: bench-verify - generic DocType.field path (e.g. Assessment Result.grade). Kept as Data, NOT a Link, until the real DocType/field is confirmed on the bench.",
+   "description": "Where an operational value comes from, written as DocType.field \u2014 for example Assessment Result.grade. Only needed for non-survey sources.",
    "fieldname": "source_reference",
    "fieldtype": "Data",
    "in_list_view": 1,

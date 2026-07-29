@@ -54,7 +54,7 @@
    "label": "Category"
   },
   {
-   "description": "TODO: bench-verify - replace with a Link to the real Department (or Cost Center) DocType once its name is confirmed on the bench.",
+   "description": "Which department owns this survey, e.g. Academic Affairs. Free text for now \u2014 used for filtering and reporting, not linked to any other record.",
    "fieldname": "owner_department",
    "fieldtype": "Data",
    "label": "Owning Department"

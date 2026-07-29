@@ -32,7 +32,7 @@
    "search_index": 1
   },
   {
-   "description": "TODO: bench-verify - period structure (term/quarter/academic year) not yet confirmed.",
+   "description": "The reporting period this result covers, e.g. 2026-S1 or AY2026. Use the same wording across results so they line up in the dashboard.",
    "fieldname": "period",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -40,14 +40,14 @@
    "label": "Period"
   },
   {
-   "description": "TODO: bench-verify - entity dimension name (e.g. Programme). Generic until real DocTypes confirmed.",
+   "description": "What kind of thing this result is about, e.g. Programme, Department or Institution. Leave blank for an institution-wide result.",
    "fieldname": "entity_type",
    "fieldtype": "Data",
    "in_standard_filter": 1,
    "label": "Entity Type"
   },
   {
-   "description": "TODO: bench-verify - generic entity identifier; kept as Data, not a Link, until real DocTypes confirmed.",
+   "description": "Which specific one, e.g. Diploma in Business. Leave blank for an institution-wide result.",
    "fieldname": "entity",
    "fieldtype": "Data",
    "in_list_view": 1,
