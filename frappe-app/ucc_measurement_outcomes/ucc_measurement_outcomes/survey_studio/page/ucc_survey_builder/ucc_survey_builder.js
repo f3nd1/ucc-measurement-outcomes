@@ -302,6 +302,12 @@ class SurveyBuilder {
 		// Mapping, Index and Dashboard Studio and the shared components. This is
 		// the minimum: one class on the grid container, so the columns are still
 		// declared in one place (CSS) rather than computed in JS.
+		// Theme is SITE-WIDE, not per-version, so it lives in its own Single rather
+		// than in this version-scoped page - a colour control sitting beside a
+		// version picker would imply per-survey theming and invite "why did
+		// changing survey B recolour survey A". This is just the way in.
+		$(`<button class="btn btn-default btn-sm" title="${__("Colours and font for the public survey page (site-wide)")}">${__("Theme…")}</button>`)
+			.appendTo($tb).on("click", () => frappe.set_route("Form", "UCC Survey Theme"));
 		this.$inspectorToggle = $(`<button class="btn btn-default btn-sm" title="${__("Show or hide the Inspector")}">☰</button>`)
 			.appendTo($tb).on("click", () => this._toggleInspector());
 		this.$undo = $(`<button class="btn btn-default btn-sm" disabled>${__("Undo")}</button>`).appendTo($tb).on("click", () => this._undo());

@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sb_intro",
+  "intro",
+  "sb_colours",
+  "ucc_accent",
+  "ucc_star",
+  "ucc_required",
+  "cb_colours",
+  "ucc_muted",
+  "ucc_surface",
+  "sb_borders",
+  "ucc_border",
+  "ucc_border_strong",
+  "cb_borders",
+  "ucc_border_soft",
+  "sb_type",
+  "ucc_font",
+  "sb_preview",
+  "preview_version",
+  "preview_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "sb_intro",
+   "fieldtype": "Section Break",
+   "label": "Respondent Form Theme"
+  },
+  {
+   "fieldname": "intro",
+   "fieldtype": "HTML",
+   "options": "<p class='text-muted' style='font-size:12px'>These apply to the public survey page (<code>/survey</code>) for the whole site \u2014 United Ceres has one brand, so this is deliberately not per-survey. Leave a colour empty to keep the built-in default. Save, then use <b>Refresh preview</b> to see the result on a real survey.</p>"
+  },
+  {
+   "fieldname": "sb_colours",
+   "fieldtype": "Section Break",
+   "label": "Colours"
+  },
+  {
+   "description": "Selected NPS button \u2014 the brand colour that actually shows.",
+   "fieldname": "ucc_accent",
+   "fieldtype": "Color",
+   "label": "Accent"
+  },
+  {
+   "description": "A filled star on a Rating question.",
+   "fieldname": "ucc_star",
+   "fieldtype": "Color",
+   "label": "Rating Star"
+  },
+  {
+   "description": "The asterisk beside a required question.",
+   "fieldname": "ucc_required",
+   "fieldtype": "Color",
+   "label": "Required Marker"
+  },
+  {
+   "fieldname": "cb_colours",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Help text, hints and secondary labels.",
+   "fieldname": "ucc_muted",
+   "fieldtype": "Color",
+   "label": "Muted Text"
+  },
+  {
+   "description": "Background of a grid question's header row.",
+   "fieldname": "ucc_surface",
+   "fieldtype": "Color",
+   "label": "Grid Header"
+  },
+  {
+   "fieldname": "sb_borders",
+   "fieldtype": "Section Break",
+   "label": "Borders"
+  },
+  {
+   "description": "Question separators, grid and list borders.",
+   "fieldname": "ucc_border",
+   "fieldtype": "Color",
+   "label": "Border"
+  },
+  {
+   "description": "Unselected control outlines and empty stars.",
+   "fieldname": "ucc_border_strong",
+   "fieldtype": "Color",
+   "label": "Border (Strong)"
+  },
+  {
+   "fieldname": "cb_borders",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Inner separators inside the ranking list.",
+   "fieldname": "ucc_border_soft",
+   "fieldtype": "Color",
+   "label": "Border (Soft)"
+  },
+  {
+   "fieldname": "sb_type",
+   "fieldtype": "Section Break",
+   "label": "Typography"
+  },
+  {
+   "default": "Site Default",
+   "description": "A closed list \u2014 each choice maps to a fixed font stack. Site Default inherits the Website Theme's font, which keeps the survey looking like the rest of the portal.",
+   "fieldname": "ucc_font",
+   "fieldtype": "Select",
+   "label": "Font",
+   "options": "Site Default\nSystem\nSerif\nHumanist Sans\nMonospace"
+  },
+  {
+   "fieldname": "sb_preview",
+   "fieldtype": "Section Break",
+   "label": "Preview"
+  },
+  {
+   "description": "Any version, including a Draft. The preview shows SAVED values \u2014 save first, then refresh.",
+   "fieldname": "preview_version",
+   "fieldtype": "Link",
+   "label": "Preview With",
+   "options": "UCC Survey Version"
+  },
+  {
+   "fieldname": "preview_html",
+   "fieldtype": "HTML",
+   "label": "Preview"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Survey Studio",
+ "name": "UCC Survey Theme",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

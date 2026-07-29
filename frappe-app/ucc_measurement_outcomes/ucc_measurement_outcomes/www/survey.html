@@ -10,6 +10,11 @@
    parser rather than by which block the base template renders first. #}
 {% if survey_css %}<link rel="stylesheet" href="{{ survey_css }}">{% endif %}
 {% if survey_js %}<script src="{{ survey_js }}"></script>{% endif %}
+{# Theme variables. The value is built server-side by theme.py from validated
+   settings - only `--<known-name>:#rrggbb;` and a font stack from a fixed table
+   can appear here, so nothing stored can close this block or introduce a CSS
+   function. Rendered AFTER the stylesheet so :root wins over its fallbacks. #}
+{% if theme_css %}<style>{{ theme_css }}</style>{% endif %}
 {# The banner is on the PAGE, not just in the Builder's link bar: the point is
    that it survives someone pasting the preview URL somewhere, which is exactly
    when the distinction matters and the Builder's styling is not there to help. #}

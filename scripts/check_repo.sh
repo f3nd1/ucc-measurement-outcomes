@@ -356,3 +356,46 @@ if problems:
 	sys.exit(1)
 print("No asset URL is built from the public/ source path.")
 PY
+
+# The theme must reach the guest page only through theme.build_theme_css.
+#
+# www/survey.html is the one guest-reachable page in this app. The standing
+# decision is that no staff-editable free text may be rendered into it: theme.py
+# emits `--<known-name>:#rrggbb;` and font stacks from a hard-coded table, and
+# nothing else. That guarantee is worth exactly as much as the rule that no
+# other value may be interpolated into a <style> block.
+python3 - <<'PY'
+import re, sys, pathlib
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+problems = []
+
+py = (app / "www/survey.py").read_text()
+if "build_theme_css" in py:
+	for m in re.finditer(r"context\.theme_css\s*=\s*(.+)", py):
+		if "build_theme_css" not in m.group(1) and m.group(1).strip() not in ('""', "''"):
+			problems.append("www/survey.py sets theme_css from %s - it must come from "
+			                "theme.build_theme_css or be empty" % m.group(1).strip())
+
+html = (app / "www/survey.html").read_text()
+for m in re.finditer(r"<style>(.*?)</style>", html, re.S):
+	inner = m.group(1).strip()
+	if inner and inner != "{{ theme_css }}":
+		problems.append("survey.html renders something other than theme_css inside "
+		                "<style>: %r" % inner[:60])
+
+# The validator itself must stay strict: anchored, lowercase, exactly six digits.
+theme = (app / "theme.py").read_text()
+if 'HEX = re.compile(r"^#[0-9a-f]{6}$")' not in theme:
+	problems.append("theme.py's colour pattern changed - it must stay anchored and "
+	                "exactly ^#[0-9a-f]{6}$")
+if "FONT_STACKS" not in theme or "settings.get(\"ucc_font\")" not in theme:
+	problems.append("theme.py no longer maps the stored font through a fixed table")
+
+if problems:
+	print("Theme rendering boundary:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	sys.exit(1)
+print("Theme reaches the guest page only through validated variables.")
+PY

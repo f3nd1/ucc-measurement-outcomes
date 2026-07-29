@@ -26,6 +26,7 @@ must never grow one.
 import frappe
 
 from ucc_measurement_outcomes.api.public import preview_payload, public_survey_payload
+from ucc_measurement_outcomes.theme import build_theme_css
 
 # TODO: bench-verify - confirm guest website access is enabled (Website Settings)
 # and that guest frappe.call() to submit_survey passes CSRF as configured on the
@@ -108,6 +109,19 @@ def get_context(context):
 	# here rather than rendering a form whose JS can never run - both routes, one
 	# check, because both are equally dead without it.
 	context.assets_missing = not (context.survey_js and context.survey_css)
+
+	# The site theme, built SERVER-SIDE from stored settings and never from
+	# anything in the request. build_theme_css emits only `--<known-name>:#rrggbb;`
+	# and a font stack chosen from a hard-coded table, so no stored text reaches
+	# the page - see theme.py for why that is the whole security argument, and
+	# test_theme.py for the attack strings it is tested against. Empty string
+	# when nothing is configured, which is every site today.
+	try:
+		context.theme_css = build_theme_css(frappe.get_cached_doc("UCC Survey Theme"))
+	except Exception:
+		# A missing Single (app updated, not yet migrated) must not take the
+		# survey down - it just means no theme.
+		context.theme_css = ""
 	# Frappe's CSRF check runs in auth.py BEFORE any whitelisted method body and
 	# throws CSRFTokenError - a ValidationError subclass, so HTTP 400 with the
 	# message "Invalid Request". window.csrf_token is set for logged-in desk

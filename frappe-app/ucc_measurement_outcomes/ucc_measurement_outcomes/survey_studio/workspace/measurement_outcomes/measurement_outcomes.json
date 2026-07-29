@@ -95,9 +95,19 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Records",
-   "link_count": 7,
+   "link_count": 8,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Survey Theme",
+   "link_count": 0,
+   "link_to": "UCC Survey Theme",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   },
   {
    "hidden": 0,

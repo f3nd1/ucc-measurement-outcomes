@@ -31,7 +31,7 @@ There is no bench in this environment. The real test tier is the **pure, Frappe-
 cd frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes
 for t in test_versioning_logic test_submission_utils test_index_engine test_explorer_agg \
          test_metric_engine test_chain_contract test_coverage test_index_templates test_bulk_parse \
-         test_display_logic test_dashboard_export; do
+         test_display_logic test_dashboard_export test_theme; do
   python3 $t.py    # each is self-contained; run a single one the same way
 done
 ```

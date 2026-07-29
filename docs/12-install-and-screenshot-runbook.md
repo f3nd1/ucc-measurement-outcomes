@@ -336,32 +336,40 @@ in the path is now reachable from the Builder.
 
 ## Part D2 — Branding the public survey page (optional)
 
-`/survey?token=…` extends `templates/web.html`, so it already inherits the
-site's Website Theme — navbar, logo, base font, link colour. Only the form's own
-controls were hardcoded; they are now CSS custom properties with the current
-values as fallbacks, so **nothing changes until a variable is set**.
+**Measurement Outcomes → Survey Theme** (or the **Theme…** button in the Survey
+Builder toolbar). Eight colour pickers and a font, applied site-wide to
+`/survey`. Pick a version under **Preview With**, save, then **Refresh preview**
+to see it on a real survey page.
 
-Set them once for the whole portal in **Website Settings → Theme → custom CSS**
-(not per survey — one college, one brand):
+United Ceres has one brand, so this is deliberately **site-wide, not per-survey**
+— twelve differently-coloured surveys would be a downgrade, not a feature.
+Leaving a colour empty keeps the built-in default; **Reset all to default** clears
+everything. **Font = Site Default** emits no font rule at all, so the form keeps
+inheriting the Website Theme and matches the rest of the portal.
+
+The preview shows **saved** values. That is deliberate: pushing unsaved colours
+into it would mean passing them through the URL into the guest-reachable page,
+which is exactly the untrusted-input path this feature is built to avoid.
+
+`/survey` also still inherits the site's Website Theme (navbar, logo, base font)
+through `templates/web.html` — the theme editor only governs the form's own
+controls.
+
+**There is deliberately no free-text CSS field, and there must never be one.**
+`/survey` is the only guest-reachable page in this app. Values are validated
+server-side against `^#[0-9a-f]{6}$`, the font is a key into a hard-coded table
+of stacks, and the variable names are a closed list — so the emitted CSS can only
+ever be `--<known-name>:#rrggbb;`. Nothing stored is echoed into the page, which
+is why no `</style>` can be smuggled and no `url()` or attribute selector can be
+introduced. See `theme.py` and the attack strings in `test_theme.py`.
+
+Setting the variables by hand in **Website Settings → Theme** still works and
+still overrides nothing — it is the same `--ucc-*` variables, just the manual
+route:
 
 ```css
-:root{
-  --ucc-accent: #003a70;   /* selected NPS button — the brand colour that shows */
-  --ucc-star: #c8a02e;     /* filled rating star */
-  --ucc-required: #b94848; /* the required asterisk */
-  --ucc-muted: #8b95a5;    /* help text, hints, secondary labels */
-  --ucc-border: #e2e6ea;   /* question separators, grid and list borders */
-  --ucc-border-strong: #d9d9d9; /* unselected control outlines, empty stars */
-  --ucc-border-soft: #eef2f7;   /* inner separators in the ranking list */
-  --ucc-surface: #f7f9fc;  /* grid header background */
-}
+:root{ --ucc-accent:#003a70; --ucc-star:#c8a02e; }
 ```
-
-There is deliberately **no per-survey theme editor and no free-text CSS field**.
-`/survey` is the only guest-reachable page in this app; staff-editable CSS
-rendered into it would be a stored-injection surface (CSS alone can exfiltrate
-via attribute selectors and `url()`). If per-survey styling is ever genuinely
-needed, it must be a closed set of validated values, never a CSS blob.
 
 ## Part E — Report
 

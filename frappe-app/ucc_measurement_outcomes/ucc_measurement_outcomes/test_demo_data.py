@@ -51,9 +51,18 @@ class TestOwnership(unittest.TestCase):
 		import json
 		import os
 		root = os.path.dirname(os.path.abspath(__file__))
-		on_disk = {json.load(open(p))["name"]
-				   for p in glob.glob(os.path.join(root, "*", "doctype", "*", "*.json"))
-				   if os.path.basename(p) == os.path.basename(os.path.dirname(p)) + ".json"}
+		# Singles are excluded: OWNED is an allowlist for RECORDS, and a Single
+		# has none - nothing to seed, nothing to delete. UCC Survey Theme is
+		# site-wide settings, and demo data must never touch those: seeding would
+		# recolour every survey on the site and teardown would wipe a real
+		# configuration nobody asked it to.
+		on_disk = set()
+		for p in glob.glob(os.path.join(root, "*", "doctype", "*", "*.json")):
+			if os.path.basename(p) != os.path.basename(os.path.dirname(p)) + ".json":
+				continue
+			doc = json.load(open(p))
+			if not doc.get("issingle"):
+				on_disk.add(doc["name"])
 		self.assertEqual(on_disk, set(OWNED))
 
 

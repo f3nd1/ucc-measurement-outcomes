@@ -49,6 +49,9 @@
    alongside a half-width question. A survey with no Page Break has exactly
    one page, i.e. today's single grid. Class, not the hidden attribute, to
    switch pages - display:grid here would otherwise beat [hidden]. */
+/* Font override: Site Default emits no variable at all, so this inherits the
+   Website Theme exactly as it always has. */
+.ucc-survey{font-family:var(--ucc-font,inherit)}
 .ucc-page{display:none}
 .ucc-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
 /* Mobile first: everything full width, widths only apply once there is room.
