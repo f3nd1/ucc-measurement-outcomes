@@ -39,6 +39,11 @@ COLOUR_FIELDS = {
 	"border_strong": "#d9d9d9",
 	"border_soft": "#eef2f7",
 	"surface": "#f7f9fc",
+	# Both default to no colour at all rather than a value: the form has no
+	# background and no label colour today (it inherits the portal), so the
+	# fallback in the stylesheet is `transparent` / `inherit`, not a hex.
+	"page_bg": None,
+	"label": None,
 }
 
 # A closed list: the stored value is a KEY, and only these literals are ever
@@ -100,6 +105,27 @@ SCALES = {
 		"Compact": "8px",
 		"Comfortable": None,  # the stylesheet's 14px
 		"Spacious": "24px",
+	}),
+	# NO input-padding control, and it is not an oversight. .form-control is the
+	# site Website Theme's, so a rule here would need to override it only when
+	# chosen - and CSS cannot express that for a default we do not own:
+	# `padding:var(--x, )` with --x unset is invalid at computed-value time and
+	# resolves to `unset`, i.e. padding 0 on every input by DEFAULT, and
+	# `revert` rolls back to the user agent rather than to Frappe's rule. The
+	# only other route is emitting a whole rule from here instead of :root
+	# variables, which widens the one thing this module guarantees. A density
+	# knob is not worth either.
+	"ucc_grid_padding": ("--ucc-grid-pad", {
+		"Compact": "4px 6px",
+		"Comfortable": None,   # the stylesheet's 8px 10px
+		"Spacious": "12px 16px",
+	}),
+	# The literal on the right is ours, so the security property is unchanged -
+	# and pointing at --ucc-surface means striping follows whatever Grid Header
+	# colour was picked instead of being a second colour to keep in sync.
+	"ucc_grid_stripe": ("--ucc-grid-stripe", {
+		"Off": None,
+		"On": "var(--ucc-surface,#f7f9fc)",
 	}),
 }
 

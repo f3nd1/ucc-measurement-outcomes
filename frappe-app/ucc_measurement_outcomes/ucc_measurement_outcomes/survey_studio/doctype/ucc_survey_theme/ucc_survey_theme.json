@@ -12,9 +12,11 @@
   "ucc_accent",
   "ucc_star",
   "ucc_required",
+  "ucc_label",
   "cb_colours",
   "ucc_muted",
   "ucc_surface",
+  "ucc_page_bg",
   "sb_borders",
   "ucc_border",
   "ucc_border_strong",
@@ -28,6 +30,8 @@
   "cb_sizing",
   "ucc_radius",
   "ucc_question_spacing",
+  "ucc_grid_padding",
+  "ucc_grid_stripe",
   "sb_preview",
   "preview_version_picker",
   "preview_version",
@@ -68,6 +72,12 @@
    "label": "Required Marker"
   },
   {
+   "description": "Colour of the question text itself. Empty inherits the portal.",
+   "fieldname": "ucc_label",
+   "fieldtype": "Color",
+   "label": "Question Label"
+  },
+  {
    "fieldname": "cb_colours",
    "fieldtype": "Column Break"
   },
@@ -82,6 +92,12 @@
    "fieldname": "ucc_surface",
    "fieldtype": "Color",
    "label": "Grid Header"
+  },
+  {
+   "description": "Background behind the questions. Scoped to the form, not the whole page - the page around it belongs to the site's Website Theme. Empty is transparent, which is how it renders today.",
+   "fieldname": "ucc_page_bg",
+   "fieldtype": "Color",
+   "label": "Form Background"
   },
   {
    "fieldname": "sb_borders",
@@ -163,6 +179,22 @@
    "fieldtype": "Select",
    "label": "Question Spacing",
    "options": "Compact\nComfortable\nSpacious"
+  },
+  {
+   "default": "Comfortable",
+   "description": "Space inside a grid question's cells. Comfortable is the built-in spacing.",
+   "fieldname": "ucc_grid_padding",
+   "fieldtype": "Select",
+   "label": "Grid Cell Padding",
+   "options": "Compact\nComfortable\nSpacious"
+  },
+  {
+   "default": "Off",
+   "description": "Shade alternate grid rows. Uses the Grid Header colour, so it follows whatever you picked there.",
+   "fieldname": "ucc_grid_stripe",
+   "fieldtype": "Select",
+   "label": "Grid Row Striping",
+   "options": "Off\nOn"
   },
   {
    "fieldname": "sb_preview",

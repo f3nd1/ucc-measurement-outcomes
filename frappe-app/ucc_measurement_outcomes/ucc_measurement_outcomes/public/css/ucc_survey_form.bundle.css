@@ -51,7 +51,8 @@
    switch pages - display:grid here would otherwise beat [hidden]. */
 /* Font override: Site Default emits no variable at all, so this inherits the
    Website Theme exactly as it always has. */
-.ucc-survey{font-family:var(--ucc-font,inherit);font-size:var(--ucc-font-size,inherit)}
+.ucc-survey{font-family:var(--ucc-font,inherit);font-size:var(--ucc-font-size,inherit);
+	background:var(--ucc-page-bg,transparent)}
 .ucc-page{display:none}
 .ucc-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
 /* Mobile first: everything full width, widths only apply once there is room.
@@ -66,7 +67,7 @@
 	.ucc-w-4{grid-column:span 4}
 }
 .ucc-q{padding:var(--ucc-q-gap,14px) 0;border-bottom:1px solid var(--ucc-border,#e2e6ea)}
-.ucc-q > label{display:block;font-weight:600;margin-bottom:6px}
+.ucc-q > label{display:block;font-weight:600;margin-bottom:6px;color:var(--ucc-label,inherit)}
 .ucc-q .help{font-size:0.75em;color:var(--ucc-muted,#8b95a5);margin-bottom:8px}
 .ucc-opt{display:block;margin:4px 0;font-weight:400}
 .ucc-req{color:var(--ucc-required,#b94848)}
@@ -100,7 +101,10 @@
 /* Grid: Likert Matrix / Multiple Choice Grid / Checkbox Grid - plain native
    radios/checkboxes in table cells, no custom styling needed. */
 .ucc-grid{border-collapse:collapse;width:100%;font-size:0.8125em}
-.ucc-grid th,.ucc-grid td{border:1px solid var(--ucc-border,#e2e6ea);padding:8px 10px}
+.ucc-grid th,.ucc-grid td{border:1px solid var(--ucc-border,#e2e6ea);padding:var(--ucc-grid-pad,8px 10px)}
+/* Striping is off unless chosen, and when chosen it follows the Grid Header
+   colour rather than being a second colour to keep in sync. */
+.ucc-grid tbody tr:nth-child(even){background:var(--ucc-grid-stripe,transparent)}
 .ucc-grid th{background:var(--ucc-surface,#f7f9fc);font-size:0.75em}
 .ucc-grid td:first-child{text-align:left}
 

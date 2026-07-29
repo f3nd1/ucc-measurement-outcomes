@@ -341,9 +341,21 @@ Builder toolbar). Eight colour pickers and a font, applied site-wide to
 `/survey`. Pick a version under **Preview With**, save, then **Refresh preview**
 to see it on a real survey page.
 
-Four sizing controls sit alongside the colours: **Star Size**, **Base Font
-Size**, **Corner Roundness** and **Question Spacing**. Each is a closed list, and
-each middle option (Medium / Rounded / Comfortable) is the built-in value — it
+**Form Background** and **Question Label** join the colours; **Grid Cell
+Padding** and **Grid Row Striping** join the sizing controls. Striping uses the
+Grid Header colour, so it follows whatever you picked there rather than being a
+second colour to keep in sync.
+
+There is deliberately **no input-padding control**. `.form-control` belongs to
+the site's Website Theme, and CSS cannot override it only-when-chosen without
+changing the default: an empty `var()` fallback is invalid at computed-value
+time and would set padding to 0 on every input for sites that never touched the
+theme.
+
+Six sizing controls sit alongside the colours: **Star Size**, **Base Font
+Size**, **Corner Roundness**, **Question Spacing**, **Grid Cell Padding** and
+**Grid Row Striping**. Each is a closed list, and each default option (Medium /
+Rounded / Comfortable / Off) is the built-in value — it
 emits nothing, so an untouched form renders exactly as it always has.
 
 Two things worth knowing about them:

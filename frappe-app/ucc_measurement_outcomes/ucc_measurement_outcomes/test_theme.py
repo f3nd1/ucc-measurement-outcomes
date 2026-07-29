@@ -156,6 +156,35 @@ def test_select_options_match_their_lookup_tables():
 	assert SELECT_CHOICES["ucc_font"] == FONT_CHOICES
 
 
+def test_new_colour_targets_default_to_no_colour():
+	# page_bg and label have NO built-in hex - the form has no background and no
+	# label colour today, it inherits the portal. So the stylesheet's fallback is
+	# transparent/inherit, and an unset field must emit nothing at all.
+	assert COLOUR_FIELDS["page_bg"] is None
+	assert COLOUR_FIELDS["label"] is None
+	assert build_theme_css({"ucc_page_bg": "", "ucc_label": None}) == ""
+	assert build_theme_css({"ucc_page_bg": "#fbfbfd"}) == ":root{--ucc-page-bg:#fbfbfd;}"
+	assert build_theme_css({"ucc_label": "#1a2b4c"}) == ":root{--ucc-label:#1a2b4c;}"
+
+
+def test_grid_striping_follows_the_surface_colour():
+	# The emitted string is our own literal, so the security property is
+	# unchanged - and referencing --ucc-surface means striping tracks whatever
+	# Grid Header colour was picked instead of being a second colour to sync.
+	assert build_theme_css({"ucc_grid_stripe": "Off"}) == ""
+	assert build_theme_css({"ucc_grid_stripe": "On"}) == ":root{--ucc-grid-stripe:var(--ucc-surface,#f7f9fc);}"
+	css = build_theme_css({"ucc_surface": "#eef3fb", "ucc_grid_stripe": "On"})
+	assert css == ":root{--ucc-surface:#eef3fb;--ucc-grid-stripe:var(--ucc-surface,#f7f9fc);}"
+
+
+def test_no_input_padding_control_exists():
+	# Deliberately absent, not forgotten: .form-control is the portal's, and CSS
+	# cannot override it only-when-chosen without changing the DEFAULT (an empty
+	# var() fallback is invalid at computed-value time and resolves to padding 0).
+	# If this ever comes back it needs a different mechanism and a fresh decision.
+	assert "ucc_input_padding" not in SELECT_CHOICES
+
+
 def test_every_colour_field_round_trips():
 	# Guards the DocType against drift: if a field is added here it must be
 	# emittable, and the fieldname/variable mapping must hold for all of them.
@@ -179,4 +208,7 @@ if __name__ == "__main__":
 	test_one_select_drives_both_radius_variables()
 	test_no_sizing_value_can_escape()
 	test_select_options_match_their_lookup_tables()
+	test_new_colour_targets_default_to_no_colour()
+	test_grid_striping_follows_the_surface_colour()
+	test_no_input_padding_control_exists()
 	print("theme: all checks passed")
