@@ -195,22 +195,52 @@ Per scope lock, these are plain `Data` fields, not `Link`s, until confirmed:
 
 | # | Field | DocType JSON | Real target to confirm |
 |---|---|---|---|
-| 4 | `owner_department` | `ucc_survey` | Real Department / Cost Center DocType name + key field |
+| ~~4~~ | ~~`owner_department`~~ | ~~`ucc_survey`~~ | **DECIDED (Felix, 2026-07-29): Link to `Department`.** See below |
 
 Core Frappe DocTypes are safe to link and **are** linked: `User`
 (`ucc_survey_version.published_by`).
 
-**#4 is now invisible to users, but it is not resolved.** Its `# TODO:
-bench-verify` note used to sit in the field's `description`, i.e. printed under
-the input on the New UCC Survey form, which is how Felix found it. The
-description now reads as help text ("Free text for now — used for filtering and
-reporting, not linked to any other record"), so the open question lives only
-here. On a bench: confirm the real Department/Cost Center DocType and key field,
-then either convert `owner_department` to a `Link` (and update that description,
-which currently promises it is *not* linked) or record the decision to keep it
-free text. `check_repo.sh` now fails if any `TODO`/`bench-verify`/`FIXME` string
-reappears in a DocType field description, label or HTML options — this file is
-where those notes belong.
+`check_repo.sh` fails if any `TODO`/`bench-verify`/`FIXME` string reappears in a
+DocType field description, label or HTML options — this file is where those
+notes belong, not under a form input.
+
+### #4 `owner_department` → `Link` to `Department` — decided, two things to check live
+
+The scope-lock question is answered: it is a Link to `Department`, and the
+migration is `patches/v0_8_0/link_owner_department.py`. Two things could not be
+checked without a bench, and both are cheap:
+
+**a. `Department` is ERPNext's, not Frappe's.** Verified against source:
+`erpnext/setup/doctype/department/` exists on `version-15`;
+`frappe/core/doctype/department/` does not, and neither does `hrms`'s. So this
+field now makes the app depend on ERPNext being installed, which
+`pyproject.toml` does not declare (it declares only `qrcode`). The site this is
+being built for runs educ_sg on ERPNext, so it holds — but on a Frappe-only
+site the field is a Link to nothing. The patch detects that
+(`frappe.db.table_exists("Department")`), touches no data, and writes an Error
+Log saying so rather than half-migrating. **Verify:** `Department` appears in
+the Awesomebar on the target site.
+
+**b. A Department's docname is not its name.** ERPNext's autoname is
+`f"{department_name} - {company_abbr}"`, so "Academic Affairs" is stored as
+`Academic Affairs - UCC`. This is why the migration matches on
+`department_name` and not just on the docname — `department_match.py`, with
+`test_department_match.py` covering it. **Verify:** the report below shows the
+values resolving, not a column of UNMATCHED.
+
+**Run the report BEFORE migrating.** It writes nothing:
+
+```bash
+bench --site <site> execute \
+    ucc_measurement_outcomes.patches.v0_8_0.link_owner_department.report
+```
+
+Anything it cannot match to exactly one Department is moved to
+`owner_department_legacy` (read-only, hidden when empty) rather than dropped or
+left as a dangling link — a dangling Link value throws on the *next* save of
+that survey, which is a landmine, and blanking it loses something a human typed.
+`owner_department_legacy` can be deleted from the DocType once the report shows
+nothing unmatched.
 
 ## Snapshot completeness
 

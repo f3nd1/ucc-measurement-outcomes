@@ -675,3 +675,42 @@ if problems:
 	sys.exit(1)
 print("All %d Desk-page server calls resolve to whitelisted methods." % checked)
 PY
+
+# Every patch named in patches.txt must exist and define execute().
+#
+# Same class as the hooks.py guard, with the widest blast radius in the app: a
+# patch reference that does not resolve does not break a page, it breaks
+# `bench migrate` for the whole SITE, including every other app on it.
+python3 - <<'PY'
+import ast, pathlib, sys
+
+APP = "ucc_measurement_outcomes"
+root = pathlib.Path("frappe-app") / APP / APP
+
+refs = [
+	line.strip() for line in (root / "patches.txt").read_text().splitlines()
+	if line.strip() and not line.strip().startswith(("#", "["))
+]
+
+problems = []
+for ref in refs:
+	path = root.joinpath(*ref.split(".")[1:]).with_suffix(".py")
+	if not path.exists():
+		problems.append("%s -> no module at %s" % (ref, path))
+		continue
+	names = {n.name for n in ast.parse(path.read_text()).body
+			 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+	if "execute" not in names:
+		problems.append("%s -> %s defines no execute()" % (ref, path.name))
+	pkg = path.parent / "__init__.py"
+	if not pkg.exists():
+		problems.append("%s -> %s is not a package (no __init__.py)" % (ref, path.parent))
+
+if problems:
+	print("patches.txt references something that does not exist:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	print("  (this breaks bench migrate for the whole site, not just this app)", file=sys.stderr)
+	sys.exit(1)
+print("All %d patches.txt references resolve." % len(refs))
+PY

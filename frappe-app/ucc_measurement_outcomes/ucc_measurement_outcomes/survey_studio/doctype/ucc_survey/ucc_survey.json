@@ -13,6 +13,7 @@
   "column_break_meta",
   "category",
   "owner_department",
+  "owner_department_legacy",
   "section_break_desc",
   "description",
   "section_break_version",
@@ -54,10 +55,19 @@
    "label": "Category"
   },
   {
-   "description": "Which department owns this survey, e.g. Academic Affairs. Free text for now \u2014 used for filtering and reporting, not linked to any other record.",
+   "description": "Which department owns this survey. Pick an existing Department \u2014 the same list the rest of the system uses, so a survey can be reported on alongside everything else that department owns.",
    "fieldname": "owner_department",
+   "fieldtype": "Link",
+   "label": "Owning Department",
+   "options": "Department"
+  },
+  {
+   "description": "What this field held before Owning Department became a proper Department link, kept because it could not be matched to a real Department. Set the link above, then this can be cleared.",
+   "fieldname": "owner_department_legacy",
    "fieldtype": "Data",
-   "label": "Owning Department"
+   "label": "Owning Department (unmatched text)",
+   "depends_on": "eval:doc.owner_department_legacy",
+   "read_only": 1
   },
   {
    "fieldname": "section_break_desc",
