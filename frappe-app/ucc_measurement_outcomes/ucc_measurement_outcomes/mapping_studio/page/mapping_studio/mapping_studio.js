@@ -125,7 +125,14 @@ class MappingStudio {
 			border-top:1px solid #eef2f7;font-size:12px;cursor:pointer}
 		.ucc-map-qrow:hover{background:#f7f9fc}
 		.ucc-map-qrow.sel{background:#eef3ff;box-shadow:inset 3px 0 0 #3d55d4}
-		.ucc-map-qtext{flex:1;text-decoration:underline dotted;text-underline-offset:2px}
+		/* No underline: this text is not a link any more. It used to carry
+		   ucc-map-q-link, and being flex:1 it WAS the row - so a click on a
+		   question navigated to Survey Builder and could never reach _select,
+		   which is what opens the objective editor. The deep link is now the ↗
+		   at the end of the row, and the row body selects. */
+		.ucc-map-qtext{flex:1}
+		.ucc-map-q-link{font-size:11px;color:#8b95a5;padding:0 2px;cursor:pointer}
+		.ucc-map-qrow:hover .ucc-map-q-link{color:#3d55d4}
 		.ucc-map-also{font-size:10px;color:#6f58a8;background:#f1edf9;border-radius:20px;padding:1px 8px;white-space:nowrap}
 		.ucc-map-metrics{white-space:nowrap}
 		.ucc-map-multi{font-size:11px;color:#6f58a8;background:#f1edf9;border-radius:7px;padding:7px 9px;margin:-6px 0 12px}
@@ -450,8 +457,9 @@ class MappingStudio {
 			? `<span class="ucc-map-also" title="${__("Also mapped to")}: ${frappe.utils.escape_html(alsoIn.join(", "))}">⧉ ${__("also")} ${frappe.utils.escape_html(alsoIn.join(", "))}</span>`
 			: "";
 		return `<div class="ucc-map-qrow ${isGap ? "gap" : ""} ${this.selected === q.name ? "sel" : ""}" data-name="${q.name}">
-			<span class="ucc-map-qtext ucc-map-q-link" title="${__("Open in Survey Builder")}">${frappe.utils.escape_html((q.question_text || "").slice(0, 90))}</span>
+			<span class="ucc-map-qtext">${frappe.utils.escape_html((q.question_text || "").slice(0, 90))}</span>
 			${also}${metrics ? `<span class="ucc-map-metrics">${metrics}</span>` : ""}
+			<span class="ucc-map-q-link" title="${__("Open in Survey Builder")}">↗</span>
 		</div>`;
 	}
 
