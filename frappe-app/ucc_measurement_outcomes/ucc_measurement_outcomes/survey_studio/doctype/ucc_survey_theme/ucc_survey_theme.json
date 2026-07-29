@@ -22,6 +22,12 @@
   "ucc_border_soft",
   "sb_type",
   "ucc_font",
+  "sb_sizing",
+  "ucc_star_size",
+  "ucc_font_size",
+  "cb_sizing",
+  "ucc_radius",
+  "ucc_question_spacing",
   "sb_preview",
   "preview_version",
   "preview_html"
@@ -115,6 +121,47 @@
    "fieldtype": "Select",
    "label": "Font",
    "options": "Site Default\nSystem\nSerif\nHumanist Sans\nMonospace"
+  },
+  {
+   "fieldname": "sb_sizing",
+   "fieldtype": "Section Break",
+   "label": "Sizing"
+  },
+  {
+   "default": "Medium",
+   "description": "Size of a Rating question's stars. Medium is the built-in size.",
+   "fieldname": "ucc_star_size",
+   "fieldtype": "Select",
+   "label": "Star Size",
+   "options": "Small\nMedium\nLarge"
+  },
+  {
+   "default": "Medium",
+   "description": "Scales the whole form's text relative to the portal's own size, including help text and grid labels. Medium inherits the portal unchanged.",
+   "fieldname": "ucc_font_size",
+   "fieldtype": "Select",
+   "label": "Base Font Size",
+   "options": "Small\nMedium\nLarge"
+  },
+  {
+   "fieldname": "cb_sizing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Rounded",
+   "description": "Corners of the ranking list and NPS buttons. Text inputs and the Submit button are styled by the site's Website Theme and are deliberately left alone, so the survey keeps matching the rest of the portal.",
+   "fieldname": "ucc_radius",
+   "fieldtype": "Select",
+   "label": "Corner Roundness",
+   "options": "Sharp\nRounded\nPill"
+  },
+  {
+   "default": "Comfortable",
+   "description": "Vertical space between questions. Comfortable is the built-in spacing.",
+   "fieldname": "ucc_question_spacing",
+   "fieldtype": "Select",
+   "label": "Question Spacing",
+   "options": "Compact\nComfortable\nSpacious"
   },
   {
    "fieldname": "sb_preview",

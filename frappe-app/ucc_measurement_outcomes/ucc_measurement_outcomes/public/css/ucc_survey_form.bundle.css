@@ -51,7 +51,7 @@
    switch pages - display:grid here would otherwise beat [hidden]. */
 /* Font override: Site Default emits no variable at all, so this inherits the
    Website Theme exactly as it always has. */
-.ucc-survey{font-family:var(--ucc-font,inherit)}
+.ucc-survey{font-family:var(--ucc-font,inherit);font-size:var(--ucc-font-size,inherit)}
 .ucc-page{display:none}
 .ucc-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
 /* Mobile first: everything full width, widths only apply once there is room.
@@ -59,15 +59,15 @@
 .ucc-q,.ucc-sec{grid-column:1/-1}
 .ucc-q[hidden]{display:none}
 #ucc-nav{display:flex;align-items:center;gap:10px;margin-top:18px}
-#ucc-progress{font-size:12px;margin-left:auto;color:var(--ucc-muted,#8b95a5)}
+#ucc-progress{font-size:0.75em;margin-left:auto;color:var(--ucc-muted,#8b95a5)}
 @media (min-width:600px){
 	.ucc-w-8{grid-column:span 8}
 	.ucc-w-6{grid-column:span 6}
 	.ucc-w-4{grid-column:span 4}
 }
-.ucc-q{padding:14px 0;border-bottom:1px solid var(--ucc-border,#e2e6ea)}
+.ucc-q{padding:var(--ucc-q-gap,14px) 0;border-bottom:1px solid var(--ucc-border,#e2e6ea)}
 .ucc-q > label{display:block;font-weight:600;margin-bottom:6px}
-.ucc-q .help{font-size:12px;color:var(--ucc-muted,#8b95a5);margin-bottom:8px}
+.ucc-q .help{font-size:0.75em;color:var(--ucc-muted,#8b95a5);margin-bottom:8px}
 .ucc-opt{display:block;margin:4px 0;font-weight:400}
 .ucc-req{color:var(--ucc-required,#b94848)}
 .ucc-thanks{padding:30px;text-align:center}
@@ -76,11 +76,11 @@
    the visual is a star, the stored/submitted value is unchanged. */
 .ucc-stars{position:relative;display:flex;gap:2px}
 .ucc-star-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
-.ucc-star{font-size:28px;line-height:1;cursor:pointer;color:var(--ucc-border-strong,#d9d9d9);user-select:none}
+.ucc-star{font-size:var(--ucc-star-size,28px);line-height:1;cursor:pointer;color:var(--ucc-border-strong,#d9d9d9);user-select:none}
 .ucc-star.filled{color:var(--ucc-star,#e0a832)}
 /* Item 3: Ranking - native HTML5 drag-and-drop reorder, same mechanics the
    Survey Builder already uses to reorder questions. */
-.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid var(--ucc-border,#e2e6ea);border-radius:8px;overflow:hidden}
+.ucc-rank{list-style:none;margin:0;padding:0;border:1px solid var(--ucc-border,#e2e6ea);border-radius:var(--ucc-radius,8px);overflow:hidden}
 .ucc-rank li{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;
 	border-bottom:1px solid var(--ucc-border-soft,#eef2f7);cursor:grab}
 .ucc-rank li:last-child{border-bottom:0}
@@ -94,14 +94,14 @@
 .ucc-nps-row{display:flex;gap:4px;flex-wrap:wrap}
 .ucc-nps-input{position:absolute;opacity:0;width:1px;height:1px;overflow:hidden}
 .ucc-nps-btn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
-	border:1px solid var(--ucc-border-strong,#d9d9d9);border-radius:6px;cursor:pointer;font-size:13px}
+	border:1px solid var(--ucc-border-strong,#d9d9d9);border-radius:var(--ucc-radius-sm,6px);cursor:pointer;font-size:0.8125em}
 .ucc-nps-btn.selected{background:var(--ucc-accent,#4a63e7);color:#fff;border-color:var(--ucc-accent,#4a63e7)}
-.ucc-nps-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--ucc-muted,#8b95a5);margin-top:4px;max-width:400px}
+.ucc-nps-ends{display:flex;justify-content:space-between;font-size:0.6875em;color:var(--ucc-muted,#8b95a5);margin-top:4px;max-width:400px}
 /* Grid: Likert Matrix / Multiple Choice Grid / Checkbox Grid - plain native
    radios/checkboxes in table cells, no custom styling needed. */
-.ucc-grid{border-collapse:collapse;width:100%;font-size:13px}
+.ucc-grid{border-collapse:collapse;width:100%;font-size:0.8125em}
 .ucc-grid th,.ucc-grid td{border:1px solid var(--ucc-border,#e2e6ea);padding:8px 10px}
-.ucc-grid th{background:var(--ucc-surface,#f7f9fc);font-size:12px}
+.ucc-grid th{background:var(--ucc-surface,#f7f9fc);font-size:0.75em}
 .ucc-grid td:first-child{text-align:left}
 
 /* Preview mode: unmistakable, and sticky so it stays on screen while scrolling

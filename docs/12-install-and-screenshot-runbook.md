@@ -341,6 +341,21 @@ Builder toolbar). Eight colour pickers and a font, applied site-wide to
 `/survey`. Pick a version under **Preview With**, save, then **Refresh preview**
 to see it on a real survey page.
 
+Four sizing controls sit alongside the colours: **Star Size**, **Base Font
+Size**, **Corner Roundness** and **Question Spacing**. Each is a closed list, and
+each middle option (Medium / Rounded / Comfortable) is the built-in value — it
+emits nothing, so an untouched form renders exactly as it always has.
+
+Two things worth knowing about them:
+
+- **Base Font Size** scales the whole form *relative to the portal's own size*,
+  help text and grid labels included. The stylesheet's font sizes are `em` for
+  this reason. Medium inherits the portal unchanged.
+- **Corner Roundness** covers the ranking list and NPS buttons — the elements
+  this app styles. Text inputs and the Submit button belong to the site's
+  Website Theme and are deliberately left alone, so the survey keeps matching
+  the rest of the portal. Overriding those would be a separate decision.
+
 United Ceres has one brand, so this is deliberately **site-wide, not per-survey**
 — twelve differently-coloured surveys would be a downgrade, not a feature.
 Leaving a colour empty keeps the built-in default; **Reset all to default** clears

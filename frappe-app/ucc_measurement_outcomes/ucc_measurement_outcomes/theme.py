@@ -55,6 +55,63 @@ FONT_STACKS = {
 
 FONT_CHOICES = list(FONT_STACKS)
 
+# The sizing controls, in exactly the shape FONT_STACKS uses: the stored Select
+# value is a KEY, and only the literal on the right can ever reach the page.
+# None means "emit nothing" - which is why every middle option below is None:
+# the stylesheet's own value then applies, so an untouched site, an unset field
+# and a garbage stored value all render identically to how they render today.
+SCALES = {
+	"ucc_star_size": ("--ucc-star-size", {
+		"Small": "20px",
+		"Medium": None,      # the stylesheet's 28px
+		"Large": "34px",
+	}),
+	# em, not px or rem: this scales the form relative to whatever the portal
+	# already sets rather than overriding it. The stylesheet's own font sizes
+	# were converted from px to em in the same change, or half the text would
+	# have ignored this control.
+	"ucc_font_size": ("--ucc-font-size", {
+		"Small": "0.9em",
+		"Medium": None,      # inherit the portal
+		"Large": "1.1em",
+	}),
+	# TWO radius variables because today's radii are already inconsistent - the
+	# ranking list is 8px and NPS buttons are 6px. One variable would force them
+	# equal and so change the NPS buttons at the DEFAULT setting; two keeps the
+	# default byte-identical. Pill is 999px on a 32px NPS button but only 18px on
+	# the ranking list, because a pill-shaped list box reads as broken.
+	"ucc_radius": ("--ucc-radius", {
+		"Sharp": "0",
+		"Rounded": None,     # the stylesheet's 8px
+		"Pill": "18px",
+	}),
+	"ucc_radius_sm": ("--ucc-radius-sm", {
+		"Sharp": "0",
+		"Rounded": None,     # the stylesheet's 6px
+		"Pill": "999px",
+	}),
+	"ucc_question_spacing": ("--ucc-q-gap", {
+		"Compact": "8px",
+		"Comfortable": None,  # the stylesheet's 14px
+		"Spacious": "24px",
+	}),
+}
+
+# ucc_radius_sm is not its own field: one "Corner roundness" Select drives both
+# radius variables, so the form has four sizing controls, not five.
+RADIUS_PAIR = ("ucc_radius", "ucc_radius_sm")
+
+# Every Select-backed field the DocType must offer, and the options it must
+# offer for each. check_repo.sh asserts the JSON matches this exactly - a Select
+# option with no table entry silently does nothing, and a table entry with no
+# option is unreachable.
+SELECT_CHOICES = {"ucc_font": FONT_CHOICES}
+SELECT_CHOICES.update({
+	field: list(table)
+	for field, (_var, table) in SCALES.items()
+	if field != "ucc_radius_sm"          # driven by ucc_radius, not stored
+})
+
 
 def normalise_colour(value):
 	"""A usable #rrggbb, or None. Uppercase in, lowercase out - a colour picker
@@ -84,6 +141,12 @@ def theme_variables(settings):
 	stack = FONT_STACKS.get(settings.get("ucc_font"))
 	if stack:
 		out["--ucc-font"] = stack
+	for field, (variable, table) in SCALES.items():
+		# One Select drives both radius variables.
+		stored = settings.get("ucc_radius" if field in RADIUS_PAIR else field)
+		value = table.get(stored)
+		if value:
+			out[variable] = value
 	return out
 
 

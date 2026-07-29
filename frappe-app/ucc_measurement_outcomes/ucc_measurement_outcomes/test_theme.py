@@ -9,6 +9,8 @@ and cannot reach it.
 from theme import (
 	COLOUR_FIELDS,
 	FONT_CHOICES,
+	SCALES,
+	SELECT_CHOICES,
 	build_theme_css,
 	is_default,
 	normalise_colour,
@@ -90,6 +92,70 @@ def test_font_is_a_key_never_a_value():
 	assert FONT_CHOICES[0] == "Site Default"      # first = the default in the Select
 
 
+def test_sizing_selects_are_keys_never_values():
+	# Same rule as the font: the stored value selects a hard-coded literal and
+	# never reaches the page itself.
+	assert build_theme_css({"ucc_star_size": "Large"}) == ":root{--ucc-star-size:34px;}"
+	assert build_theme_css({"ucc_question_spacing": "Compact"}) == ":root{--ucc-q-gap:8px;}"
+	assert build_theme_css({"ucc_font_size": "Small"}) == ":root{--ucc-font-size:0.9em;}"
+
+
+def test_every_middle_option_emits_nothing():
+	# The load-bearing property: an untouched site, a field left at its default
+	# and a garbage stored value all render EXACTLY as the app rendered before
+	# these controls existed. Nothing is emitted, so the stylesheet's own value
+	# applies.
+	assert build_theme_css({
+		"ucc_star_size": "Medium", "ucc_font_size": "Medium",
+		"ucc_radius": "Rounded", "ucc_question_spacing": "Comfortable",
+		"ucc_font": "Site Default",
+	}) == ""
+
+
+def test_one_select_drives_both_radius_variables():
+	# Today's radii differ (ranking list 8px, NPS buttons 6px), so one variable
+	# would change the NPS buttons at the DEFAULT setting. Two variables, one
+	# control - and ucc_radius_sm is never stored or offered.
+	assert build_theme_css({"ucc_radius": "Sharp"}) == ":root{--ucc-radius:0;--ucc-radius-sm:0;}"
+	assert build_theme_css({"ucc_radius": "Pill"}) == ":root{--ucc-radius:18px;--ucc-radius-sm:999px;}"
+	assert "ucc_radius_sm" not in SELECT_CHOICES
+	# Storing it directly does nothing - the value comes from ucc_radius alone.
+	assert build_theme_css({"ucc_radius_sm": "Pill"}) == ""
+
+
+def test_no_sizing_value_can_escape():
+	# Every payload the colour fields are tested against, through every sizing
+	# lookup. A key that is not in the table produces nothing at all - there is
+	# no passthrough to sanitise or escape.
+	attacks = [
+		"</style><script>alert(1)</script>",
+		"0;} body{display:none} .x{padding:0",
+		"999px;background-image:url(//evil)",
+		"expression(alert(1))",
+		"var(--secret)",
+		"Large; --ucc-accent:#000000",
+		"", None, 0, "large", "LARGE", "medium ",
+	]
+	for field in SELECT_CHOICES:
+		for payload in attacks:
+			assert build_theme_css({field: payload}) == "", (field, payload)
+			# ...and not beside a valid value either.
+			css = build_theme_css({"ucc_accent": "#003a70", field: payload})
+			assert css == ":root{--ucc-accent:#003a70;}", (field, payload)
+
+
+def test_select_options_match_their_lookup_tables():
+	# The failure this pattern invites: an option with no table entry silently
+	# does nothing, and a table entry with no option is unreachable. check_repo.sh
+	# asserts the same thing against the DocType JSON; this asserts the map the
+	# check reads is actually derived from the tables.
+	for field, (_variable, table) in SCALES.items():
+		if field == "ucc_radius_sm":
+			continue
+		assert SELECT_CHOICES[field] == list(table), field
+	assert SELECT_CHOICES["ucc_font"] == FONT_CHOICES
+
+
 def test_every_colour_field_round_trips():
 	# Guards the DocType against drift: if a field is added here it must be
 	# emittable, and the fieldname/variable mapping must hold for all of them.
@@ -108,4 +174,9 @@ if __name__ == "__main__":
 	test_unknown_fields_are_ignored()
 	test_font_is_a_key_never_a_value()
 	test_every_colour_field_round_trips()
+	test_sizing_selects_are_keys_never_values()
+	test_every_middle_option_emits_nothing()
+	test_one_select_drives_both_radius_variables()
+	test_no_sizing_value_can_escape()
+	test_select_options_match_their_lookup_tables()
 	print("theme: all checks passed")

@@ -365,7 +365,7 @@ PY
 # nothing else. That guarantee is worth exactly as much as the rule that no
 # other value may be interpolated into a <style> block.
 python3 - <<'PY'
-import re, sys, pathlib
+import json, re, sys, pathlib
 
 app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
 problems = []
@@ -391,6 +391,33 @@ if 'HEX = re.compile(r"^#[0-9a-f]{6}$")' not in theme:
 	                "exactly ^#[0-9a-f]{6}$")
 if "FONT_STACKS" not in theme or "settings.get(\"ucc_font\")" not in theme:
 	problems.append("theme.py no longer maps the stored font through a fixed table")
+
+# Every Select-backed theme field must offer EXACTLY the keys of its lookup
+# table. An option with no table entry silently does nothing when picked; a
+# table entry with no option is unreachable. Both are invisible until someone
+# tries the one setting that turns out to be dead.
+#
+# theme.py is imported for this rather than pattern-matched: it is deliberately
+# Frappe-free, so it imports here with no bench, and reading the real dicts
+# beats guessing at their source.
+sys.path.insert(0, str(app))
+try:
+	import theme as _theme
+	doctype = json.loads((app / "survey_studio/doctype/ucc_survey_theme"
+						  "/ucc_survey_theme.json").read_text())
+	offered = {f["fieldname"]: f["options"].split("\n")
+			   for f in doctype["fields"] if f["fieldtype"] == "Select"}
+	for field, expected in _theme.SELECT_CHOICES.items():
+		if offered.get(field) != expected:
+			problems.append("UCC Survey Theme.%s offers %s but theme.py's table has %s"
+							% (field, offered.get(field), expected))
+	for field in offered:
+		if field not in _theme.SELECT_CHOICES:
+			problems.append("UCC Survey Theme.%s is a Select with no lookup table in "
+							"theme.py - its value would reach the page unvalidated" % field)
+except Exception as e:
+	problems.append("could not compare theme Selects against theme.py: %s: %s"
+					% (type(e).__name__, e))
 
 if problems:
 	print("Theme rendering boundary:", file=sys.stderr)
