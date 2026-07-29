@@ -526,6 +526,28 @@ For the record, checked against the real source rather than assumed:
 | `frappe.clear_document_cache(doctype, name)` | Yes |
 
 
+## "Start collecting" creates a usable campaign (verify live)
+
+`api/campaign.start_collecting` inserts the Survey Tracking row that turns a
+published version into a live campaign. Written without a bench, so verify in
+this order on `ucc-sms-v2.orb.local`:
+
+1. `collection_setup` returns a **Link** with a real `options` DocType. If it
+   comes back as `Data`, `survey_name` is not a Link on this site and the
+   dialog is asking for free text — report the real fieldtype rather than
+   working around it.
+2. The insert survives educ_sg's own validation. Only `survey_name`,
+   `ucc_survey_version` and `ucc_collection_status` are set; if Survey Tracking
+   has **other** mandatory fields of educ_sg's, the insert throws and each one
+   has to be added to the dialog deliberately (never defaulted).
+3. `ucc_public_token` is minted by `survey_tracking_hooks.validate` on that
+   insert, and the Builder's public link appears without a reload.
+4. `/survey?token=…` accepts a response. Note the collection **window** is not
+   set by this path — `date_start`/`date_end` are still the unverified
+   fieldnames flagged in `survey_tracking_hooks.validate`, so the campaign is
+   unbounded until someone sets dates on the record itself. Resolve those
+   fieldnames and this dialog can grow two optional date fields.
+
 ## Page Background reaches `body` (verify live)
 
 `theme.py` emits `body{background:var(--ucc-page-bg);}` when — and only when — a

@@ -137,6 +137,33 @@ def new_version(survey):
 
 
 @frappe.whitelist()
+def new_survey_with_version(title):
+	"""Create a UCC Survey and its first Draft version in one action.
+
+	"+ New Version" used to require a survey that already existed, and the only
+	way to make one was the raw Desk form — a round trip through another page to
+	supply one field. A UCC Survey is a title that owns versions; everything else
+	on it is optional (naming_series carries its own default), so there is
+	nothing for that trip to collect that cannot be collected here.
+
+	Returns the VERSION name, exactly like new_version(), so the caller has one
+	code path for both branches of the dialog.
+	"""
+	title = (title or "").strip()
+	if not title:
+		frappe.throw(_("A survey needs a title."))
+	# Both permissions, checked before anything is written: new_version() covers
+	# the version, but a user who may create versions is not automatically
+	# allowed to create surveys, and a half-done create is worse than a refusal.
+	if not frappe.has_permission("UCC Survey", "create"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	if not frappe.has_permission(VERSION, "create"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	survey = frappe.get_doc({"doctype": "UCC Survey", "title": title}).insert()
+	return new_version(survey.name)
+
+
+@frappe.whitelist()
 def get_survey_builder(survey_version):
 	"""Return the version header plus its ordered questions (with choices)."""
 	_require(survey_version, "read")

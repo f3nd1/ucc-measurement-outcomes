@@ -599,3 +599,79 @@ if problems:
 	sys.exit(1)
 print("No developer scaffolding in user-visible DocType text.")
 PY
+
+# Every server method a Desk page calls must exist AND be @frappe.whitelist()'d.
+#
+# "UIs call only whitelisted api/* methods, never raw DocType REST" is a stated
+# trust boundary, and a typo'd or renamed method breaks it in the least useful
+# way: the call 404s at runtime, on a click nobody may make for weeks. Same
+# class as the hooks.py guard above — a reference pointing at something that
+# isn't there — so it is checked the same way, with ast, never by importing.
+#
+# Covers the two shapes this app actually uses: `PREFIX + "method"` (and its
+# template-literal twin), and `this._call("method")` in the one page that wraps
+# frappe.call — the wrapper's own prefix is read out of its body rather than
+# assumed, so moving it to a different constant does not silently disable this.
+python3 - <<'PY'
+import ast, re, sys, pathlib
+
+APP = "ucc_measurement_outcomes"
+root = pathlib.Path("frappe-app") / APP / APP
+
+PREFIX = re.compile(r'const\s+(\w+)\s*=\s*"(' + APP + r'\.[\w.]+\.)"')
+WRAPPER = re.compile(r'_call\(method,\s*\w+\)\s*\{[^}]*?(\w+)\s*\+\s*method')
+
+
+def whitelisted(path):
+	"""Top-level function names carrying @frappe.whitelist() — not every def."""
+	out = set()
+	for node in ast.parse(path.read_text()).body:
+		if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+			continue
+		for d in node.decorator_list:
+			f = d.func if isinstance(d, ast.Call) else d
+			if isinstance(f, ast.Attribute) and f.attr == "whitelist":
+				out.add(node.name)
+	return out
+
+
+problems = []
+checked = 0
+for js in sorted(root.rglob("*.js")):
+	src = js.read_text()
+	prefixes = dict(PREFIX.findall(src))
+	if not prefixes:
+		continue
+	refs = set()
+	for const, dotted in prefixes.items():
+		for m in re.finditer(r'\b%s\s*\+\s*"(\w+)"' % const, src):
+			refs.add((dotted, m.group(1)))
+		for m in re.finditer(r'\$\{%s\}(\w+)' % const, src):
+			refs.add((dotted, m.group(1)))
+	w = WRAPPER.search(src)
+	if w and w.group(1) in prefixes:
+		for m in re.finditer(r'_call\(\s*"(\w+)"', src):
+			refs.add((prefixes[w.group(1)], m.group(1)))
+	for dotted, method in sorted(refs):
+		checked += 1
+		mod = root.joinpath(*dotted.strip(".").split(".")[1:]).with_suffix(".py")
+		if not mod.exists():
+			problems.append("%s: %s%s -> no module %s" % (js.name, dotted, method, mod))
+		elif method not in whitelisted(mod):
+			problems.append("%s: %s%s -> not a @frappe.whitelist() method in %s"
+							% (js.name, dotted, method, mod.name))
+
+if not checked:
+	# The regexes found nothing at all, which means they stopped matching this
+	# codebase rather than that the codebase became clean.
+	print("No server calls found in any Desk page - this check has gone blind.", file=sys.stderr)
+	sys.exit(1)
+if problems:
+	print("A Desk page calls a server method that is not there:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	print("  (UIs call only whitelisted api/* methods - see the trust boundary in "
+	      "CLAUDE.md; on a bench this is a 404 on click, not a startup error)", file=sys.stderr)
+	sys.exit(1)
+print("All %d Desk-page server calls resolve to whitelisted methods." % checked)
+PY

@@ -133,6 +133,8 @@ function iconFor(type) {
 // nothing executes them yet. Re-add the controls together with the logic
 // engine (which must include a server-side logic-aware required check).
 const API = "ucc_measurement_outcomes.api.builder.";
+// Campaign creation lives with the rest of the campaign code, not in builder.py.
+const CAPI = "ucc_measurement_outcomes.api.campaign.";
 
 class SurveyBuilder {
 	constructor(page) {
@@ -482,9 +484,19 @@ class SurveyBuilder {
 			if (!r) return this.$link.hide();
 			this.$link.show().empty();
 			if (!r.url) {
-				return this.$link.append(
+				this.$link.append(
 					$(`<span class="ucc-sb-linkoff">${frappe.utils.escape_html(r.reason || "")}</span>`)
 				);
+				// Fix 4: "No campaign points at this version yet" was a dead end —
+				// true, and with nothing to do about it. Attach the action to it.
+				// Only when there is no campaign at all: a Closed or Draft one
+				// already exists and reopening it is a decision to make on that
+				// record, not a side effect of a button called "Start collecting".
+				if (!r.campaign && this.version.status === "Published") {
+					$(`<button class="btn btn-xs btn-primary">${__("Start collecting")}</button>`)
+						.appendTo(this.$link).on("click", () => this._startCollecting());
+				}
+				return;
 			}
 			const more = r.more ? ` <span class="ucc-sb-linkoff">${__("(+{0} more open campaign)", [r.more])}</span>` : "";
 			this.$link.append(`<span class="ucc-sb-linklabel">${__("Public link")}</span>`);
@@ -492,6 +504,52 @@ class SurveyBuilder {
 			$(`<button class="btn btn-xs btn-default">${__("Copy")}</button>`).appendTo(this.$link)
 				.on("click", () => copyLink(r.url));
 			this.$link.append(more);
+		});
+	}
+
+	// Fix 4: turn a published version into a live campaign without going near the
+	// Survey Tracking form.
+	//
+	// educ_sg makes Survey Tracking.survey_name mandatory, and the 2026-07-26
+	// decision is that it STAYS mandatory — this app will not write stub planning
+	// records into the institutional register, nor relax someone else's
+	// constraint. So one field is genuinely a human choice and cannot be
+	// defaulted away. Everything else (the version, the Open status, the public
+	// token) is set server-side and never shown, and the field is asked for in
+	// our words with its real Link target read off the live meta.
+	_startCollecting() {
+		frappe.call({
+			method: CAPI + "collection_setup",
+			args: { survey_version: this.version.name },
+			callback: (r) => {
+				if (!r.message) return;
+				const f = r.message;
+				const d = new frappe.ui.Dialog({
+					title: __("Start collecting responses"),
+					fields: [
+						{ fieldname: "planning_record", fieldtype: f.fieldtype,
+						  options: f.options, label: f.label, reqd: 1,
+						  description: __("The existing planning record this collection belongs to. Required by Survey Management — a campaign has to be traceable to something that was planned.") },
+					],
+					primary_action_label: __("Open the survey"),
+					primary_action: (v) => {
+						frappe.call({
+							method: CAPI + "start_collecting",
+							args: { survey_version: this.version.name,
+									planning_record: v.planning_record },
+							callback: (res) => {
+								if (!res.message) return;
+								d.hide();
+								frappe.show_alert({ indicator: "green", message: __(
+									"Campaign {0} created — the public link is now live", [res.message.campaign]) });
+								// The link surface is the thing that just changed.
+								this._renderPublicLink();
+							},
+						});
+					},
+				});
+				d.show();
+			},
 		});
 	}
 
@@ -554,12 +612,42 @@ class SurveyBuilder {
 			});
 		};
 		if (survey) return go(survey);
-		frappe.prompt(
-			[{ fieldname: "survey", fieldtype: "Link", options: "UCC Survey", label: __("Survey"), reqd: 1 }],
-			(v) => go(v.survey),
-			__("New Survey Version"),
-			__("Create")
-		);
+
+		// Fix 3: a version needs a survey, and the only way to make one used to
+		// be the raw Desk form. A UCC Survey is a title — so ask for the title
+		// here. Not frappe.prompt: these two fields are alternatives, and prompt
+		// has no way to say "one of these, not both".
+		const d = new frappe.ui.Dialog({
+			title: __("New Survey Version"),
+			fields: [
+				{ fieldname: "survey", fieldtype: "Link", options: "UCC Survey",
+				  label: __("Existing survey") },
+				{ fieldtype: "Section Break" },
+				{ fieldname: "title", fieldtype: "Data", label: __("…or start a new survey"),
+				  description: __("Type a title and both the survey and its first draft version are created.") },
+			],
+			primary_action_label: __("Create"),
+			primary_action: (v) => {
+				const title = (v.title || "").trim();
+				if (!v.survey && !title) {
+					return frappe.msgprint(__("Pick an existing survey, or type a title for a new one."));
+				}
+				if (v.survey && title) {
+					return frappe.msgprint(__("One or the other — pick an existing survey, or type a new title, not both."));
+				}
+				d.hide();
+				// Same callback either way: new_survey_with_version returns the
+				// VERSION name, exactly like new_version.
+				if (!title) return go(v.survey);
+				this._call("new_survey_with_version", { title }).then((name) => {
+					if (!name) return;
+					frappe.show_alert({ indicator: "green", message: __("Survey created with its first draft version") });
+					this._loadVersionList();
+					this.load(name);
+				});
+			},
+		});
+		d.show();
 	}
 
 	// Finding 3: mapping status comes from the SAME whitelisted method Mapping

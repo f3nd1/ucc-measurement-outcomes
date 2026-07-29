@@ -107,12 +107,17 @@ class CampaignAnalytics {
 
 	// Option 2 for Finding A: a campaign needs a Survey Management planning
 	// record, because educ_sg makes Survey Tracking.survey_name mandatory. Say
-	// that here rather than leaving an empty dropdown that looks broken.
+	// that here rather than leaving an empty dropdown that looks broken — and
+	// since the Survey Builder can now create the campaign itself (Fix 4), send
+	// people there instead of describing a record they would have to hand-build.
 	_renderNoCampaigns() {
 		this.$body.html(`<div class="ucc-ca-pending">
 			<b>${__("No campaigns yet.")}</b><br>
-			${__("A campaign is a Survey Tracking record with a Collection Status. Creating one needs a Survey Management planning record (its Survey Name is required by the existing system) plus the UCC Survey Version you want to collect against.")}
+			${__("Publish a survey version in the Survey Builder and press Start collecting. You will be asked for the planning record it belongs to — that is required by the existing Survey Management system and is the only thing a campaign cannot work out for itself.")}
 		</div>`);
+		$(`<button class="btn btn-sm btn-primary" style="margin-top:10px">${__("Open Survey Builder")}</button>`)
+			.appendTo(this.$body.find(".ucc-ca-pending"))
+			.on("click", () => frappe.set_route("ucc-survey-builder"));
 	}
 
 	load(name) {
