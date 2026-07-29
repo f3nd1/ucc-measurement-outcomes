@@ -518,3 +518,45 @@ if problems:
 	sys.exit(1)
 print("No site-wide cache wipes in app code.")
 PY
+
+# Chrome suppression must stay scoped to the survey page.
+#
+# /survey overrides base.html's navbar and footer blocks so the site's bars are
+# never rendered there. That is safe precisely because it lives in ONE template;
+# the same override in a shared template, or a matching display:none in the
+# stylesheet the Desk also loads, would strip the navbar off the whole site.
+python3 - <<'PY'
+import re, sys, pathlib
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+problems = []
+
+survey = (app / "www/survey.html").read_text()
+# Built by concatenation, not %-formatting: the pattern is full of literal % and
+# { characters, and the first version of this check died on "unsupported format
+# character" rather than checking anything.
+for blk in ("navbar", "footer"):
+	pattern = r"\{%-?\s*block\s+" + blk + r"\s*-?%\}\s*\{%-?\s*endblock"
+	if not re.search(pattern, survey):
+		problems.append("www/survey.html no longer overrides the " + blk + " block")
+
+# Nowhere else may do it, and no stylesheet may hide the bars - a rule in
+# ucc_survey_form.bundle.css would also load into the Desk via app_include_css.
+for path in list(app.rglob("*.html")) + list(app.rglob("*.css")):
+	if path.name == "survey.html":
+		continue
+	text = path.read_text()
+	if re.search(r"\{%-?\s*block\s+(?:navbar|footer)\s*-?%\}", text):
+		problems.append("%s overrides the navbar/footer block - suppression must stay "
+		                "on the survey page alone" % path)
+	if re.search(r"\.(?:navbar|web-footer)[^{]*{[^}]*display\s*:\s*none", text):
+		problems.append("%s hides the site navbar/footer in CSS - that stylesheet is "
+		                "loaded into the Desk too" % path)
+
+if problems:
+	print("Site chrome suppression:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	sys.exit(1)
+print("Navbar/footer suppression is scoped to the survey page.")
+PY

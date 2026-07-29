@@ -2,6 +2,26 @@
 
 {% block title %}{{ (survey.title if survey else "Survey") }}{% endblock %}
 
+{# The site's navbar and footer, suppressed for this page only.
+   NOT CSS: frappe/templates/base.html declares `{% block navbar %}` and
+   `{% block footer %}` around its web_block() calls, and Jinja resolves blocks
+   through the whole inheritance chain - survey.html -> web.html -> base.html -
+   so overriding them here means the markup is never RENDERED, rather than
+   rendered and then hidden. Nothing to match a selector against, nothing to
+   leak, and no fight with whatever the Website Theme does to .navbar.
+
+   Scoped by construction: this is one template. Desk is a different stack
+   entirely, and every other website page renders base.html's own blocks
+   untouched. Both /survey?token=… and /survey?preview=… share this template, so
+   both get identical treatment.
+
+   WHAT THIS REMOVES: the navbar carries the site logo (.navbar-brand) and the
+   footer carries the copyright line and any footer links, so all of that goes -
+   not just the bars around them. See the note in the runbook if a privacy or
+   data-protection link needs to survive on a page that collects personal data. #}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+
 {% block page_content %}
 {# Explicit tags, not context.include_js/include_css: those are rendered for a
    Web Page document, not for a www/ template page, so the form's own JS never

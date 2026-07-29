@@ -334,6 +334,24 @@ user or export a print format.
 creating the campaign, and setting the collection window dates. Everything else
 in the path is now reachable from the Builder.
 
+## Part D1b — The survey page has no navbar or footer
+
+`/survey` overrides Frappe's `{% block navbar %}` and `{% block footer %}` (both
+declared in `frappe/templates/base.html`), so those bars are **never rendered**
+on that page — not hidden with CSS, so there is no selector to keep in sync and
+nothing that can leak to another page. Every other website page and the whole of
+Desk are untouched; it is one template.
+
+**This removes more than the bars.** The navbar carries the site logo
+(`.navbar-brand`) and the footer carries the copyright line, footer links and the
+footer logo — all of it goes. The survey page shows the form and nothing else.
+
+⚠️ **If a privacy or data-protection link needs to appear on a page that collects
+personal data, it no longer does.** Put it back deliberately rather than by
+restoring the whole footer: add it to the survey's own last Section Heading, or
+re-render just that one line by overriding the block with the specific include
+instead of leaving it empty.
+
 ## Part D2 — Branding the public survey page (optional)
 
 **Measurement Outcomes → Survey Theme** (or the **Theme…** button in the Survey
