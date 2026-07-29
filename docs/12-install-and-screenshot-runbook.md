@@ -378,6 +378,16 @@ ever be `--<known-name>:#rrggbb;`. Nothing stored is echoed into the page, which
 is why no `</style>` can be smuggled and no `url()` or attribute selector can be
 introduced. See `theme.py` and the attack strings in `test_theme.py`.
 
+**If a setting does not exist for what you want, it is a code change, not a
+missing text box.** Cosmetic choices — colours, fonts, sizes, spacing — are
+Selects and colour pickers here. Anything structural (moving elements, a
+different layout, bespoke branding) is edited in
+`public/css/ucc_survey_form.bundle.css`, reviewed, and deployed with
+`bench build`. That is unlimited customisation with no runtime injection
+surface, because the CSS is written by someone who can already deploy code.
+There is no free-text CSS field and there will not be one — see the decision log
+entry of 2026-07-28 for why a *constrained* one was considered and rejected too.
+
 Setting the variables by hand in **Website Settings → Theme** still works and
 still overrides nothing — it is the same `--ucc-*` variables, just the manual
 route:

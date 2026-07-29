@@ -61,10 +61,16 @@ FONT_CHOICES = list(FONT_STACKS)
 # the stylesheet's own value then applies, so an untouched site, an unset field
 # and a garbage stored value all render identically to how they render today.
 SCALES = {
+	# Uneven steps (+8 then +16) on purpose. These are three intents, not three
+	# points on a linear scale: incidental, normal, and "this is the question the
+	# page exists for" - so Large should read as a decision rather than a nudge.
+	# Medium stays pinned to the stylesheet's 28px because it is the option that
+	# emits nothing; moving it would change rendering for every site that has
+	# never touched the theme.
 	"ucc_star_size": ("--ucc-star-size", {
 		"Small": "20px",
 		"Medium": None,      # the stylesheet's 28px
-		"Large": "34px",
+		"Large": "44px",
 	}),
 	# em, not px or rem: this scales the form relative to whatever the portal
 	# already sets rather than overriding it. The stylesheet's own font sizes

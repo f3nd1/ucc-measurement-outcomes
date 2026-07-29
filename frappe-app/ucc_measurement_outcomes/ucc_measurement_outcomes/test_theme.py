@@ -95,7 +95,7 @@ def test_font_is_a_key_never_a_value():
 def test_sizing_selects_are_keys_never_values():
 	# Same rule as the font: the stored value selects a hard-coded literal and
 	# never reaches the page itself.
-	assert build_theme_css({"ucc_star_size": "Large"}) == ":root{--ucc-star-size:34px;}"
+	assert build_theme_css({"ucc_star_size": "Large"}) == ":root{--ucc-star-size:44px;}"
 	assert build_theme_css({"ucc_question_spacing": "Compact"}) == ":root{--ucc-q-gap:8px;}"
 	assert build_theme_css({"ucc_font_size": "Small"}) == ":root{--ucc-font-size:0.9em;}"
 
