@@ -32,10 +32,28 @@ class UCCSurveyTheme(Document):
 			if value:
 				self.set(fieldname, normalise_colour(value))
 
-	def on_update(self):
-		# The public page renders the theme server-side, so a saved change is
-		# invisible until the website cache turns over.
-		frappe.clear_website_cache()
+	# There is deliberately NO on_update cache-clearing hook. It was written on
+	# the assumption that a saved change would be invisible until some cache
+	# turned over; checked against Frappe v15.83.0's source, nothing needs
+	# clearing, and the call it used (frappe.clear_website_cache) does not exist
+	# at all - hence the AttributeError on every save.
+	#
+	#   * The page is never cached. www/survey.py sets context.no_cache = 1, and
+	#     website.utils.cache_html only writes the page cache when
+	#     can_cache(context.no_cache) is true. Nothing is stored, so nothing is
+	#     stale.
+	#   * The document cache invalidates itself. survey.py reads this Single with
+	#     frappe.get_cached_doc, and Document.run_post_save_methods() calls
+	#     self.clear_cache() -> frappe.clear_document_cache(doctype, name) on
+	#     every save. For a Single, name == doctype, so the key is the one being
+	#     read.
+	#
+	# A saved colour therefore shows on the very next request, with no hook.
+	#
+	# If a future change ever DOES need one, it is
+	# frappe.website.utils.clear_website_cache(path) - scoped to a path. Never
+	# frappe.clear_cache(), which with no arguments deletes every cache key for
+	# the whole site.
 
 
 @frappe.whitelist()

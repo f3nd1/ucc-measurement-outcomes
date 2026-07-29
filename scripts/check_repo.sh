@@ -399,3 +399,54 @@ if problems:
 	sys.exit(1)
 print("Theme reaches the guest page only through validated variables.")
 PY
+
+# No app controller may wipe the whole site's cache.
+#
+# frappe.clear_cache() with NO arguments deletes every cache key for the site
+# (verified in v15.83.0: "Delete ALL keys associated with this site"). An app
+# saving one settings record has no business doing that. The scoped calls are
+# frappe.clear_cache(doctype=…) / (user=…) and
+# frappe.website.utils.clear_website_cache(path).
+#
+# Also catches frappe.clear_website_cache, which simply does not exist - it was
+# assumed, and every save of UCC Survey Theme died on the AttributeError.
+python3 - <<'PY'
+import io, re, sys, tokenize, pathlib
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+problems = []
+
+
+def code_only(src):
+	"""Comments and docstrings are prose. The controller that carries this rule
+	explains it by NAMING both calls, and the first run of this check flagged
+	that explanation - the same way the bundle check flagged its own header.
+	A guard that cries wolf gets switched off, so strip them properly: tokenize
+	rather than a regex, because a # inside a string is not a comment."""
+	out = []
+	try:
+		for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+			if tok.type in (tokenize.COMMENT, tokenize.STRING):
+				continue
+			out.append(tok.string)
+	except tokenize.TokenError:
+		return src            # unparseable: scan it raw rather than skip it
+	return " ".join(out)
+
+
+for path in app.rglob("*.py"):
+	src = code_only(path.read_text())
+	if re.search(r"frappe\s*\.\s*clear_cache\s*\(\s*\)", src):
+		problems.append("%s calls frappe.clear_cache() with no arguments - that wipes "
+		                "the entire site's cache" % path)
+	if re.search(r"frappe\s*\.\s*clear_website_cache", src):
+		problems.append("%s calls frappe.clear_website_cache - no such attribute on "
+		                "frappe; it lives in frappe.website.utils" % path)
+
+if problems:
+	print("Cache clearing:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	sys.exit(1)
+print("No site-wide cache wipes in app code.")
+PY

@@ -488,3 +488,27 @@ Both remaining unverified Frappe symbols are gone: `frappe.utils.quoted` is now
 stdlib `urllib.parse.quote`, and `frappe.utils.copy_to_clipboard` is behind
 `copyLink()`, which tries the native Clipboard API first and falls back to a
 `prompt()` the user can copy from.
+
+
+## Cache behaviour of the survey page (verified, v15.83.0)
+
+No cache-clearing hook is needed when the theme is saved, and `UCC Survey Theme`
+deliberately has none:
+
+- **The page is never cached.** `www/survey.py` sets `context.no_cache = 1`, and
+  `website/utils.py:cache_html` only writes the page cache when
+  `can_cache(context.no_cache)` is true.
+- **The document cache invalidates itself.** `survey.py` reads the Single with
+  `frappe.get_cached_doc`, and `Document.run_post_save_methods()` calls
+  `self.clear_cache()` → `frappe.clear_document_cache(doctype, name)` on every
+  save. For a Single, `name == doctype`.
+
+For the record, checked against the real source rather than assumed:
+
+| Symbol | Exists? |
+|---|---|
+| `frappe.clear_website_cache` | **No** — this was the AttributeError |
+| `frappe.website.utils.clear_website_cache(path)` | Yes, path-scoped |
+| `frappe.clear_cache()` | Yes, but **deletes every cache key for the site** |
+| `frappe.clear_cache(doctype=…)` / `(user=…)` | Yes, scoped |
+| `frappe.clear_document_cache(doctype, name)` | Yes |
