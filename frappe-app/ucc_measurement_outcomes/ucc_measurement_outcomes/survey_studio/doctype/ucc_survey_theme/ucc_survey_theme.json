@@ -29,6 +29,7 @@
   "ucc_radius",
   "ucc_question_spacing",
   "sb_preview",
+  "preview_version_picker",
   "preview_version",
   "preview_html"
  ],
@@ -169,9 +170,15 @@
    "label": "Preview"
   },
   {
-   "description": "Any version, including a Draft. The preview shows SAVED values \u2014 save first, then refresh.",
+   "fieldname": "preview_version_picker",
+   "fieldtype": "HTML",
+   "label": "Preview With"
+  },
+  {
+   "description": "Set by the picker above. Hidden because the picker shows the same friendly labels the Survey Builder uses; this stores the actual version so the link stays validated.",
    "fieldname": "preview_version",
    "fieldtype": "Link",
+   "hidden": 1,
    "label": "Preview With",
    "options": "UCC Survey Version"
   },

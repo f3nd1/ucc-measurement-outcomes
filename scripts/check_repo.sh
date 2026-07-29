@@ -88,6 +88,32 @@ if missing or extra:
 		print("Palette icons for types that no longer exist: %s" % ", ".join(extra), file=sys.stderr)
 	sys.exit(1)
 print("Palette icons cover all %d question types." % len(types))
+
+# A grid needs BOTH halves seeded, or dragging it from the palette produces the
+# fallback textarea both renderers use when rows or columns are missing - which
+# is what "Multiple Choice Grid renders as a big empty box" actually was.
+import ast
+
+builder = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes"
+                       "/api/builder.py").read_text()
+tables = {
+	n.targets[0].id: ast.literal_eval(n.value)
+	for n in ast.parse(builder).body
+	if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
+	and n.targets[0].id in ("CHOICE_DEFAULTS", "MATRIX_ROW_DEFAULTS")
+}
+# MATRIX_TYPES is a one-liner, so block() - which looks for a closing "\n];" -
+# cannot read it. Matched directly instead.
+grids = re.findall(r'"([^"]+)"',
+                   re.search(r'const MATRIX_TYPES = new Set\(\[(.*?)\]\)', src).group(1))
+short = [g for g in grids
+         if not tables.get("CHOICE_DEFAULTS", {}).get(g)
+         or not tables.get("MATRIX_ROW_DEFAULTS", {}).get(g)]
+if short:
+	print("Grid types seeded with only half a grid (need columns AND rows): %s"
+	      % ", ".join(short), file=sys.stderr)
+	sys.exit(1)
+print("All %d grid types are seeded with both rows and columns." % len(grids))
 PY
 
 # submit_survey must never learn about preview. The preview route deliberately

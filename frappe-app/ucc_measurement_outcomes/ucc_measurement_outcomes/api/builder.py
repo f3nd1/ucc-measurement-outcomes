@@ -23,12 +23,32 @@ VERSION = "UCC Survey Version"
 CAMPAIGN = "UCC Survey Campaign"
 
 # Types that carry a choice list, and the defaults to seed when one is added.
+#
+# The three grid types are here because they were NOT, and that was the bug: a
+# grid needs TWO things configured - columns (choices) and rows (matrix_rows) -
+# and it was the only family of question types seeded with neither. Both
+# renderers fall back to a plain textarea when either is missing (deliberately,
+# so a required grid is still answerable), so dragging "Multiple Choice Grid"
+# from the palette produced a big empty textarea with nothing saying why.
 CHOICE_DEFAULTS = {
 	"Single Choice": ["Option 1", "Option 2", "Option 3"],
 	"Multiple Choice": ["Option 1", "Option 2", "Option 3"],
 	"Dropdown": ["Option 1", "Option 2", "Option 3"],
 	"Rating": ["1", "2", "3", "4", "5"],
 	"Yes / No": ["Yes", "No"],
+	# Grid COLUMNS.
+	"Likert Matrix": ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"],
+	"Multiple Choice Grid": ["Column 1", "Column 2", "Column 3"],
+	"Checkbox Grid": ["Column 1", "Column 2", "Column 3"],
+}
+
+# Grid ROWS, one statement per line - the other half a grid needs. Keyed by the
+# same type names, so the two tables are checked against each other rather than
+# drifting (see check_repo.sh).
+MATRIX_ROW_DEFAULTS = {
+	"Likert Matrix": "Teaching quality\nFacilities\nSupport services",
+	"Multiple Choice Grid": "Row 1\nRow 2\nRow 3",
+	"Checkbox Grid": "Row 1\nRow 2\nRow 3",
 }
 
 
@@ -232,6 +252,8 @@ def add_question(survey_version, question_type="Short Text", sequence=None):
 		_resequence(survey_version, make_room_at=doc.sequence)
 	for i, label in enumerate(CHOICE_DEFAULTS.get(question_type, [])):
 		doc.append("choices", {"choice_label": label, "sequence": i})
+	if question_type in MATRIX_ROW_DEFAULTS:
+		doc.matrix_rows = MATRIX_ROW_DEFAULTS[question_type]
 	doc.insert()
 	return doc.name
 
