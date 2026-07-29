@@ -9,6 +9,7 @@ and cannot reach it.
 from theme import (
 	COLOUR_FIELDS,
 	FONT_CHOICES,
+	PAGE_BG_RULE,
 	SCALES,
 	SELECT_CHOICES,
 	build_theme_css,
@@ -163,8 +164,35 @@ def test_new_colour_targets_default_to_no_colour():
 	assert COLOUR_FIELDS["page_bg"] is None
 	assert COLOUR_FIELDS["label"] is None
 	assert build_theme_css({"ucc_page_bg": "", "ucc_label": None}) == ""
-	assert build_theme_css({"ucc_page_bg": "#fbfbfd"}) == ":root{--ucc-page-bg:#fbfbfd;}"
+	assert build_theme_css({"ucc_page_bg": "#fbfbfd"}) == (
+		":root{--ucc-page-bg:#fbfbfd;}body{background:var(--ucc-page-bg);}")
 	assert build_theme_css({"ucc_label": "#1a2b4c"}) == ":root{--ucc-label:#1a2b4c;}"
+
+
+def test_page_background_rule_only_exists_when_a_colour_is_set():
+	# This is the whole reason the rule is emitted here instead of living in the
+	# stylesheet. A static body{background:var(--ucc-page-bg,transparent)} would
+	# apply to EVERY site and its fallback would override whatever the portal
+	# paints. Emitting it conditionally means an untouched site has no rule at
+	# all - structural, not dependent on choosing the right fallback.
+	assert PAGE_BG_RULE not in build_theme_css({})
+	assert PAGE_BG_RULE not in build_theme_css({"ucc_accent": "#003a70"})
+	assert PAGE_BG_RULE not in build_theme_css({"ucc_page_bg": ""})
+	assert PAGE_BG_RULE not in build_theme_css({"ucc_page_bg": "not a colour"})
+	assert PAGE_BG_RULE in build_theme_css({"ucc_page_bg": "#f4f6fb"})
+	# It appears once, after the variables, and never more than once.
+	css = build_theme_css({"ucc_page_bg": "#f4f6fb", "ucc_accent": "#003a70"})
+	assert css.count(PAGE_BG_RULE) == 1
+	assert css.index(PAGE_BG_RULE) > css.index(":root{")
+
+
+def test_page_background_rule_contains_no_stored_value():
+	# The rule is a fixed literal referencing an already-validated variable, so
+	# widening the output beyond :root does not widen what can reach the page.
+	assert "#" not in PAGE_BG_RULE
+	for payload in ("</style><script>alert(1)</script>", "#000;}body{x:y", "url(//evil)"):
+		css = build_theme_css({"ucc_page_bg": payload})
+		assert css == "", payload
 
 
 def test_grid_striping_follows_the_surface_colour():
@@ -209,6 +237,8 @@ if __name__ == "__main__":
 	test_no_sizing_value_can_escape()
 	test_select_options_match_their_lookup_tables()
 	test_new_colour_targets_default_to_no_colour()
+	test_page_background_rule_only_exists_when_a_colour_is_set()
+	test_page_background_rule_contains_no_stored_value()
 	test_grid_striping_follows_the_surface_colour()
 	test_no_input_padding_control_exists()
 	print("theme: all checks passed")

@@ -94,10 +94,10 @@
    "label": "Grid Header"
   },
   {
-   "description": "Background behind the questions. Scoped to the form, not the whole page - the page around it belongs to the site's Website Theme. Empty is transparent, which is how it renders today.",
+   "description": "Fills the whole page behind the form, not just the boxed area around the questions. This is the one setting that overrides the site's Website Theme on /survey - only when you set it. Leave it empty and the portal's own background shows, exactly as today.",
    "fieldname": "ucc_page_bg",
    "fieldtype": "Color",
-   "label": "Form Background"
+   "label": "Page Background"
   },
   {
    "fieldname": "sb_borders",

@@ -512,3 +512,19 @@ For the record, checked against the real source rather than assumed:
 | `frappe.clear_cache()` | Yes, but **deletes every cache key for the site** |
 | `frappe.clear_cache(doctype=…)` / `(user=…)` | Yes, scoped |
 | `frappe.clear_document_cache(doctype, name)` | Yes |
+
+
+## Page Background reaches `body` (verify live)
+
+`theme.py` emits `body{background:var(--ucc-page-bg);}` when — and only when — a
+Page Background colour is set. Unverified without a bench: **whether the
+portal's Website Theme paints an inner wrapper** (`.main-section`,
+`.page_content` or similar) that would sit on top of `body` and hide the colour.
+
+**Verify:** set Page Background to something obvious (e.g. `#ffe9e9`) and open
+`/survey?preview=…`. If the area outside the 680px form does not change colour,
+the theme is painting a wrapper and that selector needs adding beside `body` —
+report the element rather than guessing, given how many unverified selectors have
+cost this project already.
+
+Nothing is at risk either way: with no colour set no rule is emitted at all.

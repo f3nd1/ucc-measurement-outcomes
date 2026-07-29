@@ -418,6 +418,21 @@ if 'HEX = re.compile(r"^#[0-9a-f]{6}$")' not in theme:
 if "FONT_STACKS" not in theme or "settings.get(\"ucc_font\")" not in theme:
 	problems.append("theme.py no longer maps the stored font through a fixed table")
 
+# build_theme_css emits :root variables plus exactly ONE fixed rule (the page
+# background, which cannot live in the static stylesheet without changing the
+# default for every site). That is the whole widening; a second appended rule
+# means the output is drifting towards free-form CSS one literal at a time.
+if theme.count("css +=") > 1:
+	problems.append("theme.py appends more than one rule to build_theme_css's output - "
+	                "the :root block plus PAGE_BG_RULE is the entire contract")
+import re as _re
+m = _re.search(r'PAGE_BG_RULE = "([^"]*)"', theme)
+if not m:
+	problems.append("theme.py no longer defines PAGE_BG_RULE as a fixed literal")
+elif "#" in m.group(1) or "{{" in m.group(1) or "%" in m.group(1):
+	problems.append("PAGE_BG_RULE is no longer a fixed literal - it must reference the "
+	                "already-validated variable, never carry a stored value: %r" % m.group(1))
+
 # Every Select-backed theme field must offer EXACTLY the keys of its lookup
 # table. An option with no table entry silently does nothing when picked; a
 # table entry with no option is unreachable. Both are invisible until someone

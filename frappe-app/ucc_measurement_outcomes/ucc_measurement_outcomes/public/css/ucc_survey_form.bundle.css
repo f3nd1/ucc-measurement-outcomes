@@ -51,8 +51,12 @@
    switch pages - display:grid here would otherwise beat [hidden]. */
 /* Font override: Site Default emits no variable at all, so this inherits the
    Website Theme exactly as it always has. */
-.ucc-survey{font-family:var(--ucc-font,inherit);font-size:var(--ucc-font-size,inherit);
-	background:var(--ucc-page-bg,transparent)}
+.ucc-survey{font-family:var(--ucc-font,inherit);font-size:var(--ucc-font-size,inherit)}
+/* The page background is NOT here. A static `background:var(--ucc-page-bg,
+   transparent)` would apply to every site, and the fallback would override
+   whatever the portal's Website Theme paints - a rendering change for sites that
+   never touched the theme. theme.py emits a body rule only when a colour is
+   actually set, so an untouched site has no rule at all. */
 .ucc-page{display:none}
 .ucc-page.active{display:grid;grid-template-columns:repeat(12,1fr);column-gap:20px}
 /* Mobile first: everything full width, widths only apply once there is room.

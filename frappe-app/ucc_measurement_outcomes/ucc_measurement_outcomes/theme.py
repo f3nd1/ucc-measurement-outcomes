@@ -40,8 +40,10 @@ COLOUR_FIELDS = {
 	"border_soft": "#eef2f7",
 	"surface": "#f7f9fc",
 	# Both default to no colour at all rather than a value: the form has no
-	# background and no label colour today (it inherits the portal), so the
-	# fallback in the stylesheet is `transparent` / `inherit`, not a hex.
+	# background and no label colour today (it inherits the portal), so there is
+	# no fallback hex - unset means no rule at all. page_bg paints the whole page
+	# behind the form (see PAGE_BG_RULE), which DOES override the portal's own
+	# background on /survey - deliberately, and only when someone sets it.
 	"page_bg": None,
 	"label": None,
 }
@@ -182,8 +184,21 @@ def theme_variables(settings):
 	return out
 
 
+# The one rule this module emits besides the :root block, and it is a FIXED
+# literal - no stored value appears in it, only a reference to the variable that
+# was already validated. It exists because a page background cannot live in the
+# static stylesheet: `body{background:var(--ucc-page-bg,transparent)}` would
+# apply to every site, and the fallback would override whatever background the
+# portal's Website Theme sets - a rendering change for sites that never touched
+# the theme. Emitting the rule ONLY when a colour is set means an untouched site
+# has no rule at all, which is a structural guarantee rather than one that
+# depends on picking the right fallback.
+PAGE_BG_RULE = "body{background:var(--ucc-page-bg);}"
+
+
 def build_theme_css(settings):
-	"""The `:root{…}` block for the public page, or "" when nothing is set.
+	"""The `:root{…}` block for the public page, plus the page-background rule
+	when one is set. "" when nothing is set.
 
 	Returns the INNER CSS only; survey.html wraps it in <style>. Empty means the
 	page emits no style block at all, which is the state every existing site is
@@ -192,7 +207,10 @@ def build_theme_css(settings):
 	variables = theme_variables(settings)
 	if not variables:
 		return ""
-	return ":root{%s}" % "".join("%s:%s;" % kv for kv in variables.items())
+	css = ":root{%s}" % "".join("%s:%s;" % kv for kv in variables.items())
+	if "--ucc-page-bg" in variables:
+		css += PAGE_BG_RULE
+	return css
 
 
 def is_default(settings):
