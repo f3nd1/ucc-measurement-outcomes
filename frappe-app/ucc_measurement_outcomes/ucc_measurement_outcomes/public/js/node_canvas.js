@@ -68,6 +68,11 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		.ucc-nc-edges path{pointer-events:none}
 		.ucc-nc-edges path.ucc-nc-edge-hit{stroke:transparent;stroke-width:14;fill:none;
 			pointer-events:stroke;cursor:pointer}
+		.ucc-nc-edge-del{pointer-events:all;cursor:pointer}
+		.ucc-nc-edge-del circle{fill:var(--card-bg,#fff);stroke:#b0bac6;stroke-width:1.5}
+		.ucc-nc-edge-del path{stroke:#8793a5;stroke-width:1.8;stroke-linecap:round;fill:none}
+		.ucc-nc-edge-del:hover circle{fill:#fbeaea;stroke:#b94848}
+		.ucc-nc-edge-del:hover path{stroke:#b94848}
 		`;
 		const el = document.createElement("style");
 		el.id = "ucc-nc-style";
@@ -190,7 +195,29 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 			hit.removeAttribute("marker-end");
 			hit.addEventListener("click", () => this.onEdgeClick(a, b));
 			this.svg.appendChild(hit);
+			this._edgeDeleteButton(path, a, b);
 		});
+	}
+
+	// Click-the-line-to-delete is a gesture nobody discovers. A visible ×  at the
+	// connector's midpoint says the connector is removable. Always drawn, not
+	// hover-only: hover-only affordances do not exist on touch, and being unable
+	// to see the control was the whole complaint.
+	_edgeDeleteButton(path, a, b) {
+		// The real midpoint of the curve, not the midpoint of its endpoints -
+		// a bezier between two far-apart nodes bulges well away from that.
+		const mid = path.getPointAtLength(path.getTotalLength() / 2);
+		const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+		g.setAttribute("class", "ucc-nc-edge-del");
+		g.setAttribute("transform", `translate(${mid.x},${mid.y})`);
+		g.innerHTML =
+			'<circle r="8"></circle>' +
+			'<path d="M-3.2,-3.2 L3.2,3.2 M3.2,-3.2 L-3.2,3.2"></path>';
+		const label = document.createElementNS("http://www.w3.org/2000/svg", "title");
+		label.textContent = __("Remove this mapping");
+		g.appendChild(label);
+		g.addEventListener("click", (e) => { e.stopPropagation(); this.onEdgeClick(a, b); });
+		this.svg.appendChild(g);
 	}
 
 	// Drag from a port onto another node. elementFromPoint rather than hit-testing

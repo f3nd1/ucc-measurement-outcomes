@@ -655,3 +655,17 @@ frappe.db.count("UCC Question Mapping")   # before/after one drag: +1, never -1
    visible instead of being hidden by it.
 5. Click the new connector → confirm → the question returns to the gap list and
    reappears on the canvas.
+
+## Canvas: delete affordance, objective panel, default view (verify live)
+
+1. **× on every connector.** Always drawn (not hover-only — hover affordances do
+   not exist on touch), grey, turning red on hover, at the curve's real midpoint
+   via `getPointAtLength`. Clicking it and clicking the line both delete. If the
+   × sits off the line, `getPointAtLength` is being called before the path has
+   its `d` attribute — check `_drawEdges` order.
+2. **Click an objective node** → the inspector shows its code, name, description
+   and the questions mapped to it. Clicking one of those questions swaps to the
+   question editor. "Open objective record" routes to the UCC Objective form.
+3. **Mapping Studio opens on Canvas.** List is one click away and must still
+   render correctly when switched to — including its coverage-header drill-down
+   filters, which are never exercised on first paint any more.

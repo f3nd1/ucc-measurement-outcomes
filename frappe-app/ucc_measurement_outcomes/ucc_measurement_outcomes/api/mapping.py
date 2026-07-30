@@ -241,7 +241,11 @@ def mapping_coverage(survey_version):
 def mapping_masters():
 	"""Dropdown data for the mapping inspector."""
 	return {
-		"objectives": frappe.get_all("UCC Objective", fields=["name", "objective_name"], order_by="name"),
+		# description comes along for the canvas's objective panel - it is one
+		# extra column on a list that was already being fetched, which beats a
+		# second round trip per node click.
+		"objectives": frappe.get_all(
+			"UCC Objective", fields=["name", "objective_name", "description"], order_by="name"),
 		"standards": frappe.get_all("UCC Standard", fields=["name", "standard_name"], order_by="name"),
 		"metrics": frappe.get_all(METRIC, fields=["name", "metric_name"], order_by="name"),
 	}

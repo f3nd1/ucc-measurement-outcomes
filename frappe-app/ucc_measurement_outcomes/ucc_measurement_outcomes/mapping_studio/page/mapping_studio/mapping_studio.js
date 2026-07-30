@@ -131,6 +131,13 @@ class MappingStudio {
 		   which is what opens the objective editor. The deep link is now the ↗
 		   at the end of the row, and the row body selects. */
 		.ucc-map-qtext{flex:1}
+		.ucc-map-ocode{font-family:monospace;font-size:13px;font-weight:600;color:#2f8196}
+		.ucc-map-oname{font-size:12px;margin-top:2px}
+		.ucc-map-odesc{font-size:11px;color:#6b7684;margin-top:6px;line-height:1.45}
+		.ucc-map-oq{font-size:11px;padding:5px 7px;border-radius:5px;cursor:pointer;
+			display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+		.ucc-map-oq:hover{background:#eef3ff}
+		.ucc-map-oq .cl{font-size:10px;color:#bf6b45;white-space:nowrap}
 		.ucc-map-cfilter{font-size:11px;color:#6b7684;margin:0 0 0 10px;font-weight:400;cursor:pointer}
 		.ucc-map-cfilter input{vertical-align:-1px;margin-right:3px}
 		.ucc-map-q-link{font-size:11px;color:#8b95a5;padding:0 2px;cursor:pointer}
@@ -166,12 +173,15 @@ class MappingStudio {
 		this.$coverage = $('<div class="ucc-map-coverage" style="margin-top:12px"></div>').appendTo($main);
 		const $grid = $('<div style="display:grid;grid-template-columns:1.4fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		const $left = $('<div></div>').appendTo($grid);
-		// The canvas is genuinely good for one question's lineage but it was
-		// never the work surface, and as a permanent panel it made four regions
-		// of equal weight with no entry point. A toggle over the same selection.
+		// Canvas is the default (Felix): mapping is the job this page exists for,
+		// and the canvas is the surface that does it. The list stays one click
+		// away and is still the better read for "show me everything grouped".
+		// Set via _setView at the end of _build rather than by hand-toggling the
+		// active classes here, so there is one place that knows what a view
+		// change involves.
 		this.view = "list";
 		const $views = $('<div class="ucc-map-views"></div>').appendTo($left);
-		this.$viewList = $(`<button class="btn btn-default btn-xs active">${__("List")}</button>`)
+		this.$viewList = $(`<button class="btn btn-default btn-xs">${__("List")}</button>`)
 			.appendTo($views).on("click", () => this._setView("list"));
 		this.$viewCanvas = $(`<button class="btn btn-default btn-xs">${__("Canvas")}</button>`)
 			.appendTo($views).on("click", () => this._setView("canvas"));
@@ -193,14 +203,19 @@ class MappingStudio {
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {
 			// Selecting a node on the canvas drives the same inspector the list
 			// drives, so the canvas is a second way in and never a second editor.
-			onSelect: (n) => { if (n.id.startsWith("q:")) this._select(n.id.slice(2)); },
+			onSelect: (n) => (n.id.startsWith("q:")
+				? this._select(n.id.slice(2))
+				: this._selectObjective(n.id.slice(2))),
 			onConnect: (a, b) => this._connect(a, b),
 			onEdgeClick: (a, b) => this._disconnect(a, b),
 		});
-		// Finding 2: say what to do instead of a bare "No nodes to show".
-		this.canvas.setEmpty({ message: __("Pick a survey to see how its questions map to objectives.") });
+		// Finding 2 (say what to do, not "No nodes to show") is handled by
+		// _renderMap's own empty state, which _setView below always reaches.
 		this.$next = $('<div></div>').appendTo($main);   // item 2
 		this._renderTrail();
+		// Last, once every element _setView touches exists. _renderMap no-ops
+		// without a version, so this is safe before anything is loaded.
+		this._setView("canvas");
 	}
 
 	// Checkpoint D: pick a source, read what would be created, then commit.
@@ -661,6 +676,46 @@ class MappingStudio {
 		// Selection is what the list highlights; the canvas is the whole map now,
 		// so selecting on it must NOT rebuild the graph underneath the pointer.
 		if (this.view === "list") this._renderTable();
+	}
+
+	// Objective nodes were selectable and did nothing. There is no existing
+	// objective detail view anywhere in this app to reuse - UCC Objective has
+	// three fields (code, name, description) and no page of its own - so this is
+	// the smallest honest one: what the record holds, and which questions point
+	// at it, built entirely from data the page already has.
+	//
+	// It deliberately does NOT claim an objective-level clause. UCC Objective has
+	// no clause field; the clause lives on each MAPPING row, and
+	// get_mapping_overview only returns the first mapping's clause per question -
+	// so a clause is shown against the question that carries it, never summarised
+	// up to the objective as if the objective owned it.
+	_selectObjective(code) {
+		this.selected = null;                       // the list highlight is for questions
+		const o = (this.masters.objectives || []).find((x) => x.name === code) || { name: code };
+		const qs = this.rows.filter((q) => (q.objectives || []).indexOf(code) !== -1);
+		const esc = frappe.utils.escape_html;
+		const rows = qs.map((q) => `
+			<div class="ucc-map-oq" data-name="${esc(q.name)}">
+				<span>${esc((q.question_text || "").slice(0, 70))}</span>
+				${q.primary_clause ? `<span class="cl">${esc(q.primary_clause)}</span>` : ""}
+			</div>`).join("");
+		this.$inspector.html(`
+			<h5 style="margin-top:0">${__("Objective")}</h5>
+			<div class="ucc-map-ocode">${esc(o.name)}</div>
+			${o.objective_name ? `<div class="ucc-map-oname">${esc(o.objective_name)}</div>` : ""}
+			${o.description ? `<div class="ucc-map-odesc">${esc(o.description)}</div>` : ""}
+			<hr>
+			<h5>${qs.length
+				? __("{0} question(s) mapped to it", [qs.length])
+				: __("No questions mapped to it")}</h5>
+			${rows || `<p class="text-muted" style="font-size:12px">${
+				__("Drag a question's dot onto this objective to map one.")}</p>`}
+			<button class="btn btn-default btn-sm btn-block ucc-map-oopen" style="margin-top:12px">${
+				__("Open objective record")}</button>`);
+		this.$inspector.find(".ucc-map-oq").on("click", (e) =>
+			this._select($(e.currentTarget).data("name")));
+		this.$inspector.find(".ucc-map-oopen").on("click", () =>
+			frappe.set_route("Form", "UCC Objective", code));
 	}
 
 	_renderInspector(q) {
