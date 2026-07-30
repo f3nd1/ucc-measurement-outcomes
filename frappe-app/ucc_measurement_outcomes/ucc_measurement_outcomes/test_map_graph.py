@@ -64,6 +64,11 @@ def test_no_edge_to_an_objective_that_is_not_on_the_canvas():
 
 
 def test_unmapped_only_is_the_default_working_set():
+	# NOTE: this exclusion is correct HERE and was the cause of a live bug
+	# elsewhere - mapping_studio.js used to rebuild the graph after every
+	# successful connect, so a question became mapped and was then filtered off
+	# the canvas by this very rule, with nothing saying why. The fix belongs in
+	# the caller (do not rebuild after a write), not in this function.
 	nodes, edges = build_map_graph(QUESTIONS, OBJECTIVES, unmapped_only=True, unmapped=UNMAPPED)
 	assert [n["id"] for n in nodes if n["id"].startswith("q:")] == ["q:Q3"]
 	assert edges == []                                   # nothing mapped, by definition

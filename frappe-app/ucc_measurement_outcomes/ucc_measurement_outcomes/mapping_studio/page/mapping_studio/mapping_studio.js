@@ -349,14 +349,19 @@ class MappingStudio {
 				// previous version's gaps for one frame.
 				this.$inspector.html('<p class="text-muted" style="font-size:12px">' +
 					__("Select a question to edit its objective and metric mapping.") + "</p>");
-				this._loadCoverage();
+				this._loadCoverage(() => this._renderMap());
 				this._renderTrail();
 				this._applyPendingQuestion();   // finding 2: arrived via deep link
 			},
 		});
 	}
 
-	_loadCoverage() {
+	// `then` exists so the canvas can be built AFTER coverage lands (its gap nodes
+	// come from coverage) without coverage rebuilding the canvas every time it
+	// refreshes. That unconditional rebuild is what deleted the question the user
+	// had just mapped, so only the three callers that genuinely want a fresh
+	// graph - version load, view switch, filter change - ask for one.
+	_loadCoverage(then) {
 		frappe.call({
 			method: MAPI + "mapping_coverage",
 			args: { survey_version: this.version },
@@ -365,8 +370,8 @@ class MappingStudio {
 				this.coverage = r.message;
 				this._renderCoverage();
 				this._renderTable();   // finding 3: table flags depend on coverage
-				this._renderMap();     // ...and the canvas's gap nodes come from it too
 				this._renderTrail();   // finding 5: badge reflects the same count
+				if (then) then();
 			},
 		});
 	}
@@ -597,9 +602,38 @@ class MappingStudio {
 				frappe.show_alert(r.message
 					? { indicator: "green", message: __("Mapping created") }
 					: { indicator: "blue", message: __("Already mapped") });
-				this.load(this.version);
+				// Patch the graph in place; do NOT rebuild it. Rebuilding runs
+				// mapping_canvas again with unmapped_only still on, which removed
+				// the question that was just mapped - so the reward for a
+				// successful drag was the question vanishing. Felix hit exactly
+				// this. The edge you drew stays drawn until you ask for a redraw.
+				this._markConnected(a, b);
+				this._afterMappingWrite();
 			},
 		});
+	}
+
+	// The connected question stops being a gap and grows the edge, locally. The
+	// coverage header still comes from the server, so the numbers are truth and
+	// the canvas is the working set - they are allowed to differ by the one thing
+	// you are looking at.
+	_markConnected(a, b) {
+		const nodes = this.canvas.nodes;
+		const q = a.startsWith("q:") ? a : b;
+		const o = q === a ? b : a;
+		nodes.forEach((n) => { if (n.id === q && n.type === "gap") n.type = "question"; });
+		const has = this.canvas.edges.some(([x, y]) => x === q && y === o);
+		if (!has) this.canvas.edges.push([q, o]);
+		this.canvas.setGraph(nodes, this.canvas.edges);
+	}
+
+	// Every mapping write goes through here. A write must never leave the user
+	// looking at a filter that hides its own result, and "unmapped" is precisely
+	// the filter that excludes what they just did - so it is cleared rather than
+	// left to make a correct mapping look like a lost question.
+	_afterMappingWrite() {
+		if (this.filter === "unmapped") this.filter = "all";
+		this._loadCoverage();
 	}
 
 	_disconnect(a, b) {
@@ -611,6 +645,8 @@ class MappingStudio {
 				args: { a, b },
 				callback: () => {
 					frappe.show_alert({ indicator: "green", message: __("Mapping removed") });
+					// Removal is the one case where a rebuild is right: the
+					// question becomes a gap, so unmapped-only should show it.
 					this.load(this.version);
 				},
 			});
@@ -670,7 +706,14 @@ class MappingStudio {
 				primary_clause: this._val("primary_clause"),
 				related_clauses: this._val("related_clauses"),
 			},
-			callback: () => { frappe.show_alert({ message: __("Mapping saved"), indicator: "green" }); this.load(this.version); },
+			callback: () => {
+				frappe.show_alert({ message: __("Mapping saved"), indicator: "green" });
+				// Same trap as the canvas: saving an objective from the inspector
+				// while the list is filtered to "unmapped" hides the question that
+				// was just mapped.
+				if (this.filter === "unmapped") this.filter = "all";
+				this.load(this.version);
+			},
 		});
 	}
 

@@ -612,3 +612,46 @@ Written without a bench. Four things to try on `ucc-sms-v2.orb.local`, in order:
    scroll; if it clips instead, the stage's explicit width/height is losing to
    `inset:0`. This also affects **Index Studio**, which shares the component —
    check a large index still renders as it did.
+
+## Canvas "question vanishes after connecting" — fix NOT yet confirmed live
+
+Felix hit this on v0.9.0: drag a port onto an objective, and the question
+disappears from Canvas and does not appear as mapped in List. Diagnosed by code
+reading as a VISIBILITY bug, not a data bug — but the diagnosis is unverified
+against the database, and the fix is unverified in a browser.
+
+**First, confirm the data was fine all along** (`bench --site <site> console`):
+
+```python
+import frappe
+frappe.get_all("UCC Question Mapping",
+    fields=["name", "question", "objective", "survey_version", "creation"],
+    order_by="creation desc", limit=5)
+```
+
+Expect the drag to have produced exactly one row, with the right question, the
+right objective, and **survey_version filled in**. That last column is the one
+worth staring at: `add_question_mapping` does not set it, relying on the field's
+`fetch_from: question.survey_version`, which Frappe applies inside
+`_validate_links()` during insert (base_document.py ~line 848, v15.83.0). If it
+is NULL, `get_mapping_overview` and `mapping_coverage` both filter it out and
+the diagnosis below is wrong — that would be a real data bug.
+
+Then check nothing was destroyed:
+
+```python
+frappe.db.count("UCC Question Mapping")   # before/after one drag: +1, never -1
+```
+
+**Then re-test the fix in the browser** (this is what "fixed" requires):
+
+1. Canvas, "Unmapped only" ticked. Drag a question's port onto an objective.
+2. The question must STAY on the canvas, turn from red to normal, and show the
+   new connector. Alert says "Mapping created".
+3. Switch to List. The question must appear under that objective's heading, not
+   in "⚠ No objective yet".
+4. Repeat with the list filter set to "unmapped" first (click the Questions card
+   in the coverage header): the write should clear that filter so the result is
+   visible instead of being hidden by it.
+5. Click the new connector → confirm → the question returns to the gap list and
+   reappears on the canvas.
