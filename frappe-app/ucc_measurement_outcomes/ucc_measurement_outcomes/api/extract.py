@@ -22,13 +22,13 @@ from ucc_measurement_outcomes.extraction import build_plan
 
 QITEM = "Survey Question Item"
 QUESTION = "UCC Survey Question"
-OBJECTIVE = "UCC Objective"
+OBJECTIVE = "Survey Objective"
 MAPPING = "UCC Question Mapping"
 VERSION = "UCC Survey Version"
 
-# Every DocType this endpoint may create. Extraction reads educ_sg but must
-# never write to it.
-WRITES = {QUESTION, OBJECTIVE, MAPPING}
+# Every DocType this endpoint may create. Extraction reads educ_sg - including
+# Survey Objective, the objective register - but never writes to it.
+WRITES = {QUESTION, MAPPING}
 
 
 def _resolve(doctype, *candidates):
@@ -79,7 +79,9 @@ def _plan_for(survey_version, survey_management=None):
 	rows, resolved = _source_rows(survey_management)
 	plan = build_plan(
 		rows,
-		existing_objectives=frappe.get_all(OBJECTIVE, pluck="name"),
+		# The institution's register, read-only. Extraction checks against it and
+		# never adds to it.
+		known_objectives=frappe.get_all(OBJECTIVE, pluck="name"),
 		existing_questions=frappe.get_all(
 			QUESTION, filters={"survey_version": survey_version}, pluck="question_text"),
 	)
@@ -113,12 +115,11 @@ def commit_extraction(survey_version, survey_management=None):
 	write something the user never reviewed."""
 	plan = _plan_for(survey_version, survey_management)
 
-	for obj in plan["new_objectives"]:
-		if not frappe.db.exists(OBJECTIVE, obj["code"]):
-			frappe.get_doc({
-				"doctype": OBJECTIVE, "objective_code": obj["code"],
-				"objective_name": obj["label"],
-			}).insert()
+	# No objective creation. build_plan has already dropped every row pointing at
+	# something the register does not have, and listed them in
+	# plan["unknown_objectives"] for the user to take to whoever owns the
+	# register. Inventing one here would put an objective nobody approved into
+	# the institutional record this app exists to produce evidence from.
 
 	created_q = created_m = 0
 	base = frappe.db.count(QUESTION, {"survey_version": survey_version})
@@ -151,6 +152,6 @@ def commit_extraction(survey_version, survey_management=None):
 	return {
 		"questions_created": created_q,
 		"mappings_created": created_m,
-		"objectives_created": len(plan["new_objectives"]),
+		"unknown_objectives": plan["unknown_objectives"],
 		"counts": plan["counts"],
 	}

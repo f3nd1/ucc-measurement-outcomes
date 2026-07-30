@@ -714,3 +714,44 @@ if problems:
 	sys.exit(1)
 print("All %d patches.txt references resolve." % len(refs))
 PY
+
+# UCC Objective is gone. Nothing may link to it or query it again.
+#
+# It was a parallel copy of educ_sg's Survey Objective register, keyed on a slug
+# of the real docname, so the 97 institutional objectives could never be joined
+# to this app's 7. Removing the DocType folder does not stop code referring to
+# it - a Link whose options name a missing DocType fails only when someone opens
+# the field. Fail here instead.
+python3 - <<'PY'
+import pathlib, sys
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+DEAD = '"UCC Objective"'
+# The migration and its test necessarily name the thing they are removing, and
+# prose explaining the change is not a reference.
+ALLOW = {"objective_migration.py", "test_objective_migration.py",
+         "link_objectives_to_register.py"}
+
+problems = []
+for path in sorted(list(app.rglob("*.py")) + list(app.rglob("*.js")) + list(app.rglob("*.json"))):
+	if path.name in ALLOW or "__pycache__" in path.parts:
+		continue
+	for n, line in enumerate(path.read_text().splitlines(), 1):
+		stripped = line.strip()
+		if stripped.startswith(("#", "//", "*")):
+			continue                       # prose about the removal
+		if DEAD in line or "'UCC Objective'" in line:
+			problems.append("%s:%d  %s" % (path.relative_to(app), n, stripped[:90]))
+
+if problems:
+	print("Code still references the removed UCC Objective DocType:", file=sys.stderr)
+	for p in problems:
+		print("  - " + p, file=sys.stderr)
+	print("  (mappings link to Survey Objective now - see docs/09-decision-log.md)",
+	      file=sys.stderr)
+	sys.exit(1)
+if (app / "mapping_studio" / "doctype" / "ucc_objective").exists():
+	print("mapping_studio/doctype/ucc_objective still exists on disk.", file=sys.stderr)
+	sys.exit(1)
+print("No live references to the removed UCC Objective DocType.")
+PY

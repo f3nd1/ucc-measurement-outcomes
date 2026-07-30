@@ -71,11 +71,11 @@ def get_lineage(index_result):
 					for c in (b["lineage_objectives"] or "").split(",") if c.strip()})
 	objective_names = {}
 	if codes:
+		# Survey Objective docnames ARE the label - the register names its own
+		# records, so there is no separate title field to fall back through.
 		objective_names = {
-			o["name"]: o["objective_name"] or o["name"]
-			for o in frappe.get_all("UCC Objective",
-									filters={"name": ["in", codes]},
-									fields=["name", "objective_name"])
+			o: o for o in frappe.get_all(
+				"Survey Objective", filters={"name": ["in", codes]}, pluck="name")
 		}
 
 	return build_report(

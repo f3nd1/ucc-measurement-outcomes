@@ -59,11 +59,17 @@ class TestChainIntegration(FrappeTestCase):
 		self.assertEqual(frappe.db.count("UCC Survey Answer", {"question": question.name}), 3)
 
 		# 4) Mapping: objective mapping + metric with the question as a source.
-		objective = frappe.get_doc({
-			"doctype": "UCC Objective", "objective_code": "OBJ-TC", "objective_name": "Teaching",
-		}).insert()
+		# The objective is BORROWED from the institution's register, never created:
+		# Survey Objective is educ_sg's and a test that seeds one would write a
+		# fake objective into the real record. A site with an empty register
+		# cannot run this part, and says so rather than inventing a row.
+		objective = frappe.get_all("Survey Objective", pluck="name",
+								   order_by="name asc", limit=1)
+		self.assertTrue(objective, "no Survey Objective on this site - seed the "
+								   "register before running the integration chain")
 		frappe.get_doc({
-			"doctype": "UCC Question Mapping", "question": question.name, "objective": objective.name,
+			"doctype": "UCC Question Mapping", "question": question.name,
+			"objective": objective[0],
 		}).insert()
 		frappe.get_doc({
 			"doctype": "UCC Metric Definition", "metric_code": "TEACHING_CLARITY",

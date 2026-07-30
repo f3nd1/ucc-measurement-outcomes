@@ -9,3 +9,4 @@
 
 [post_model_sync]
 ucc_measurement_outcomes.patches.v0_8_0.link_owner_department
+ucc_measurement_outcomes.patches.v0_10_0.link_objectives_to_register

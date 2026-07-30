@@ -17,7 +17,25 @@ from ucc_measurement_outcomes.map_graph import build_map_graph, connection_pair
 QUESTION = "UCC Survey Question"
 MAPPING = "UCC Question Mapping"
 METRIC = "UCC Metric Definition"
+# educ_sg's objective register - 97 real records, each already linked to
+# Policies And Standards Management. This app reads it and never writes to it.
+OBJECTIVE = "Survey Objective"
+
+# Fields worth showing in the objective panel, IF this site's Survey Objective
+# has them. Resolved against the real meta rather than assumed: the only two
+# confirmed by inspection are clause_or_criterion and status, and a hardcoded
+# fieldname that does not exist is how three earlier assumptions on this project
+# died. Anything missing is simply not shown.
+OBJECTIVE_DETAIL = ("objective_name", "objective", "description", "objective_description",
+					"clause_or_criterion", "status")
+
+
 VERSION = "UCC Survey Version"
+
+
+def _objective_fields():
+	real = {df.fieldname for df in frappe.get_meta(OBJECTIVE).fields}
+	return ["name"] + [f for f in OBJECTIVE_DETAIL if f in real]
 
 
 def _require(survey_version, ptype):
@@ -165,7 +183,7 @@ def mapping_canvas(survey_version, unmapped_only=1):
 	cov = mapping_coverage(survey_version)
 	nodes, edges = build_map_graph(
 		overview["questions"],
-		frappe.get_all("UCC Objective", fields=["name"], order_by="name asc"),
+		frappe.get_all(OBJECTIVE, fields=["name"], order_by="name asc"),
 		unmapped_only=bool(frappe.utils.cint(unmapped_only)),
 		unmapped=cov["questions_without_objective"],
 	)
@@ -229,8 +247,12 @@ def mapping_coverage(survey_version):
 		MAPPING, filters={"survey_version": survey_version},
 		fields=["question", "objective", "primary_clause"],
 	)
-	# Objectives in scope = every defined objective (which ones this survey misses).
-	objectives = frappe.get_all("UCC Objective", pluck="name")
+	# Objectives in scope = the whole register. This used to be the 7 rows of a
+	# parallel UCC Objective table, which made "all in use" a statement about
+	# almost nothing; against the real 97 it answers the question Criterion 7.1.1
+	# actually asks - which of the institution's objectives does this survey not
+	# reach.
+	objectives = frappe.get_all(OBJECTIVE, pluck="name")
 	summary = coverage_summary(questions, mappings, objectives)
 	# Attach question text so the UI can label the gap lists + flag canvas nodes.
 	summary["question_text"] = {q["name"]: q["question_text"] for q in questions}
@@ -241,11 +263,10 @@ def mapping_coverage(survey_version):
 def mapping_masters():
 	"""Dropdown data for the mapping inspector."""
 	return {
-		# description comes along for the canvas's objective panel - it is one
-		# extra column on a list that was already being fetched, which beats a
-		# second round trip per node click.
-		"objectives": frappe.get_all(
-			"UCC Objective", fields=["name", "objective_name", "description"], order_by="name"),
+		# Whatever detail fields this site's Survey Objective actually has come
+		# along for the canvas's objective panel - one wider query on a list that
+		# was already being fetched beats a round trip per node click.
+		"objectives": frappe.get_all(OBJECTIVE, fields=_objective_fields(), order_by="name"),
 		"standards": frappe.get_all("UCC Standard", fields=["name", "standard_name"], order_by="name"),
 		"metrics": frappe.get_all(METRIC, fields=["name", "metric_name"], order_by="name"),
 	}

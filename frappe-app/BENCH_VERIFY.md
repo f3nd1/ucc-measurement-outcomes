@@ -669,3 +669,48 @@ frappe.db.count("UCC Question Mapping")   # before/after one drag: +1, never -1
 3. **Mapping Studio opens on Canvas.** List is one click away and must still
    render correctly when switched to — including its coverage-header drill-down
    filters, which are never exercised on first paint any more.
+
+## Objectives now come from the register (verify live, v0.10.0)
+
+`UCC Objective` is deleted; `UCC Question Mapping.objective` links to
+`Survey Objective`. Run the report BEFORE migrating — it writes nothing:
+
+```bash
+bench --site <site> execute \
+    ucc_measurement_outcomes.patches.v0_10_0.link_objectives_to_register.report
+```
+
+Expect roughly: 7 rows, 97 in the register, ~1 `relink`, ~6 `drop`,
+**0 "need a human"**. Anything in the report column means the patch will keep
+`UCC Objective` in place rather than orphan a mapping — that is the designed
+outcome, not a failure, but it needs a decision before the DocType goes.
+
+Then:
+
+```bash
+bench --site <site> migrate
+bench build --app ucc_measurement_outcomes
+bench --site <site> clear-cache
+```
+
+Afterwards, in the browser:
+
+1. Mapping Studio's coverage header now reads against **97**, not 7 — e.g.
+   "Objectives 1/97". That is the real Criterion 7.1.1 question and it will look
+   much worse than before. It is not a regression.
+2. The canvas's right-hand column holds 97 nodes. This is the first time the
+   scroll (`overflow:auto` + stage sizing) carries real weight — confirm it
+   scrolls and that "Unmapped only" keeps the left column workable.
+3. Click an objective node. The panel shows whatever the register carries —
+   `clause_or_criterion` and `status` are the confirmed ones. If a row shows a
+   raw fieldname or nothing at all, add/remove it from `OBJECTIVE_DETAIL` in
+   `api/mapping.py`; the query already resolves against the real meta, so an
+   absent field is skipped rather than erroring.
+4. "Open objective record" routes to the Survey Objective form.
+5. Re-run `demo_data`. Demo mappings should point at the first six real
+   objectives by name, and no `DEMO-OBJ-*` objective should be created anywhere.
+
+**If the register is empty** on some site, the patch touches nothing and logs
+why, `demo_data` prints a warning and seeds no mappings, and
+`test_integration_chain` fails with a message telling you to seed the register.
+None of those paths invent an objective.

@@ -33,6 +33,8 @@ frappe.pages["mapping-studio"].on_page_show = function (wrapper) {
 const MAPI = "ucc_measurement_outcomes.api.mapping.";
 const XAPI = "ucc_measurement_outcomes.api.extract.";
 const srcLabel = (s) => `${s.name} (${s.rows})`;
+// How many "objective with no question" pills to render before summarising.
+const IDLE_SHOWN = 24;
 
 class MappingStudio {
 	constructor(page) {
@@ -49,9 +51,9 @@ class MappingStudio {
 
 	// The inspector's Objective and Standard dropdowns are built from this list.
 	// It used to be fetched once, in the constructor, and never again - and the
-	// constructor runs on on_page_load, which fires once per session. So any
-	// UCC Objective created after the page was first opened (by extraction, or
-	// by anyone in another tab) could not appear in the dropdown until a full
+	// constructor runs on on_page_load, which fires once per session. So an
+	// objective added to the register after the page was first opened (or a
+	// mapping made in another tab) could not appear in the dropdown until a full
 	// browser reload, which reads as "the data is missing" rather than "the list
 	// is stale". Refetch instead of caching for the session.
 	_loadMasters() {
@@ -132,8 +134,9 @@ class MappingStudio {
 		   at the end of the row, and the row body selects. */
 		.ucc-map-qtext{flex:1}
 		.ucc-map-ocode{font-family:monospace;font-size:13px;font-weight:600;color:#2f8196}
-		.ucc-map-oname{font-size:12px;margin-top:2px}
-		.ucc-map-odesc{font-size:11px;color:#6b7684;margin-top:6px;line-height:1.45}
+		.ucc-map-orow{display:flex;gap:8px;font-size:11px;margin-top:5px;line-height:1.45}
+		.ucc-map-orow .k{color:#8b95a5;flex:0 0 96px}
+		.ucc-map-orow .v{flex:1;word-break:break-word}
 		.ucc-map-oq{font-size:11px;padding:5px 7px;border-radius:5px;cursor:pointer;
 			display:flex;justify-content:space-between;gap:6px;align-items:baseline}
 		.ucc-map-oq:hover{background:#eef3ff}
@@ -264,11 +267,15 @@ class MappingStudio {
 					<div style="font-size:12px;margin-top:10px">
 						<b>${__("Would create")}:</b>
 						${c.questions - c.questions_already_present} ${__("questions")},
-						${c.mappings} ${__("objective mappings")},
-						${c.new_objectives} ${__("new objectives")}.<br>
+						${c.mappings} ${__("objective mappings")}.<br>
 						${c.questions_already_present} ${__("questions already exist and are reused")};
 						${c.questions_multi_objective} ${__("carry more than one objective")};
 						${c.skipped} ${__("source rows skipped")}.
+						${c.unknown_objectives ? `<div style="color:#b94848;margin-top:4px">${
+							__("{0} objective(s) are not in the register and will be skipped: {1}",
+							   [c.unknown_objectives,
+								frappe.utils.escape_html((p.unknown_objectives || []).join(", "))])
+							}</div>` : ""}
 						<table class="table table-bordered" style="margin-top:8px">
 							<tr><th>${__("Question")}</th><th>${__("Objectives")}</th><th>${__("Status")}</th></tr>
 							${rows}
@@ -283,11 +290,10 @@ class MappingStudio {
 						callback: (res) => {
 							d.hide();
 							frappe.show_alert({ indicator: "green", message: __(
-								"{0} questions, {1} mappings, {2} objectives created",
-								[res.message.questions_created, res.message.mappings_created,
-								 res.message.objectives_created]) });
-							// Extraction just created objectives - the inspector's
-							// dropdown is now out of date by definition.
+								"{0} questions and {1} mappings created",
+								[res.message.questions_created, res.message.mappings_created]) });
+							// Extraction creates no objectives any more (the register is
+							// educ_sg's), but the mapping list has changed.
 							this._loadMasters();
 							this.load(this.version);
 						},
@@ -538,7 +544,14 @@ class MappingStudio {
 			if (idle.length && filter !== "unmapped") {
 				html += `<div class="ucc-map-group idle">
 					<div class="ucc-map-ghead">${__("Objectives with no question")} <span class="n">${idle.length}</span></div>
-					<div class="ucc-map-qrow" style="cursor:default">${idle.map((o) => `<span class="indicator-pill gray" style="margin:2px">${frappe.utils.escape_html(o)}</span>`).join("")}</div>
+					<div class="ucc-map-qrow" style="cursor:default;flex-wrap:wrap">${
+						// Capped: the register holds ~97 objectives and a survey
+						// touches a handful, so the uncapped list was a wall of
+						// pills that buried everything under it. The COUNT above is
+						// the real number; this is a sample.
+						idle.slice(0, IDLE_SHOWN).map((o) => `<span class="indicator-pill gray" style="margin:2px">${frappe.utils.escape_html(o)}</span>`).join("")}${
+						idle.length > IDLE_SHOWN ? `<span class="text-muted" style="font-size:11px;margin-left:6px">${
+							__("+{0} more", [idle.length - IDLE_SHOWN])}</span>` : ""}</div>
 				</div>`;
 			}
 		}
@@ -678,20 +691,24 @@ class MappingStudio {
 		if (this.view === "list") this._renderTable();
 	}
 
-	// Objective nodes were selectable and did nothing. There is no existing
-	// objective detail view anywhere in this app to reuse - UCC Objective has
-	// three fields (code, name, description) and no page of its own - so this is
-	// the smallest honest one: what the record holds, and which questions point
-	// at it, built entirely from data the page already has.
+	// The objective panel. Its fields come from Survey Objective, the
+	// institution's register, and WHICH ones exist is resolved server-side
+	// (mapping._objective_fields) rather than assumed - so a site whose register
+	// is shaped differently shows less, never a row of "undefined".
 	//
-	// It deliberately does NOT claim an objective-level clause. UCC Objective has
-	// no clause field; the clause lives on each MAPPING row, and
-	// get_mapping_overview only returns the first mapping's clause per question -
-	// so a clause is shown against the question that carries it, never summarised
-	// up to the objective as if the objective owned it.
+	// clause_or_criterion is the one worth pointing at: the register already
+	// links each objective to Policies And Standards Management, which is the
+	// relationship this app used to re-type as free text on every mapping row.
 	_selectObjective(code) {
 		this.selected = null;                       // the list highlight is for questions
 		const o = (this.masters.objectives || []).find((x) => x.name === code) || { name: code };
+		// Whatever the register actually carries, in a fixed order, skipping
+		// anything this site does not have.
+		const detail = [
+			["objective_name", __("Name")], ["objective", __("Objective")],
+			["description", __("Description")], ["objective_description", __("Description")],
+			["clause_or_criterion", __("Clause / criterion")], ["status", __("Status")],
+		].filter(([f]) => o[f]);
 		const qs = this.rows.filter((q) => (q.objectives || []).indexOf(code) !== -1);
 		const esc = frappe.utils.escape_html;
 		const rows = qs.map((q) => `
@@ -702,8 +719,8 @@ class MappingStudio {
 		this.$inspector.html(`
 			<h5 style="margin-top:0">${__("Objective")}</h5>
 			<div class="ucc-map-ocode">${esc(o.name)}</div>
-			${o.objective_name ? `<div class="ucc-map-oname">${esc(o.objective_name)}</div>` : ""}
-			${o.description ? `<div class="ucc-map-odesc">${esc(o.description)}</div>` : ""}
+			${detail.map(([f, label]) => `<div class="ucc-map-orow"><span class="k">${
+				label}</span><span class="v">${esc(String(o[f]))}</span></div>`).join("")}
 			<hr>
 			<h5>${qs.length
 				? __("{0} question(s) mapped to it", [qs.length])
@@ -715,7 +732,7 @@ class MappingStudio {
 		this.$inspector.find(".ucc-map-oq").on("click", (e) =>
 			this._select($(e.currentTarget).data("name")));
 		this.$inspector.find(".ucc-map-oopen").on("click", () =>
-			frappe.set_route("Form", "UCC Objective", code));
+			frappe.set_route("Form", "Survey Objective", code));
 	}
 
 	_renderInspector(q) {

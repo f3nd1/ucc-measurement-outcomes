@@ -37,12 +37,13 @@
    "read_only": 1
   },
   {
+   "description": "The institution's objective register (97 records, each already linked to Policies And Standards Management). This app reads that register and never adds to it.",
    "fieldname": "objective",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Objective",
-   "options": "UCC Objective",
+   "options": "Survey Objective",
    "reqd": 1
   },
   {

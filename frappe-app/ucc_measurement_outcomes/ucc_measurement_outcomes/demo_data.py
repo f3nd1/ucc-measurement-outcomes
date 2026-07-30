@@ -38,7 +38,7 @@ DEMO_PREFIX = "DEMO-"
 OWNED = frozenset({
 	"UCC Survey", "UCC Survey Version", "UCC Survey Question",
 	"UCC Survey Question Choice", "UCC Survey Campaign", "UCC Survey Submission",
-	"UCC Survey Answer", "UCC Objective", "UCC Standard", "UCC Question Mapping",
+	"UCC Survey Answer", "UCC Standard", "UCC Question Mapping",
 	"UCC Metric Definition", "UCC Metric Source", "UCC Metric Result",
 	"UCC Index Definition", "UCC Index Version", "UCC Index Node",
 	"UCC Index Result", "UCC Score Breakdown",
@@ -145,14 +145,20 @@ def _build(spec, publish_index):
 				 question=question.name, answer_value=answers[i])
 
 	standard = _demo_standard()
-	for question, (_text, obj_code, obj_name, metric_code, _a) in zip(questions, spec["questions"]):
+	# Objectives are BORROWED, never created. UCC Objective used to exist purely
+	# so demo data could invent six of its own; now that mappings point at the
+	# institution's Survey Objective register, seeding one would put a fake
+	# objective into the real record - the same refusal as the Survey Management
+	# stub (decision 2026-07-26). So the demo mappings point at real objectives,
+	# picked deterministically, and simply do not exist if the register is empty.
+	pool = _objective_pool()
+	for i, (question, (_text, obj_code, obj_name, metric_code, _a)) in enumerate(
+			zip(questions, spec["questions"])):
 		if not obj_code:
 			continue   # left unmapped on purpose - this is what set B demonstrates
-		objective = _get_or_create("UCC Objective", f"{DEMO_PREFIX}OBJ-{obj_code}",
-								   objective_code=f"{DEMO_PREFIX}OBJ-{obj_code}",
-								   objective_name=obj_name)
-		_new("UCC Question Mapping", question=question.name, survey_version=version.name,
-			 objective=objective.name, standard=standard.name, primary_clause="7.1.1")
+		if pool:
+			_new("UCC Question Mapping", question=question.name, survey_version=version.name,
+				 objective=pool[i % len(pool)], standard=standard.name, primary_clause="7.1.1")
 		_new("UCC Metric Definition", metric_code=metric_code, metric_name=obj_name,
 			 default_normalisation="Likert 1-5 to 0-100",
 			 sources=[{"source_type": "Survey Question", "source_question": question.name,
@@ -175,6 +181,22 @@ def _build(spec, publish_index):
 		iv.status = "Published"
 		iv.save(ignore_permissions=True)
 	return iv, metrics
+
+
+def _objective_pool(limit=6):
+	"""Real Survey Objective docnames for the demo mappings to point at.
+
+	Deterministic (sorted, first `limit`) so a reseed produces the same demo
+	every time. Empty when the register is empty, and the caller then creates no
+	mappings at all rather than inventing an objective - the demo is allowed to
+	be less complete, never to lie about the institutional record.
+	"""
+	pool = frappe.get_all("Survey Objective", pluck="name", order_by="name asc", limit=limit)
+	if not pool:
+		print("demo_data: no Survey Objective records - demo mappings skipped. "
+			  "Metrics and index still seed; Mapping Studio will show every "
+			  "demo question as unmapped, which is a true statement about this site.")
+	return pool
 
 
 def _demo_standard():
@@ -263,7 +285,6 @@ def remove(dry_run=0):
 										metrics[0][0] if metrics else None)),
 		("UCC Metric Definition", metrics),
 		("UCC Question Mapping", mappings),
-		("UCC Objective", _prefixed("UCC Objective")),
 		("UCC Standard", _prefixed("UCC Standard")),
 		("UCC Survey Answer", answers),
 		("UCC Survey Submission", submissions),
