@@ -750,3 +750,23 @@ None of those paths invent an objective.
    where the evidence is read.
 5. **Version history** on the question shows old → new text.
 6. Correcting a question on a DRAFT version needs no reason (nothing is frozen).
+
+## Draft editing after the v0.12.2 fix (re-test first)
+
+The v0.12.0 correction gate fired on DRAFT versions: a wording-only change is
+what typing the first real question text *is*, and the gate never checked
+whether the version was frozen. Re-test in this order:
+
+1. New survey via the Builder's inline dialog → Draft, no questions.
+2. Drag a Short Text question in. Select it. Type real wording. **Apply
+   Changes must save**, and the card title must update. No toast about
+   published questions.
+3. Same draft: change the type, the required flag, choices. All must save.
+4. Publish it. Now editing the wording with no reason **must** be refused, with
+   a reason **must** save, and changing the type **must** be refused either way.
+5. Layout width on the published version must still apply with no reason.
+
+All seven of those paths are covered by `question_edit_verdict` in
+`test_versioning_logic.py`, and were driven through the real
+`assert_doc_version_editable` in a standalone harness before shipping — but
+nothing here has run against a database.

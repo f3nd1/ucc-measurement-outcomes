@@ -174,6 +174,57 @@ def test_correctable_only_change():
 	assert CORRECTABLE_FIELDS == {"question_text"}
 
 
+def test_question_edit_verdict():
+	from versioning import (ALLOW, CHECK_VERSION, NEEDS_REASON, question_edit_verdict)
+
+	def q(**kw):
+		base = {"survey_version": "V1", "sequence": 0, "question_type": "Short Text",
+				"is_required": 0, "layout_width": "Full",
+				"question_text": "Enter your question", "help_text": None,
+				"matrix_rows": None, "display_logic": None,
+				"display_logic_config": None, "choices": []}
+		base.update(kw)
+		return base
+
+	# ------------------------------------------------------------------ THE BUG
+	# Felix's exact repro, and the regression this function exists to prevent:
+	# new survey -> Draft -> drag a Short Text question -> type the real wording
+	# -> Apply Changes. A wording-only change, so v0.12.0 matched it against the
+	# CORRECTION rule and refused the first edit anyone makes on a new survey.
+	draft_before = q()
+	draft_after = q(question_text="How clear was the teaching?")
+	assert question_edit_verdict(draft_before, draft_after, frozen=False) == CHECK_VERSION
+	# ...and with no reason supplied, which is the state that used to throw.
+	assert question_edit_verdict(draft_before, draft_after, frozen=False, reason="") == CHECK_VERSION
+
+	# Nothing about a draft may reach either exemption.
+	assert question_edit_verdict(draft_before, q(layout_width="Half"), frozen=False) == CHECK_VERSION
+	assert question_edit_verdict(draft_before, q(question_type="Rating"), frozen=False) == CHECK_VERSION
+	# An insert (no `before`) always defers to the version.
+	assert question_edit_verdict(None, draft_after, frozen=False) == CHECK_VERSION
+	assert question_edit_verdict(None, draft_after, frozen=True) == CHECK_VERSION
+
+	# ------------------------------------------------------------- FROZEN PATHS
+	# Wording, no reason -> refused. Wording with a reason -> allowed.
+	assert question_edit_verdict(draft_before, draft_after, frozen=True) == NEEDS_REASON
+	assert question_edit_verdict(draft_before, draft_after, frozen=True, reason="   ") == NEEDS_REASON
+	assert question_edit_verdict(draft_before, draft_after, frozen=True, reason="typo") == ALLOW
+	# Presentation stays silent - no reason, no refusal.
+	assert question_edit_verdict(draft_before, q(layout_width="Half"), frozen=True) == ALLOW
+	# Structure is still frozen, reason or not: it falls through to the version
+	# check, which throws for a frozen version.
+	for after in (q(question_type="Rating"), q(is_required=1),
+				  q(choices=[{"choice_label": "a", "choice_value": "a", "sequence": 0}]),
+				  q(survey_version="V2")):
+		assert question_edit_verdict(draft_before, after, frozen=True) == CHECK_VERSION
+		assert question_edit_verdict(draft_before, after, frozen=True, reason="please") == CHECK_VERSION
+	# Wording AND layout together is neither exemption.
+	both = q(question_text="How clear was the teaching?", layout_width="Half")
+	assert question_edit_verdict(draft_before, both, frozen=True, reason="typo") == CHECK_VERSION
+	# A save that changes nothing is not a correction and needs no reason.
+	assert question_edit_verdict(draft_before, q(), frozen=True) == CHECK_VERSION
+
+
 if __name__ == "__main__":
 	test_frozen()
 	test_transitions()
@@ -184,5 +235,6 @@ if __name__ == "__main__":
 	test_presentation_field_whitelist_stays_small()
 	test_blank_and_unset_are_the_same()
 	test_correctable_only_change()
+	test_question_edit_verdict()
 	assert FROZEN_STATUSES == {"Published", "Closed"}
 	print("versioning logic: all checks passed")

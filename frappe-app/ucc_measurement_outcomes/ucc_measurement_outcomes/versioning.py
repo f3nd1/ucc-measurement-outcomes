@@ -108,6 +108,39 @@ def correctable_only_change(before, after):
 	return bool(changed) and changed <= CORRECTABLE_FIELDS
 
 
+# What a save of one question should do. Three outcomes, and the caller does
+# nothing else.
+ALLOW = "allow"                  # let it through, no version check needed
+NEEDS_REASON = "needs-reason"    # a frozen version's wording, with no reason given
+CHECK_VERSION = "check-version"  # ordinary path: the version must not be frozen
+
+
+def question_edit_verdict(before, after, frozen, reason=""):
+	"""Pure decision behind assert_doc_version_editable.
+
+	`frozen` is the CURRENT version's frozen state, and it is a parameter rather
+	than something this works out, because that is the bug this function exists
+	to make impossible to reintroduce:
+
+	    v0.12.0 asked correctable_only_change() first and threw NEEDS_REASON
+	    whenever it matched - on a DRAFT too. Typing the first real wording into
+	    a brand-new question is a wording-only change, so the very first edit on
+	    a brand-new survey was refused with a message about published questions.
+
+	The presentation branch had the same shape and was harmless only by luck: it
+	RETURNS (allows), which is what a draft wants anyway, while the correction
+	branch THROWS. Both are now gated on `frozen` so neither can misfire, and the
+	whole decision is testable without a bench - which the caller was not.
+	"""
+	if not before:
+		return CHECK_VERSION                  # insert: the version decides
+	if presentation_only_change(before, after):
+		return ALLOW if frozen else CHECK_VERSION
+	if frozen and correctable_only_change(before, after):
+		return ALLOW if (reason or "").strip() else NEEDS_REASON
+	return CHECK_VERSION
+
+
 def next_version_number(existing_count, name_exists):
 	"""Smallest free version number (as an int), probing past any gap left by a
 	deleted-then-recreated version.
@@ -178,29 +211,30 @@ def assert_doc_version_editable(doc):
 	the PREVIOUS version too, so a record cannot be moved out of a frozen
 	version (the old guard only checked the destination).
 
-	Presentation-only edits are exempt (decision 2026-07-28): a published survey
-	whose layout reads badly on a phone would otherwise need a whole new version,
-	which orphans the campaign already collecting against the published one.
-	Content stays absolutely frozen - presentation_only_change() returns False
-	the moment anything outside PRESENTATION_FIELDS differs."""
-	before = doc.get_doc_before_save()
-	if before and presentation_only_change(before, doc):
-		return
-	if before and correctable_only_change(before, doc):
-		# Wording only. Allowed on a frozen version, but never silently: the
-		# reason is what turns this from an edit into a correction, and Frappe's
-		# own track_changes (already on for UCC Survey Question) records the rest.
-		if not (doc.get("correction_reason") or "").strip():
-			import frappe
-			from frappe import _
+	The two post-publish exemptions (presentation 2026-07-28, wording correction
+	2026-07-29) apply ONLY to a frozen version. A draft is edited normally and
+	neither exemption may be consulted for it - see question_edit_verdict, which
+	holds the whole decision and is tested without a bench."""
+	import frappe
+	from frappe import _
 
-			frappe.throw(
-				_("Correcting the wording of a published question needs a reason. "
-				  "The version history records who, when and what changed; this "
-				  "records why - and it is shown wherever this question's results "
-				  "are read.")
-			)
+	before = doc.get_doc_before_save()
+	status = frappe.db.get_value("UCC Survey Version", doc.survey_version, "status")
+	verdict = question_edit_verdict(
+		before, doc, version_is_frozen(status), doc.get("correction_reason")
+	)
+	if verdict == ALLOW:
 		return
+	if verdict == NEEDS_REASON:
+		# Wording on a frozen version. Allowed, but never silently: the reason is
+		# what turns an edit into a correction, and Frappe's own track_changes
+		# (already on for UCC Survey Question) records the rest.
+		frappe.throw(
+			_("Correcting the wording of a published question needs a reason. "
+			  "The version history records who, when and what changed; this "
+			  "records why - and it is shown wherever this question's results "
+			  "are read.")
+		)
 	assert_version_editable(doc.survey_version)
 	if before and before.survey_version != doc.survey_version:
 		assert_version_editable(before.survey_version)
