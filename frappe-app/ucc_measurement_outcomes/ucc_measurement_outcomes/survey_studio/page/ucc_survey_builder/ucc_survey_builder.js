@@ -1066,6 +1066,15 @@ class SurveyBuilder {
 			<div class="form-group ucc-sb-choices" style="${CHOICE_TYPES.has(q.question_type) ? "" : "display:none"}"><label class="ucc-sb-choices-label">${MATRIX_TYPES.has(q.question_type) ? __("Grid Columns (response options, one per line, optional |value)") : __("Choices (one per line, optional |value)")}</label><textarea class="form-control" data-f="choices" rows="4" ${dis}>${frappe.utils.escape_html(choicesText)}</textarea></div>
 			${this._logicFields(q, dis, opt)}
 			${this.editable ? `<button class="btn btn-primary btn-sm btn-block ucc-sb-apply">${__("Apply Changes")}</button>` : ""}
+			${this.editable ? "" : `
+			<hr>
+			<div class="ucc-sb-correct">
+				<h6>${__("Correct the wording")}</h6>
+				<p class="text-muted" style="font-size:11px">${__("Typos only. The question's type, options and required flag stay frozen — changing those would change what counts as a valid answer. The correction is recorded in the version history and shown wherever this question's results are read.")}</p>
+				<div class="form-group"><textarea class="form-control" data-f="corrected_text" rows="3">${frappe.utils.escape_html(q.question_text || "")}</textarea></div>
+				<div class="form-group"><label>${__("Reason")}</label><textarea class="form-control" data-f="correction_reason" rows="2" placeholder="${__("e.g. fixed spelling of \"Teaching\"")}">${frappe.utils.escape_html(q.correction_reason || "")}</textarea></div>
+				<button class="btn btn-default btn-sm btn-block ucc-sb-applycorrection">${__("Save Wording Correction")}</button>
+			</div>`}
 		`);
 		this.$inspector.find('[data-f="display_logic"]').on("change", (e) => {
 			this.$inspector.find(".ucc-sb-logic").toggle(e.target.value !== LOGIC_MODES[0]);
@@ -1081,6 +1090,39 @@ class SurveyBuilder {
 		this.$inspector.find(".ucc-sb-apply").on("click", () => this._apply(q.name));
 		this.$inspector.find(".ucc-sb-applywidth").on("click", () =>
 			this._applyWidth(q.name, this.$inspector.find('[data-f="layout_width"]').val()));
+		this.$inspector.find(".ucc-sb-applycorrection").on("click", () => this._applyCorrection(q.name));
+	}
+
+	// The SECOND edit a frozen version accepts (decision 2026-07-29). Modelled on
+	// _applyWidth for the same reason: sends question_text and its reason ALONE,
+	// so nothing else from the inspector can ride along and be rejected - or,
+	// worse, quietly differ from what the reason describes.
+	//
+	// This was missing when the server-side rule shipped: every inspector field
+	// is `disabled` on a frozen version and _apply refuses outright, so the rule
+	// had no door. versioning.correctable_only_change() is what actually decides;
+	// this just makes the request one it can say yes to.
+	_applyCorrection(name) {
+		const text = (this.$inspector.find('[data-f="corrected_text"]').val() || "").trim();
+		const reason = (this.$inspector.find('[data-f="correction_reason"]').val() || "").trim();
+		const q = this.questions.find((x) => x.name === name);
+		if (!text) return frappe.show_alert({ message: __("The question cannot be empty."), indicator: "orange" });
+		if (q && text === (q.question_text || "").trim()) {
+			return frappe.show_alert({ message: __("The wording is unchanged."), indicator: "blue" });
+		}
+		// Checked here as well as on the server so the user is told before the
+		// round trip, never instead of it - the server throw is the real guard.
+		if (!reason) return frappe.show_alert({ message: __("A correction needs a reason."), indicator: "orange" });
+		this._call("update_question", {
+			question: name,
+			payload: JSON.stringify({ question_text: text, correction_reason: reason }),
+		}).then((ok) => {
+			if (!ok) return;
+			if (q) { q.question_text = text; q.correction_reason = reason; }
+			this._renderQuestions();
+			this._renderInspector();
+			frappe.show_alert({ message: __("Wording corrected"), indicator: "green" });
+		});
 	}
 
 	// The one edit a frozen version accepts. Sends layout_width ALONE - not the

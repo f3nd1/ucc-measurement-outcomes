@@ -183,7 +183,7 @@ def get_survey_builder(survey_version):
 		fields=[
 			"name", "question_text", "question_type", "help_text", "is_required",
 			"sequence", "display_logic", "display_logic_config", "matrix_rows",
-			"layout_width",
+			"layout_width", "correction_reason",
 		],
 		order_by="sequence asc, creation asc",
 	)
@@ -319,6 +319,10 @@ def update_question(question, payload):
 		"question_text", "question_type", "help_text", "is_required",
 		"display_logic", "display_logic_config", "sequence", "matrix_rows",
 		"layout_width",
+		# Must be settable, or a wording correction on a frozen version can never
+		# satisfy the rule that demands it: the reason has to be ON the doc
+		# before doc.save() runs validate.
+		"correction_reason",
 	):
 		if field in data:
 			doc.set(field, data[field])
