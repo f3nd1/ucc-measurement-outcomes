@@ -247,6 +247,31 @@ def public_link(survey_version):
 	}
 
 
+SUBMISSION = "UCC Survey Submission"
+
+
+@frappe.whitelist()
+def response_summary(survey_version):
+	"""How many responses this version has, and where to go and read them.
+
+	Its own method rather than a field on public_link(): that one has five
+	return branches for the states a LINK can be in, and responses exist
+	independently of all of them - a closed campaign still has its answers.
+
+	`campaign` is the newest Survey Tracking pointing at this version, so the
+	button can deep-link straight to it instead of dropping the user on a
+	campaign picker and making them work out which one is theirs.
+	"""
+	_require(survey_version, "read")
+	responses = frappe.db.count(SUBMISSION, {"survey_version": survey_version})
+	campaign = None
+	if responses and frappe.has_permission(TRACKING, "read"):
+		rows = frappe.get_all(TRACKING, filters={"ucc_survey_version": survey_version},
+							  pluck="name", order_by="modified desc", limit=1)
+		campaign = rows[0] if rows else None
+	return {"responses": responses, "campaign": campaign}
+
+
 @frappe.whitelist()
 def preview_link(survey_version):
 	"""The author-facing /survey?preview=… link. Always available - unlike the

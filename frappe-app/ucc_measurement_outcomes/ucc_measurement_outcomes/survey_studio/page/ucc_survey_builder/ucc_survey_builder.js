@@ -317,6 +317,17 @@ class SurveyBuilder {
 			.appendTo($tb).on("click", () => frappe.set_route("Form", "UCC Survey Theme"));
 		this.$inspectorToggle = $(`<button class="btn btn-default btn-sm" title="${__("Show or hide the Inspector")}">☰</button>`)
 			.appendTo($tb).on("click", () => this._toggleInspector());
+		// The only route to responses used to be the word "Analyse" in the
+		// five-step bar - a small grey label that reads as a progress marker, not
+		// a way in, and Felix could not find results at all from here. This is a
+		// second, obvious door; the bar is untouched.
+		//
+		// Hidden until there is something to look at: a "View Responses" button
+		// that opens an empty analytics page is worse than no button, because it
+		// teaches you the feature is broken rather than that you have no data.
+		this.$responses = $(`<button class="btn btn-primary btn-sm">${
+			__("View Responses")}</button>`).appendTo($tb).hide()
+			.on("click", () => this._openResponses());
 		this.$undo = $(`<button class="btn btn-default btn-sm" disabled>${__("Undo")}</button>`).appendTo($tb).on("click", () => this._undo());
 		this.$redo = $(`<button class="btn btn-default btn-sm" disabled>${__("Redo")}</button>`).appendTo($tb).on("click", () => this._redo());
 		// Item 4: the public link had no UI at all - a published version with an
@@ -465,6 +476,7 @@ class SurveyBuilder {
 			this._applyPendingQuestion();   // finding 2: arrived via deep link
 			this._loadCoverage();           // finding 3: mapping status
 			this._renderPublicLink();       // item 4: /survey?token=… link surface
+			this._renderResponses();        // the way in to what was collected
 			this._renderPreviewLink();      // item C: /survey?preview=… author link
 			// The banner above just toggled, which moves the grid's top offset.
 			this._layoutColumns();
@@ -551,6 +563,26 @@ class SurveyBuilder {
 				d.show();
 			},
 		});
+	}
+
+	// Responses are the point of publishing, so the count is on the button
+	// itself - "View Responses (23)" answers "did anyone reply?" without a click.
+	_renderResponses() {
+		if (!this.version) return this.$responses.hide();
+		this._call("response_summary", { survey_version: this.version.name }).then((r) => {
+			if (!r || !r.responses) return this.$responses.hide();
+			this._responseCampaign = r.campaign;
+			this.$responses.show().text(__("View Responses ({0})", [r.responses]));
+		});
+	}
+
+	_openResponses() {
+		// Campaign Analytics is where response data lives today. Deep-link to the
+		// right campaign rather than dropping the user on a picker: with several
+		// campaigns on a site, "which one is mine" is exactly the navigation
+		// problem this button exists to remove.
+		if (this._responseCampaign) frappe.route_options = { campaign: this._responseCampaign };
+		frappe.set_route("ucc-campaign-analytics");
 	}
 
 	// Item C: deliberately unlike the public link. Different colour, dashed

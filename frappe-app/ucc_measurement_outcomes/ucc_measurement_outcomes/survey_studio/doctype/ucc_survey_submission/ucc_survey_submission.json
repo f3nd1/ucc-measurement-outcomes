@@ -83,7 +83,13 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Responses",
+   "link_doctype": "UCC Survey Answer",
+   "link_fieldname": "submission"
+  }
+ ],
  "modified": "2026-07-24 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Survey Studio",

@@ -714,3 +714,20 @@ Afterwards, in the browser:
 why, `demo_data` prints a warning and seeds no mappings, and
 `test_integration_chain` fails with a message telling you to seed the register.
 None of those paths invent an objective.
+
+## "View Responses" and answer correction (verify live, v0.11.0)
+
+1. **Builder toolbar.** A published version with submissions shows a primary
+   "View Responses (N)" button beside Preview/Theme. A version with none shows
+   nothing at all — confirm the button does NOT appear on an empty version, and
+   that N matches `frappe.db.count("UCC Survey Submission", {"survey_version": …})`.
+2. **The deep link lands on the right campaign**, not on whichever sorts first.
+   Test with two campaigns on the site; the picker should arrive preselected.
+3. **Correcting an answer.** Open a UCC Survey Submission → the new
+   **Responses** connections section lists its UCC Survey Answer rows. Open one,
+   change `answer_value`, save with no reason → must throw. Save with a reason →
+   must succeed, and `answer_numeric` must come back **empty** (the next metric
+   calculation recomputes it).
+4. **The version history tab** on that answer shows old → new, who and when.
+   `track_changes` is already 1 on UCC Survey Answer; this confirms Frappe is
+   actually recording it rather than the flag merely being set.

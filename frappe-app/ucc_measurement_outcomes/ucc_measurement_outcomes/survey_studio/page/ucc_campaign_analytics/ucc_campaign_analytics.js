@@ -27,7 +27,9 @@ frappe.pages["ucc-campaign-analytics"].on_page_load = function (wrapper) {
 frappe.pages["ucc-campaign-analytics"].on_page_show = function (wrapper) {
 	// Campaigns are created elsewhere; pick up new ones without a full reload
 	// (the stale-list bug already fixed in Mapping and Dashboard Studio).
-	if (wrapper.ucc) wrapper.ucc.loadCampaigns();
+	if (!wrapper.ucc) return;
+	wrapper.ucc.applyRouteOptions();
+	wrapper.ucc.loadCampaigns();
 };
 
 const CAPI = "ucc_measurement_outcomes.api.campaign.";
@@ -39,7 +41,19 @@ class CampaignAnalytics {
 		this.data = null;
 		this._injectStyle();
 		this._build();
+		this.applyRouteOptions();
 		this.loadCampaigns();
+	}
+
+	// The Builder's "View Responses" button sends the campaign it already knows
+	// about. Without this the deep link landed on whichever campaign happened to
+	// sort first, which is the "which one is mine" problem the button exists to
+	// remove. Idempotent - it clears route_options, so the extra call from
+	// on_page_show is a harmless no-op.
+	applyRouteOptions() {
+		const opts = frappe.route_options || {};
+		frappe.route_options = {};
+		if (opts.campaign) this._wanted = opts.campaign;
 	}
 
 	_injectStyle() {
@@ -89,7 +103,11 @@ class CampaignAnalytics {
 			method: CAPI + "list_campaigns",
 			callback: (r) => {
 				this.campaigns = r.message || [];
-				const keep = this.$select.val();
+				// A campaign asked for by route wins over whatever was selected
+				// before, once - then it is spent, so a later refresh does not
+				// keep yanking the user back to it.
+				const keep = this._wanted || this.$select.val();
+				this._wanted = null;
 				this.$select.html(
 					this.campaigns.map((c) =>
 						`<option value="${frappe.utils.escape_html(c.name)}">${
