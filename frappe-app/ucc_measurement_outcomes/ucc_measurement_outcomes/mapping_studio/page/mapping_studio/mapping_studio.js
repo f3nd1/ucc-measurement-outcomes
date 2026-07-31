@@ -199,6 +199,16 @@ class MappingStudio {
 			this.canvasUnmappedOnly = e.target.checked;
 			this._renderMap();
 		});
+		// The register holds 97 objectives and one survey touches a handful.
+		// Showing all of them put a few real edges among ~90 unconnected boxes,
+		// which reads as "everything is linked to everything". Default to what
+		// this survey actually uses; this is the way to reach the rest.
+		this.canvasAllObjectives = false;
+		this.$canvasAll = $(`<button class="btn btn-default btn-xs"></button>`)
+			.appendTo($views).hide().on("click", () => {
+				this.canvasAllObjectives = !this.canvasAllObjectives;
+				this._renderMap();
+			});
 		this.$table = $('<div class="ucc-map-table"></div>').appendTo($left);
 		this.$canvas = $('<div style="height:420px;display:none"></div>').appendTo($left);
 		this.$inspector = $('<div class="ucc-map-inspector"><p class="text-muted" style="font-size:12px">' +
@@ -589,6 +599,7 @@ class MappingStudio {
 		this.$viewList.toggleClass("active", v === "list");
 		this.$viewCanvas.toggleClass("active", v === "canvas");
 		this.$canvasFilter.toggle(v === "canvas");
+		this.$canvasAll.toggle(v === "canvas");
 		this._renderTable();
 		// Edges are drawn from getBoundingClientRect, which is all zeros while
 		// the canvas is display:none - so a graph built in list view lands with
@@ -607,14 +618,29 @@ class MappingStudio {
 		}
 		frappe.call({
 			method: MAPI + "mapping_canvas",
-			args: { survey_version: this.version, unmapped_only: this.canvasUnmappedOnly ? 1 : 0 },
+			args: {
+				survey_version: this.version,
+				unmapped_only: this.canvasUnmappedOnly ? 1 : 0,
+				all_objectives: this.canvasAllObjectives ? 1 : 0,
+			},
 			callback: (r) => {
 				if (!r.message) return;
-				this.canvas.setGraph(r.message.nodes, r.message.edges);
-				if (!r.message.nodes.length) {
+				const m = r.message;
+				this.canvas.setGraph(m.nodes, m.edges);
+				this.$canvasAll.show().text(this.canvasAllObjectives
+					? __("Showing all {0} objectives — show only this survey's", [m.objectives_total])
+					: __("Show all {0} objectives", [m.objectives_total]));
+				if (!m.nodes.length) {
 					this.canvas.setEmpty({ message: this.canvasUnmappedOnly
 						? __("Every question has an objective. Untick “Unmapped only” to see the whole map.")
 						: __("This version has no questions yet.") });
+				} else if (!m.objectives_shown) {
+					// Questions but no objective column: nothing to drag ONTO, and
+					// an empty right-hand side looks like a loading failure.
+					this.canvas.setEmpty({
+						message: __("This survey has no objectives mapped yet. Press “Show all {0} objectives” to connect the first one.",
+									[m.objectives_total]),
+					});
 				}
 			},
 		});
@@ -742,7 +768,7 @@ class MappingStudio {
 			).join("");
 		this.$inspector.html(`
 			<h5 style="margin-top:0">${__("Objective Mapping")}</h5>
-			<div class="form-group"><label>${__("Objective")}</label><select class="form-control" data-f="objective">${opt(this.masters.objectives, q.objective)}</select></div>
+			<div class="form-group"><label>${__("Objective")}</label><div class="ucc-map-objfield"></div></div>
 			${(q.objectives && q.objectives.length > 1)
 				? `<div class="ucc-map-multi">${__("This question carries {0} objectives: {1}. The field above edits one at a time.",
 					[q.objectives.length, frappe.utils.escape_html(q.objectives.join(", "))])}</div>`
@@ -758,11 +784,33 @@ class MappingStudio {
 			<div class="form-group"><label>${__("Metric Code")}</label><input class="form-control" data-f="metric_code" placeholder="e.g. TEACHING_CLARITY"></div>
 			<button class="btn btn-default btn-sm btn-block ucc-map-metric">${__("Add As Metric Source")}</button>
 		`);
+		// A Link control, not a <select>. The register holds 97 objectives and a
+		// dropdown of 97 is what "every question is showing every objective"
+		// actually looked like - the mappings were always correct, the picker was
+		// listing the whole register on every question. A Link searches instead of
+		// enumerating, and it is Frappe's own control rather than a new widget.
+		this.objectiveField = frappe.ui.form.make_control({
+			parent: this.$inspector.find(".ucc-map-objfield").get(0),
+			df: {
+				fieldname: "objective",
+				fieldtype: "Link",
+				options: "Survey Objective",
+				label: "",
+				placeholder: __("Search the objective register…"),
+			},
+			render_input: true,
+		});
+		this.objectiveField.set_value(q.objective || "");
 		this.$inspector.find(".ucc-map-save").on("click", () => this._saveMapping(q.name));
 		this.$inspector.find(".ucc-map-metric").on("click", () => this._saveMetric(q.name));
 	}
 
-	_val(f) { return this.$inspector.find(`[data-f="${f}"]`).val(); }
+	_val(f) {
+		// objective is a Frappe Link control now, so it has no [data-f] input to
+		// read - everything else in the inspector is still plain markup.
+		if (f === "objective") return this.objectiveField ? this.objectiveField.get_value() : null;
+		return this.$inspector.find(`[data-f="${f}"]`).val();
+	}
 
 	_saveMapping(name) {
 		if (!this._val("objective")) {

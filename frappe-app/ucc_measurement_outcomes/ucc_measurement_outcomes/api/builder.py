@@ -460,10 +460,17 @@ def copy_questions_to_version(names, target_version):
 
 @frappe.whitelist()
 def campaign_qr(campaign):
-	"""SVG QR code for a campaign's public survey link."""
-	if not frappe.has_permission(CAMPAIGN, "read", doc=campaign):
+	"""SVG QR code for a campaign's public survey link.
+
+	`campaign` is a Survey Tracking record. This used to read UCC Survey
+	Campaign.public_token - the model D2 retired - so it was not merely
+	uncalled, it was broken in exactly the way api/public._get_open_campaign
+	already had to be fixed: a genuinely minted token lives on Survey Tracking
+	as ucc_public_token, and looking for it anywhere else finds nothing.
+	"""
+	if not frappe.has_permission(TRACKING, "read", doc=campaign):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
-	token = frappe.db.get_value(CAMPAIGN, campaign, "public_token")
+	token = frappe.db.get_value(TRACKING, campaign, "ucc_public_token")
 	if not token:
 		frappe.throw(_("Campaign has no public token."))
 	url = frappe.utils.get_url("/survey?token=" + token)

@@ -14,6 +14,7 @@ from ucc_measurement_outcomes.index_engine import (
 	weights_valid,
 )
 from ucc_measurement_outcomes import index_templates
+from ucc_measurement_outcomes.index_calc import _lineage_snapshot, calculate_index
 
 INDEX_VERSION = "UCC Index Version"
 INDEX_DEF = "UCC Index Definition"
@@ -174,21 +175,88 @@ def publish_version(index_version):
 
 @frappe.whitelist()
 def calculate(index_version, period=None, entity_type=None, entity=None, metric_values=None):
-	"""Enqueue a background calculation. Returns immediately."""
+	"""Compute one result now and return its name.
+
+	Synchronous, deliberately. It used to enqueue a background job and return
+	{"queued": True} - which nothing could act on, which is part of why it had no
+	caller for so long: a button that says "started something, somewhere" is not
+	a button anyone can build a results panel around. The work is a handful of
+	get_alls plus pure arithmetic, so there is nothing here worth a worker, and
+	the queue itself was never bench-verified.
+
+	Writes a UCC Index Result, so it needs create permission on that - read on
+	the version is not enough to mint an immutable evidence record.
+	"""
 	_require(index_version, "read")
+	if not frappe.has_permission("UCC Index Result", "create"):
+		frappe.throw(_("You do not have permission to calculate results."), frappe.PermissionError)
 	if isinstance(metric_values, str):
 		metric_values = json.loads(metric_values)
-	# TODO: bench-verify - confirm the queue name / worker availability on the bench.
-	frappe.enqueue(
-		"ucc_measurement_outcomes.index_calc.calculate_index",
-		queue="short",
-		index_version=index_version,
-		period=period,
-		entity_type=entity_type,
-		entity=entity,
-		metric_values=metric_values,
+	name = calculate_index(
+		index_version=index_version, period=period, entity_type=entity_type,
+		entity=entity, metric_values=metric_values,
 	)
-	return {"queued": True}
+	return {"result": name}
+
+
+@frappe.whitelist()
+def list_results(index_version, limit=20):
+	"""Calculation history for one version, newest first.
+
+	`owner` and `creation` are Frappe's own - there is no separate log to invent,
+	and a second record of who calculated what would be one more thing that can
+	disagree with the framework.
+	"""
+	_require(index_version, "read")
+	return frappe.get_all(
+		"UCC Index Result",
+		filters={"index_version": index_version},
+		fields=["name", "period", "entity_type", "entity", "value", "target",
+				"calculation_date", "owner", "creation"],
+		order_by="creation desc",
+		limit=int(limit),
+	)
+
+
+@frappe.whitelist()
+def node_sources(index_version):
+	"""{metric_code: {questions:[{name,text,survey_version}], objectives, clauses}}
+	for every Metric node on this version.
+
+	The lineage snapshot run FORWARD. Reuses index_calc._lineage_snapshot rather
+	than re-walking metric -> question -> mapping, so what this panel shows and
+	what gets frozen into UCC Score Breakdown at calculation time cannot drift
+	apart - if they did, the panel would be quietly lying about the evidence.
+
+	Live data, unlike the snapshot: this answers "what WOULD feed a calculation
+	run now", which is the question you ask before pressing Calculate.
+	"""
+	_require(index_version, "read")
+	version = frappe.get_doc(INDEX_VERSION, index_version)
+	codes = {n.source_metric for n in version.nodes if n.source_metric}
+	trace = _lineage_snapshot(codes)
+
+	names = sorted({q for t in trace.values() for q in t["questions"]})
+	detail = {
+		q["name"]: q for q in frappe.get_all(
+			"UCC Survey Question", filters={"name": ["in", names or [""]]},
+			fields=["name", "question_text", "survey_version"])
+	}
+	out = {}
+	for code, t in trace.items():
+		out[code] = {
+			"objectives": t["objectives"],
+			"clauses": t["clauses"],
+			"questions": [
+				{"name": q, "text": (detail.get(q, {}).get("question_text") or q),
+				 "survey_version": detail.get(q, {}).get("survey_version")}
+				for q in t["questions"]
+			],
+		}
+	# Named separately so a node pointing at a metric with no sources at all is
+	# visible as such, rather than as an empty section that reads like a bug.
+	return {"sources": out,
+			"empty_metrics": sorted(c for c in codes if not trace.get(c, {}).get("questions"))}
 
 
 @frappe.whitelist()

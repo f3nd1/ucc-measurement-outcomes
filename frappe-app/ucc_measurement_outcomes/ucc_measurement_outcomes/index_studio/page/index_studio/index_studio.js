@@ -104,6 +104,22 @@ class IndexStudio {
 		const el = document.createElement("style");
 		el.id = "ucc-idx-style";
 		el.textContent = `
+		.ucc-idx-results{margin-top:16px}
+		.ucc-idx-results h5{font-size:13px;margin:0 0 8px}
+		.ucc-idx-none{border:1px dashed #ecd6aa;background:#fff8ea;color:#715824;
+			border-radius:8px;padding:11px 13px;font-size:12px;margin-top:16px}
+		.ucc-idx-rtable{font-size:12px;margin-bottom:8px}
+		.ucc-idx-rtable th{font-size:11px;color:#8b95a5;font-weight:600}
+		.ucc-idx-rrow{cursor:pointer}
+		.ucc-idx-rrow:hover{background:#f7f9fc}
+		.ucc-idx-rrow.sel{background:#eef3ff;font-weight:600}
+		.ucc-idx-rhead{font-size:12px;margin:10px 0 6px}
+		.ucc-idx-src{border:1px solid #dbe7ea;background:#f4fafb;border-radius:8px;
+			padding:9px 11px;margin:0 0 12px;font-size:11px;line-height:1.5}
+		.ucc-idx-src.empty{border-color:#e0b4b4;background:#fbeaea;color:#b94848}
+		.ucc-idx-srcv{margin-top:6px;font-weight:600;color:#2f8196}
+		.ucc-idx-srcq{padding-left:10px;color:#5a6675;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+		.ucc-idx-srco{margin-top:6px;color:#6f58a8}
 		.ucc-idx-norm{border-radius:8px;padding:9px 11px;margin:0 0 12px;font-size:12px}
 		.ucc-idx-norm .l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
 		.ucc-idx-norm.ok{background:#e8f5ef;color:#1c5e44;border:1px solid #bfe0d1}
@@ -152,6 +168,13 @@ class IndexStudio {
 		// gives it the weight; irreversibility is carried by _publish()'s confirm.
 		// Create drops to btn-default so the primary slot is not contested.
 		this.$publish = $(`<button class="btn btn-primary btn-sm" disabled>${__("Publish Version")}</button>`).appendTo($bar).on("click", () => this._publish());
+		// The page could build and publish a formula it had no way to RUN:
+		// api.index_studio.calculate was whitelisted, tested and called by nothing,
+		// and the trail said "publish it to calculate results" while offering no
+		// control that did. Born disabled for the same reason as the two above -
+		// this.version is only set inside load().
+		this.$calculate = $(`<button class="btn btn-default btn-sm" disabled>${
+			__("Calculate")}</button>`).appendTo($bar).on("click", () => this._calculate());
 		this.$badge = $('<span style="margin-left:6px;font-size:12px"></span>').appendTo($bar);
 		frappe.call({
 			method: IAPI + "list_index_templates",
@@ -174,6 +197,9 @@ class IndexStudio {
 		const $grid = $('<div style="display:grid;grid-template-columns:1fr 320px;gap:14px;margin-top:12px"></div>').appendTo($main);
 		this.$canvas = $('<div style="height:560px"></div>').appendTo($grid);
 		this.$inspector = $('<div><p class="text-muted" style="font-size:12px">' + __("Click a node to edit it.") + "</p></div>").appendTo($grid);
+		// Full width under the canvas, not in the 320px inspector: a breakdown is
+		// a table, and the inspector is where you edit ONE node.
+		this.$results = $('<div class="ucc-idx-results"></div>').appendTo($main);
 		this.canvas = new window.UCCNodeCanvas(this.$canvas.get(0), {
 			onSelect: (n) => this._select(n.id),
 			onMove: (n) => this._onMove(n),
@@ -291,6 +317,8 @@ class IndexStudio {
 				this._renderCanvas();
 				this._renderInspector();
 				this._renderTrail();
+				this._loadResults();
+				this._loadNodeSources();
 				this._applyPendingSelection();   // finding 2: arrived via deep link
 			},
 		});
@@ -469,6 +497,146 @@ class IndexStudio {
 		</div>`;
 	}
 
+	_calculate() {
+		frappe.confirm(
+			__("Calculate a result for this version now? It writes an immutable UCC Index Result."),
+			() => frappe.call({
+				method: IAPI + "calculate",
+				args: { index_version: this.version },
+				freeze: true,
+				freeze_message: __("Calculating…"),
+				callback: (r) => {
+					if (!r.message) return;
+					frappe.show_alert({ indicator: "green", message: __("Result {0} calculated", [r.message.result]) });
+					this._loadResults(r.message.result);
+				},
+			})
+		);
+	}
+
+	// `focus` is the result just calculated, so the panel opens on it instead of
+	// making the user find their own row.
+	_loadResults(focus) {
+		if (!this.version) return;
+		frappe.call({
+			method: IAPI + "list_results",
+			args: { index_version: this.version },
+			callback: (r) => {
+				this.results = r.message || [];
+				this.focusResult = focus || (this.results[0] && this.results[0].name) || null;
+				this._renderResults();
+			},
+		});
+	}
+
+	_loadNodeSources() {
+		if (!this.version) return;
+		frappe.call({
+			method: IAPI + "node_sources",
+			args: { index_version: this.version },
+			callback: (r) => {
+				this.nodeSources = (r.message || {}).sources || {};
+				this.emptyMetrics = (r.message || {}).empty_metrics || [];
+				this._renderInspector();     // a node may already be selected
+			},
+		});
+	}
+
+	// History and the selected result's breakdown, below the canvas. Frappe's own
+	// owner/creation carry who and when - there is no second log to invent, and a
+	// parallel record of who calculated what is one more thing that can disagree
+	// with the framework.
+	_renderResults() {
+		if (!this.results || !this.results.length) {
+			this.$results.html(`<div class="ucc-idx-none">${
+				this.editable
+					? __("Draft versions cannot be calculated. Publish this version, then press Calculate.")
+					: __("No results yet. Press Calculate to compute one from this published formula.")
+			}</div>`);
+			return;
+		}
+		const esc = frappe.utils.escape_html;
+		const rows = this.results.map((x) => `
+			<tr class="ucc-idx-rrow ${x.name === this.focusResult ? "sel" : ""}" data-name="${esc(x.name)}">
+				<td>${x.value === null || x.value === undefined ? "—" : Number(x.value).toFixed(1)}</td>
+				<td>${esc(x.period || "—")}</td>
+				<td>${esc(x.entity || "—")}</td>
+				<td>${frappe.datetime.str_to_user(x.calculation_date || x.creation)}</td>
+				<td>${esc(x.owner || "")}</td>
+			</tr>`).join("");
+		this.$results.html(`
+			<h5>${__("Results")} <span class="text-muted" style="font-size:11px">(${this.results.length})</span></h5>
+			<table class="table table-bordered ucc-idx-rtable">
+				<tr><th>${__("Score")}</th><th>${__("Period")}</th><th>${__("Entity")}</th>
+					<th>${__("Calculated")}</th><th>${__("By")}</th></tr>
+				${rows}
+			</table>
+			<div class="ucc-idx-breakdown"></div>`);
+		this.$results.find(".ucc-idx-rrow").on("click", (e) => {
+			this.focusResult = $(e.currentTarget).data("name");
+			this._renderResults();
+		});
+		if (this.focusResult) this._renderBreakdown();
+	}
+
+	_renderBreakdown() {
+		const $into = this.$results.find(".ucc-idx-breakdown");
+		frappe.call({
+			method: IAPI + "get_result_breakdown",
+			args: { index_result: this.focusResult },
+			callback: (r) => {
+				const d = r.message;
+				if (!d) return;
+				const esc = frappe.utils.escape_html;
+				const num = (v) => (v === null || v === undefined ? "—" : Number(v).toFixed(1));
+				$into.html(`
+					<div class="ucc-idx-rhead">${__("Score")} <b>${num(d.value)}</b>${
+						d.target ? ` · ${__("target")} ${num(d.target)}` : ""}</div>
+					<table class="table table-bordered ucc-idx-rtable">
+						<tr><th>${__("Component")}</th><th>${__("Metric")}</th><th>${__("Raw")}</th>
+							<th>${__("Score")}</th><th>${__("Weight")}</th><th>${__("Contribution")}</th></tr>
+						${d.breakdown.map((b) => `<tr>
+							<td>${esc(b.component_label || b.component_key)}</td>
+							<td>${esc(b.source_metric || "—")}</td>
+							<td>${num(b.raw_value)}</td><td>${num(b.normalised_value)}</td>
+							<td>${b.weight ? b.weight + "%" : "—"}</td><td>${num(b.contribution)}</td>
+						</tr>`).join("")}
+					</table>
+					<div class="text-muted" style="font-size:11px">${
+						__("This is the snapshot taken when the result was calculated. Editing a mapping today does not change it.")}</div>`);
+			},
+		});
+	}
+
+	// What actually feeds this node, resolved live - the lineage snapshot run
+	// FORWARD. It answers the question you ask BEFORE pressing Calculate, which
+	// the frozen snapshot on an existing result cannot.
+	_nodeSourcePanel(n) {
+		if (n.node_type !== "Metric" || !n.source_metric) return "";
+		if (!this.nodeSources) return "";
+		const t = this.nodeSources[n.source_metric];
+		const esc = frappe.utils.escape_html;
+		if (!t || !t.questions.length) {
+			return `<div class="ucc-idx-src empty"><b>${__("Nothing feeds this node")}</b><br>${
+				__("Metric {0} has no survey questions as sources, so it will score nothing.", [esc(n.source_metric)])
+			}</div>`;
+		}
+		// Grouped by survey version, because the whole point of a metric is that
+		// it may draw on several - and a node silently fed by one survey when you
+		// expected three is invisible in a flat list.
+		const byVersion = {};
+		t.questions.forEach((q) => (byVersion[q.survey_version || __("(unknown version)")] ||= []).push(q));
+		return `<div class="ucc-idx-src">
+			<b>${__("Fed by {0} question(s) from {1} survey version(s)",
+					[t.questions.length, Object.keys(byVersion).length])}</b>
+			${Object.keys(byVersion).sort().map((v) => `
+				<div class="ucc-idx-srcv">${esc(v)}</div>
+				${byVersion[v].map((q) => `<div class="ucc-idx-srcq" title="${esc(q.text)}">${esc(q.text.slice(0, 70))}</div>`).join("")}
+			`).join("")}
+			${t.objectives.length ? `<div class="ucc-idx-srco">${__("Objectives")}: ${esc(t.objectives.join(", "))}</div>` : ""}
+		</div>`;
+	}
+
 	_renderInspector() {
 		const n = this.nodes.find((x) => x.node_key === this.selectedKey);
 		if (!n) {
@@ -492,6 +660,7 @@ class IndexStudio {
 		// weights only (docs/09-decision-log.md). So state the effective rule
 		// plainly and stop presenting the node's own field as if it drives a score.
 		const effective = this._normalisationPanel(n, metric);
+		const sources = this._nodeSourcePanel(n);
 		this.$inspector.html(`
 			<h5 style="margin-top:0">${frappe.utils.escape_html(n.label || n.node_key)} <span class="text-muted" style="font-size:11px">(${n.node_type})</span></h5>
 			<p class="text-muted" style="font-size:11px;margin-top:-4px">${
@@ -507,6 +676,7 @@ class IndexStudio {
 			<div class="form-group"><label>${__("Source Metric")}</label>
 				<select class="form-control" data-f="source_metric" ${dis}>${metricOpts}</select></div>
 			${effective}
+			${sources}
 			<details class="ucc-idx-doc"${n.normalisation ? "" : ""}>
 				<summary>${__("Node normalisation note")}</summary>
 				<div class="form-group" style="margin-top:8px"><select class="form-control" data-f="normalisation" ${dis}>${normOpts}</select></div>

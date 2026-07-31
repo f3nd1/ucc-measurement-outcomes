@@ -531,6 +531,15 @@ class SurveyBuilder {
 			this.$link.append($(`<a href="${frappe.utils.escape_html(r.url)}" target="_blank" rel="noopener">${frappe.utils.escape_html(r.url)}</a>`));
 			$(`<button class="btn btn-xs btn-default">${__("Copy")}</button>`).appendTo(this.$link)
 				.on("click", () => copyLink(r.url));
+			// api.builder.campaign_qr has existed since the app gained its `qrcode`
+			// dependency and was never called by anything - and it was reading the
+			// retired UCC Survey Campaign, so it would have failed if it had been.
+			// A printed QR is how a survey reaches students who are in a room
+			// rather than at an inbox.
+			if (r.campaign) {
+				$(`<button class="btn btn-xs btn-default">${__("QR code")}</button>`)
+					.appendTo(this.$link).on("click", () => this._showQR(r.campaign));
+			}
 			this.$link.append(more);
 		});
 	}
@@ -599,6 +608,21 @@ class SurveyBuilder {
 		// problem this button exists to remove.
 		if (this._responseCampaign) frappe.route_options = { campaign: this._responseCampaign };
 		frappe.set_route("ucc-campaign-analytics");
+	}
+
+	_showQR(campaign) {
+		this._call("campaign_qr", { campaign }).then((r) => {
+			if (!r) return;
+			// The SVG comes from the qrcode package server-side, never from user
+			// text, so there is nothing here to escape - but it IS markup, so it
+			// goes in a dialog of our own rather than anywhere a stored value
+			// could sit beside it.
+			const d = new frappe.ui.Dialog({ title: __("Scan to open this survey"), fields: [{ fieldtype: "HTML", fieldname: "qr" }] });
+			d.fields_dict.qr.$wrapper.html(
+				`<div style="text-align:center">${r.svg}
+				 <div style="font-size:11px;word-break:break-all;margin-top:8px">${frappe.utils.escape_html(r.url)}</div></div>`);
+			d.show();
+		});
 	}
 
 	// Item C: deliberately unlike the public link. Different colour, dashed

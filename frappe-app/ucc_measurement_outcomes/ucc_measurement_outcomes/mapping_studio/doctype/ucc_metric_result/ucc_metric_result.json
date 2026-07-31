@@ -80,11 +80,11 @@
    "label": "Traceability"
   },
   {
-   "description": "Published survey version the metric was computed from.",
+   "description": "Every survey version that contributed an answer to this result, comma-separated. A metric may draw on questions from several surveys, so this is a list - a single Link recorded one of them and silently implied it was the only one.",
    "fieldname": "source_version",
-   "fieldtype": "Link",
-   "label": "Source Version",
-   "options": "UCC Survey Version"
+   "fieldtype": "Small Text",
+   "label": "Source Versions",
+   "read_only": 1
   },
   {
    "fieldname": "calculation_date",

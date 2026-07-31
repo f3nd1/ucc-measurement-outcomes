@@ -770,3 +770,50 @@ All seven of those paths are covered by `question_edit_verdict` in
 `test_versioning_logic.py`, and were driven through the real
 `assert_doc_version_editable` in a standalone harness before shipping — but
 nothing here has run against a database.
+
+## Index Studio Calculate, source_version, objective display (verify live, v0.13.0)
+
+**Item 3's confirmation query — run this FIRST.** It decides whether the
+objective work below was the right fix:
+
+```python
+import frappe
+from collections import Counter
+rows = frappe.get_all("UCC Question Mapping", fields=["question", "objective"])
+per_q = Counter(r.question for r in rows)
+print(len(rows), "mappings across", len(per_q), "questions")
+print("objectives per question:", Counter(per_q.values()))
+```
+
+Expect mostly `{1: n, 2: few, 3: fewer}`. **A long tail near 97 means the data
+IS wrong** and the presentation fix, while still an improvement, is not the
+whole story — say so before going further.
+
+**Index Studio:**
+1. Open a **Draft** version → Calculate is disabled, tooltip says publish first,
+   and the results panel says draft versions cannot be calculated.
+2. Publish → Calculate enables. Press it, confirm. A result appears in the
+   history with its score, who calculated it and when (Frappe's `owner` and
+   `creation`; no new log was invented).
+3. Click a history row → the breakdown table renders from
+   `get_result_breakdown`, which had no caller until now.
+4. Click a **Metric** node → the inspector shows which questions feed it,
+   grouped by survey version. **This is the cross-survey proof surface**: a
+   metric drawing on three surveys must show three version groups.
+5. A node whose metric has no sources must show the red "Nothing feeds this
+   node" panel rather than an empty section.
+
+**`calculate` is now synchronous** — it used to `frappe.enqueue` and return
+`{"queued": True}`, against a queue that was never bench-verified. If a real
+index turns out slow enough to matter, that is the moment to reconsider, not
+before.
+
+**source_version:** run a metric whose sources span two surveys and confirm the
+field now reads `EOM-V01, ONB-V01` rather than one of them. Existing rows keep
+their single value — still valid text under the new `Small Text` type, so no
+data patch was needed.
+
+**QR:** the public-link bar gains a QR button on a version with an open
+campaign. `campaign_qr` was reading the retired `UCC Survey Campaign` and would
+have thrown; it now reads `Survey Tracking.ucc_public_token`. Needs the
+`qrcode` package present in the bench env.

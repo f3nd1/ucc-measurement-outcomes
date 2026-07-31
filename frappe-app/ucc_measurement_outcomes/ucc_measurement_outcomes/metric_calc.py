@@ -11,7 +11,11 @@ answer_numeric, and writes one Metric Result. Runs as a background job.
 
 import frappe
 
-from ucc_measurement_outcomes.metric_engine import aggregate_metric, assert_scoreable_source
+from ucc_measurement_outcomes.metric_engine import (
+	aggregate_metric,
+	assert_scoreable_source,
+	contributing_versions,
+)
 
 METRIC = "UCC Metric Definition"
 ANSWER = "UCC Survey Answer"
@@ -68,7 +72,13 @@ def calculate_metric_result(metric_code, period=None, entity_type=None, entity=N
 		"entity": entity,
 		"value": result["value"],
 		"response_count": result["response_count"],
-		"source_version": answer_rows[0][4] if answer_rows else None,
+		# EVERY contributing version, not the first one. A metric may name
+		# questions from several surveys - that is the point of the source table,
+		# and the whole cross-survey index rests on it - so a single value here
+		# recorded one arbitrary version and silently implied it was the only
+		# one. Nothing scoring reads this field; it is provenance on an EduTrust
+		# evidence record, which is exactly why it must not misreport.
+		"source_version": contributing_versions(answer_rows),
 	})
 	doc.insert()
 	return doc.name

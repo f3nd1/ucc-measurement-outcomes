@@ -801,3 +801,72 @@ if leaked:
 print("Post-publish exemptions are disjoint and answer-safe (%d + %d fields)."
       % (len(sets["PRESENTATION_FIELDS"]), len(sets["CORRECTABLE_FIELDS"])))
 PY
+
+# Every whitelisted method must be reachable, or be declared API-only.
+#
+# The mirror of the guard above, and it found a real hole: index_studio.calculate
+# and get_result_breakdown were whitelisted, working and tested - with no caller
+# anywhere. Index Studio could build and publish a formula it could not run, and
+# the forward-only check could never see it, because nothing was calling the
+# wrong name; nothing was calling at all.
+python3 - <<'PY'
+import ast, pathlib, re, sys
+
+app = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes")
+
+# Reachable without a Desk-page call site. Each entry states WHY, because an
+# unexplained exemption is how the next orphan hides.
+API_ONLY = {
+	# The guest survey page and its shared renderer post to these directly.
+	"get_public_survey": "www/survey.html + public/js/survey_form.js",
+	"submit_survey": "www/survey.html (form-encoded POST, no frappe.call)",
+	"preview_payload": "www/survey.py preview branch",
+	# Called server-side by connect_nodes / disconnect_nodes, which the canvas
+	# calls. Whitelisted so a script or another app can use the verb directly.
+	"add_question_mapping": "api.mapping.connect_nodes",
+	"remove_question_mapping": "api.mapping.disconnect_nodes",
+}
+
+whitelisted = {}
+for path in sorted(app.rglob("*.py")):
+	if "__pycache__" in path.parts:
+		continue
+	for node in ast.parse(path.read_text()).body:
+		if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+			continue
+		for d in node.decorator_list:
+			f = d.func if isinstance(d, ast.Call) else d
+			if isinstance(f, ast.Attribute) and f.attr == "whitelist":
+				whitelisted[node.name] = path.relative_to(app)
+
+# Any string literal in any JS or HTML this app ships counts as a call site.
+haystack = "\n".join(
+	p.read_text() for p in list(app.rglob("*.js")) + list(app.rglob("*.html"))
+	if "__pycache__" not in p.parts
+)
+named = set(re.findall(r'["\'`](\w+)["\'`]', haystack))
+# ...plus anything another Python module calls by name (server-side chaining).
+py = "\n".join(p.read_text() for p in app.rglob("*.py") if "__pycache__" not in p.parts)
+
+orphans = []
+for name, where in sorted(whitelisted.items()):
+	if name in named or name in API_ONLY:
+		continue
+	# A server-side caller counts too, but only a real call, not the def.
+	if len(re.findall(r"\b%s\s*\(" % re.escape(name), py)) > 1:
+		continue
+	orphans.append("%s  (%s)" % (name, where))
+
+stale = sorted(set(API_ONLY) - set(whitelisted))
+if orphans or stale:
+	if orphans:
+		print("Whitelisted but unreachable - no caller anywhere:", file=sys.stderr)
+		for o in orphans:
+			print("  - " + o, file=sys.stderr)
+		print("  (wire it up, delete it, or add it to API_ONLY with the reason)", file=sys.stderr)
+	for s in stale:
+		print("  - API_ONLY names %r, which is no longer whitelisted" % s, file=sys.stderr)
+	sys.exit(1)
+print("All %d whitelisted methods are reachable (%d declared API-only)."
+      % (len(whitelisted), len(API_ONLY)))
+PY

@@ -36,6 +36,18 @@ def assert_scoreable_source(doctype):
 	return doctype
 
 
+def contributing_versions(answer_rows):
+	"""Comma-separated, sorted, de-duplicated survey versions from the rows a
+	metric actually read. "" when nothing contributed.
+
+	Rows are (answer_name, raw_value, normalisation, reverse, survey_version) -
+	the tuple metric_calc builds. Lives here rather than beside its one caller
+	because metric_calc imports frappe, and this is the repo's pure tier: a rule
+	with a test beats a line inside a service.
+	"""
+	return ", ".join(sorted({r[4] for r in answer_rows if len(r) > 4 and r[4]}))
+
+
 def aggregate_metric(entries):
 	"""entries: [{value, normalisation, reverse}] raw answers for a metric.
 

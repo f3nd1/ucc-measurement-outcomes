@@ -41,6 +41,22 @@ def test_empty():
 	assert r["response_count"] == 0
 
 
+def test_contributing_versions():
+	from metric_engine import contributing_versions
+	R = lambda v: ("ans", "4", "Likert 1-5 to 0-100", False, v)
+	# The bug this replaced: source_version took answer_rows[0][4] - one
+	# arbitrary version - on a metric whose whole purpose is spanning surveys.
+	assert contributing_versions([R("EOM-V01"), R("ONB-V01"), R("EOM-V01")]) == "EOM-V01, ONB-V01"
+	assert contributing_versions([R("A-V01")]) == "A-V01"
+	assert contributing_versions([]) == ""
+	# A row with no version must not become an empty entry in the list.
+	assert contributing_versions([R(None), R(""), R("A-V01")]) == "A-V01"
+	assert contributing_versions([R(None)]) == ""
+	# Sorted, so re-running the same metric writes the same string - a provenance
+	# field that reorders itself reads as a change that never happened.
+	assert contributing_versions([R("C"), R("A"), R("B")]) == "A, B, C"
+
+
 if __name__ == "__main__":
 	test_mean_of_normalised()
 	test_unscoreable_ignored()

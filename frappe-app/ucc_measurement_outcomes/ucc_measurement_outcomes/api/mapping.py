@@ -170,7 +170,7 @@ def remove_question_mapping(question, objective):
 
 
 @frappe.whitelist()
-def mapping_canvas(survey_version, unmapped_only=1):
+def mapping_canvas(survey_version, unmapped_only=1, all_objectives=0):
 	"""Nodes + edges for Mapping Studio's canvas.
 
 	Built HERE rather than in the browser so the layout, the id scheme and the
@@ -178,16 +178,33 @@ def mapping_canvas(survey_version, unmapped_only=1):
 	canvas is a write surface, and a client that invents its own node ids is a
 	client that can post a pair the server never offered. Permission comes from
 	the two methods this delegates to.
+
+	all_objectives=0 (the default) shows only the objectives THIS SURVEY VERSION
+	already uses. The register holds 97, and rendering all of them made a canvas
+	where a handful of real edges sat among 97 unconnected boxes - which reads as
+	"everything is linked to everything" even though every link is correct. The
+	mappings were never wrong; the column was. Pass 1 to browse the whole
+	register and connect an objective this survey has not used yet.
 	"""
 	overview = get_mapping_overview(survey_version)
 	cov = mapping_coverage(survey_version)
+	if frappe.utils.cint(all_objectives):
+		objectives = frappe.get_all(OBJECTIVE, fields=["name"], order_by="name asc")
+	else:
+		used = sorted({o for q in overview["questions"] for o in (q.get("objectives") or [])})
+		objectives = [{"name": o} for o in used]
 	nodes, edges = build_map_graph(
 		overview["questions"],
-		frappe.get_all(OBJECTIVE, fields=["name"], order_by="name asc"),
+		objectives,
 		unmapped_only=bool(frappe.utils.cint(unmapped_only)),
 		unmapped=cov["questions_without_objective"],
 	)
-	return {"nodes": nodes, "edges": edges}
+	return {
+		"nodes": nodes, "edges": edges,
+		# So the UI can say "12 of 97" rather than implying the register is small.
+		"objectives_shown": len(objectives),
+		"objectives_total": frappe.db.count(OBJECTIVE),
+	}
 
 
 def _pair(a, b):
