@@ -203,7 +203,13 @@ class SurveyBuilder {
 		.ucc-sb-bulkbar{display:none;gap:6px;align-items:center;background:#eef3fb;border:1px solid #d5e1f0;border-radius:8px;padding:6px 10px;margin-top:8px;font-size:12px}
 		.ucc-sb-bulkbar.show{display:flex}
 		.ucc-sb-palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-		.ucc-sb-chip{border:1px solid var(--border-color,#e2e6ea);border-radius:8px;padding:8px 6px;font-size:11px;text-align:center;cursor:grab;user-select:none;background:var(--fg-color,#fff)}
+		.ucc-sb-chip{border:1px solid var(--border-color,#e2e6ea);border-radius:8px;padding:8px 6px;font-size:11px;text-align:center;cursor:pointer;user-select:none;background:var(--fg-color,#fff)}
+		.ucc-sb-chip:hover{border-color:var(--primary,#4a63e7);background:var(--bg-light-gray,#f7f9fc)}
+		/* A chip that looks clickable and then refuses is the dead control we
+		   removed from the campaign link. _guardEditable still has the last word
+		   - this just stops the invitation. */
+		.ucc-sb-palette.disabled .ucc-sb-chip{opacity:.45;cursor:not-allowed}
+		.ucc-sb-palette.disabled .ucc-sb-chip:hover{border-color:var(--border-color,#e2e6ea);background:var(--fg-color,#fff)}
 		/* Icon ABOVE the label, never instead of it: the sprite name for a given
 		   type is unverified without a bench, so a chip must still read if its
 		   icon never resolves. */
@@ -338,7 +344,9 @@ class SurveyBuilder {
 		this.$bulk = $('<div class="ucc-sb-bulkbar"></div>').appendTo($main);
 		this.$banner = $('<div class="ucc-sb-banner" style="display:none"></div>').appendTo($main);
 		const $grid = $('<div class="ucc-sb-grid"></div>').appendTo($main);
-		this.$palette = $(`<div class="ucc-sb-panel"><h5>${__("Question Types")}</h5><div class="ucc-sb-body"><div class="ucc-sb-palette"></div></div></div>`).appendTo($grid).find(".ucc-sb-palette");
+		// Starts disabled: nothing can be added until a version is loaded, and
+		// load() toggles it from there.
+		this.$palette = $(`<div class="ucc-sb-panel"><h5>${__("Question Types")}</h5><div class="ucc-sb-body"><div class="ucc-sb-palette disabled"></div></div></div>`).appendTo($grid).find(".ucc-sb-palette");
 		this.$list = $(`<div class="ucc-sb-panel"><h5>${__("Questions")}</h5><div class="ucc-sb-body"><div class="ucc-sb-list"></div></div></div>`).appendTo($grid).find(".ucc-sb-list");
 		this.$inspectorPanel = $(`<div class="ucc-sb-panel ucc-sb-inspectorpanel"><h5>${__("Inspector")}</h5><div class="ucc-sb-body"></div></div>`).appendTo($grid);
 		this.$inspector = this.$inspectorPanel.find(".ucc-sb-body");
@@ -445,8 +453,15 @@ class SurveyBuilder {
 	_renderPalette() {
 		this.$palette.empty();
 		QUESTION_TYPES.forEach((t) => {
-			const $c = $(`<div class="ucc-sb-chip" draggable="true" title="${frappe.utils.escape_html(t)}">${iconFor(t)}<span class="ucc-sb-chiplabel">${frappe.utils.escape_html(t)}</span></div>`);
+			const $c = $(`<div class="ucc-sb-chip" draggable="true" title="${
+				__("Click to add at the end, or drag to place it")}">${iconFor(t)}<span class="ucc-sb-chiplabel">${frappe.utils.escape_html(t)}</span></div>`);
 			$c.on("dragstart", (e) => e.originalEvent.dataTransfer.setData("newType", t));
+			// Drag-and-drop was the ONLY way to add a question, which is a hard
+			// requirement to discover and impossible on a touch device. Same
+			// _addQuestion the drop handler and the empty state's button already
+			// call - one write path, three ways in. Appends at the end; drag stays
+			// the way to insert at a position.
+			$c.on("click", () => this._addQuestion(t, this.questions.length));
 			this.$palette.append($c);
 		});
 	}
@@ -469,6 +484,7 @@ class SurveyBuilder {
 			this._updateUndo();
 			this.page.set_title(`${__("UCC Survey Builder")} — ${frappe.utils.escape_html(this.version.survey_title || "")} v${frappe.utils.escape_html(this.version.version_number || "")}`);
 			this.$banner.toggle(!this.editable).text(__("This version is {0} and cannot be edited.", [this.version.status]));
+			this.$palette.toggleClass("disabled", !this.editable);
 			this._renderQuestions();
 			this._renderInspector();
 			this._renderBulkBar();
@@ -802,7 +818,14 @@ class SurveyBuilder {
 
 	_guardEditable() {
 		if (this.editable) return true;
-		frappe.show_alert({ message: __("This version is read-only."), indicator: "orange" });
+		// "read-only" is wrong before anything is picked, and that is the state a
+		// palette chip is most likely to be clicked in. Say which it is.
+		frappe.show_alert({
+			message: this.version
+				? __("This version is {0} and cannot be edited.", [this.version.status])
+				: __("Pick a survey version first."),
+			indicator: "orange",
+		});
 		return false;
 	}
 
