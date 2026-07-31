@@ -755,3 +755,49 @@ if (app / "mapping_studio" / "doctype" / "ucc_objective").exists():
 	sys.exit(1)
 print("No live references to the removed UCC Objective DocType.")
 PY
+
+# The two post-publish exemptions must stay disjoint, and small.
+#
+# PRESENTATION_FIELDS is silent; CORRECTABLE_FIELDS demands a reason and shows a
+# marker where the evidence is read. A field in both would take whichever branch
+# ran first in assert_doc_version_editable, so one of its two rules would
+# silently stop applying - and the one that stops applying is the audited one.
+python3 - <<'PY'
+import ast, pathlib, sys
+
+src = pathlib.Path("frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes/versioning.py")
+tree = ast.parse(src.read_text())
+sets = {}
+for node in tree.body:
+	if not isinstance(node, ast.Assign):
+		continue
+	name = node.targets[0].id if isinstance(node.targets[0], ast.Name) else None
+	if name in ("PRESENTATION_FIELDS", "CORRECTABLE_FIELDS"):
+		# frozenset({...}) - read the literal without importing anything.
+		sets[name] = {e.value for e in node.value.args[0].elts}
+
+missing = {"PRESENTATION_FIELDS", "CORRECTABLE_FIELDS"} - set(sets)
+if missing:
+	print("versioning.py no longer defines %s as a frozenset literal."
+	      % ", ".join(sorted(missing)), file=sys.stderr)
+	sys.exit(1)
+
+overlap = sets["PRESENTATION_FIELDS"] & sets["CORRECTABLE_FIELDS"]
+if overlap:
+	print("A field is in BOTH post-publish exemptions: %s" % ", ".join(sorted(overlap)),
+	      file=sys.stderr)
+	print("  (one of its two rules would silently stop applying)", file=sys.stderr)
+	sys.exit(1)
+
+# Anything that can change what counts as a valid answer must never appear.
+FORBIDDEN = {"question_type", "choices", "is_required", "matrix_rows",
+             "display_logic", "display_logic_config", "survey_version", "sequence"}
+leaked = FORBIDDEN & (sets["PRESENTATION_FIELDS"] | sets["CORRECTABLE_FIELDS"])
+if leaked:
+	print("Answer-determining field(s) exempted from the freeze: %s"
+	      % ", ".join(sorted(leaked)), file=sys.stderr)
+	print("  (a published score would stop being reproducible)", file=sys.stderr)
+	sys.exit(1)
+print("Post-publish exemptions are disjoint and answer-safe (%d + %d fields)."
+      % (len(sets["PRESENTATION_FIELDS"]), len(sets["CORRECTABLE_FIELDS"])))
+PY

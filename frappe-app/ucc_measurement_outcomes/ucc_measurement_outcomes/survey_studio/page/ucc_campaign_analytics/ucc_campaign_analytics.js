@@ -179,7 +179,13 @@ class CampaignAnalytics {
 			d.distribution.length
 				? d.distribution.map((q) => {
 					const max = Math.max(1, ...q.values.map((v) => v.count));
-					return `<div class="ucc-ca-q">${frappe.utils.escape_html(q.label)}</div>` +
+					// These counts are answers to the wording as it WAS. A question
+					// corrected since must say so here, or the distribution quietly
+					// relabels itself against text nobody was shown.
+					return `<div class="ucc-ca-q">${frappe.utils.escape_html(q.label)}${
+						q.corrected ? `<span class="ucc-ca-corrected" title="${
+							frappe.utils.escape_html(q.corrected)}">${
+							__("wording corrected")}</span>` : ""}</div>` +
 						q.values.map((v) => this._bar(v.value, v.count, max)).join("");
 				}).join("")
 				: `<div class="text-muted" style="font-size:12px">${__("No answers yet.")}</div>`

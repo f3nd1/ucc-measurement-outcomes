@@ -83,12 +83,13 @@ def test_question_text_is_resolved_but_never_changes_structure():
 	r = build_report(RESULT, BREAKDOWN, TEXT)
 	rel = next(x for o in r["objectives"] if o["code"] == "OBJ-0406"
 			   for x in o["rows"] if x["component"]["key"] == "rel")
-	assert rel["questions"] == [{"name": "q3", "text": "I could access support services"}]
+	assert rel["questions"] == [{"name": "q3", "text": "I could access support services",
+								 "corrected": None}]
 	# Missing text falls back to the name rather than dropping the row.
 	r2 = build_report(RESULT, BREAKDOWN, {})
 	rel2 = next(x for o in r2["objectives"] if o["code"] == "OBJ-0406"
 				for x in o["rows"] if x["component"]["key"] == "rel")
-	assert rel2["questions"] == [{"name": "q3", "text": "q3"}]
+	assert rel2["questions"] == [{"name": "q3", "text": "q3", "corrected": None}]
 
 
 def test_pre_snapshot_results_are_flagged_not_shown_as_empty():
@@ -109,6 +110,32 @@ def test_header_carries_the_calculation_date():
 	h = build_report(RESULT, BREAKDOWN, TEXT)["header"]
 	assert h["calculation_date"] == "2026-07-24 09:00:00"
 	assert h["value"] == 76.25 and h["target"] == 75
+
+
+def test_corrected_wording_is_marked_on_the_evidence():
+	# No answer row snapshots the wording a respondent saw and this report
+	# resolves question_text live, so a correction would otherwise print as
+	# though it were the original. The marker is the condition the frozen-content
+	# exemption was granted on (decision 2026-07-29).
+	rep = build_report(
+		{"index": "SEQI", "value": 80},
+		[{"component_key": "c1", "source_metric": "M1", "normalised_value": 80,
+		  "weight": 100, "contribution": 80,
+		  "lineage_objectives": "OBJ-1", "lineage_questions": "Q1,Q2"}],
+		question_text={"Q1": "Teaching quality", "Q2": "Facilities"},
+		corrections={"Q1": "typo: 'Teching' -> 'Teaching'"},
+	)
+	qs = {q["name"]: q for o in rep["objectives"] for r in o["rows"] for q in r["questions"]}
+	assert qs["Q1"]["corrected"] == "typo: 'Teching' -> 'Teaching'"
+	assert qs["Q2"]["corrected"] is None
+	# Omitting corrections entirely must not throw - every result calculated
+	# before this existed goes through the same call.
+	rep = build_report({"index": "SEQI", "value": 80},
+					   [{"component_key": "c1", "source_metric": "M1",
+						 "lineage_objectives": "OBJ-1", "lineage_questions": "Q1"}],
+					   question_text={"Q1": "Teaching quality"})
+	assert [q["corrected"] for o in rep["objectives"] for r in o["rows"]
+			for q in r["questions"]] == [None]
 
 
 if __name__ == "__main__":

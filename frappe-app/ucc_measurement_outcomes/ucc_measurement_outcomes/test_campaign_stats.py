@@ -69,6 +69,24 @@ def test_roster_gap_is_reported_not_guessed():
 	assert "not available" in summarise(SUBS, ANS, target=10)["roster_pending"]
 
 
+def test_a_corrected_question_is_flagged_on_its_distribution():
+	# The counts are answers to the wording as it WAS. Relabelling them silently
+	# is the evidence problem the correction exemption was granted on condition
+	# of avoiding (decision 2026-07-29).
+	out = summarise(
+		[{"name": "S1", "status": "Completed", "submitted_on": "2026-07-01"}],
+		[{"question": "Q1", "question_text": "Teaching quality", "answer_value": "5",
+		  "corrected": "typo: 'Teching' -> 'Teaching'"},
+		 {"question": "Q2", "question_text": "Facilities", "answer_value": "4"}],
+	)
+	by_q = {d["question"]: d for d in out["distribution"]}
+	assert by_q["Q1"]["corrected"] == "typo: 'Teching' -> 'Teaching'"
+	# An uncorrected question carries None, not a missing key - the renderer
+	# tests truthiness and a missing key would read the same, but the contract
+	# is that every row answers the question.
+	assert "corrected" in by_q["Q2"] and by_q["Q2"]["corrected"] is None
+
+
 if __name__ == "__main__":
 	for name, fn in sorted(globals().items()):
 		if name.startswith("test_") and callable(fn):

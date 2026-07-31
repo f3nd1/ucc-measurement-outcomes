@@ -22,6 +22,34 @@ FROZEN_STATUSES = {"Published", "Closed"}
 # silently make each new field editable after publish.
 PRESENTATION_FIELDS = frozenset({"layout_width"})
 
+# Decision 2026-07-29: a published question's WORDING may be corrected; its
+# answer-determining structure may not. A separate frozenset from
+# PRESENTATION_FIELDS, not an addition to it, because the two carry different
+# permissions: a layout tweak is silent, a wording correction demands a reason
+# and is audited. One set would force a reason for dragging a column width, or
+# let wording change without one.
+#
+# THE INVARIANT MOVES, and it is worth saying exactly how. It was "a published
+# version's content is frozen". It is now "a published version's
+# answer-determining structure is frozen; its wording may be corrected with an
+# audited reason". Scores are untouched either way - nothing in metric_engine,
+# index_engine or Score Breakdown reads question_text, and lineage_questions
+# stores docnames. What weakens is EVIDENCE: no answer row snapshots the wording
+# a respondent saw, so after a correction the app can no longer prove what was
+# on screen at the time. That is why the readers show a marker (api/lineage.py,
+# api/campaign.py) - an audited correction that nobody can see while reading the
+# evidence is just a quiet rewrite of the record.
+#
+# question_type, choices, is_required, matrix_rows, display_logic,
+# display_logic_config and survey_version stay frozen: every one of them can
+# change what counts as a valid answer.
+CORRECTABLE_FIELDS = frozenset({"question_text"})
+
+# The two exemptions must never overlap: a field in both would take whichever
+# branch ran first, so one of its two rules would silently not apply.
+# check_repo.sh asserts this too.
+assert not (PRESENTATION_FIELDS & CORRECTABLE_FIELDS)
+
 # Everything a survey question stores, and the parts of a choice row that carry
 # meaning. Listed rather than derived because "compare every field" would drag in
 # modified/modified_by/idx and report a change on every save.
@@ -59,6 +87,25 @@ def presentation_only_change(before, after):
 	if _choice_rows(before.get("choices")) != _choice_rows(after.get("choices")):
 		changed.add("choices")
 	return bool(changed) and changed <= PRESENTATION_FIELDS
+
+
+def correctable_only_change(before, after):
+	"""True if this save changes ONLY correctable fields (and changes something).
+
+	Same shape and the same fail-closed rule as presentation_only_change: an
+	unrecognised difference is a difference, choices compare as an ordered list,
+	and re-parenting can never pass because survey_version is in QUESTION_FIELDS
+	and not in CORRECTABLE_FIELDS.
+
+	Presentation fields are deliberately NOT accepted here. A save that changes
+	wording AND layout together is neither purely presentational nor purely a
+	correction, so it fails both gates and is refused - which is the right
+	answer, because the reason recorded would describe only half of it.
+	"""
+	changed = {f for f in QUESTION_FIELDS if _norm(before.get(f)) != _norm(after.get(f))}
+	if _choice_rows(before.get("choices")) != _choice_rows(after.get("choices")):
+		changed.add("choices")
+	return bool(changed) and changed <= CORRECTABLE_FIELDS
 
 
 def next_version_number(existing_count, name_exists):
@@ -138,6 +185,21 @@ def assert_doc_version_editable(doc):
 	the moment anything outside PRESENTATION_FIELDS differs."""
 	before = doc.get_doc_before_save()
 	if before and presentation_only_change(before, doc):
+		return
+	if before and correctable_only_change(before, doc):
+		# Wording only. Allowed on a frozen version, but never silently: the
+		# reason is what turns this from an edit into a correction, and Frappe's
+		# own track_changes (already on for UCC Survey Question) records the rest.
+		if not (doc.get("correction_reason") or "").strip():
+			import frappe
+			from frappe import _
+
+			frappe.throw(
+				_("Correcting the wording of a published question needs a reason. "
+				  "The version history records who, when and what changed; this "
+				  "records why - and it is shown wherever this question's results "
+				  "are read.")
+			)
 		return
 	assert_version_editable(doc.survey_version)
 	if before and before.survey_version != doc.survey_version:

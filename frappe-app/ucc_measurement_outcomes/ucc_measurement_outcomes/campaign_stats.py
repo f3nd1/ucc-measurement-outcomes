@@ -31,7 +31,7 @@ def _day(ts):
 
 def summarise(submissions, answers, target=None):
 	"""submissions: [{name, status, submitted_on}]
-	answers:     [{question, question_text, answer_value}]
+	answers:     [{question, question_text, answer_value, corrected}]
 	target:      expected respondent count, or None if not set on the campaign.
 
 	Returns counts, response rate (None when there is no target - a rate with an
@@ -49,11 +49,18 @@ def summarise(submissions, answers, target=None):
 
 	distribution = {}
 	labels = {}
+	# Wording corrected after publication (decision 2026-07-29). These counts are
+	# of answers given to the OLD wording, so the label has to say so - a silently
+	# relabelled distribution is the evidence problem the correction exemption was
+	# only granted on condition of avoiding.
+	corrected = {}
 	for a in answers:
 		q = a.get("question")
 		if not q:
 			continue
 		labels.setdefault(q, a.get("question_text") or q)
+		if a.get("corrected"):
+			corrected.setdefault(q, a["corrected"])
 		value = a.get("answer_value")
 		# Blank is a real observation - a question everyone skipped is a finding,
 		# not an absence - so it is counted under its own label rather than
@@ -80,6 +87,7 @@ def summarise(submissions, answers, target=None):
 			{
 				"question": q,
 				"label": labels[q],
+				"corrected": corrected.get(q),
 				"values": sorted(
 					({"value": v, "count": n} for v, n in buckets.items()),
 					key=lambda r: (-r["count"], r["value"]),

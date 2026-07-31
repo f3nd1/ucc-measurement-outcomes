@@ -135,6 +135,45 @@ def test_blank_and_unset_are_the_same():
 	assert not presentation_only_change(_q(help_text=None), _q(help_text="x"))
 
 
+def test_correctable_only_change():
+	from versioning import CORRECTABLE_FIELDS, PRESENTATION_FIELDS, correctable_only_change
+	base = {"survey_version": "V1", "sequence": 0, "question_type": "Rating",
+			"is_required": 1, "layout_width": "full", "question_text": "Teching quality",
+			"help_text": None, "matrix_rows": None, "display_logic": 0,
+			"display_logic_config": None, "choices": [{"choice_label": "1", "choice_value": "1", "sequence": 0}]}
+
+	def after(**kw):
+		d = dict(base); d["choices"] = list(base["choices"]); d.update(kw); return d
+
+	# The whole point: a typo fix.
+	assert correctable_only_change(base, after(question_text="Teaching quality"))
+	# No change at all is not a correction.
+	assert not correctable_only_change(base, after())
+
+	# Everything that decides what a valid answer is stays frozen.
+	assert not correctable_only_change(base, after(question_type="Short Text"))
+	assert not correctable_only_change(base, after(is_required=0))
+	assert not correctable_only_change(base, after(matrix_rows="a\nb"))
+	assert not correctable_only_change(base, after(display_logic=1))
+	assert not correctable_only_change(base, after(display_logic_config="{}"))
+	assert not correctable_only_change(base, after(help_text="hint"))
+	assert not correctable_only_change(base, after(sequence=3))
+	# Re-parenting out of a frozen version can never pass as a correction.
+	assert not correctable_only_change(base, after(survey_version="V2"))
+	# Choices compare as an ordered list, so relabelling or reordering fails.
+	assert not correctable_only_change(base, after(choices=[{"choice_label": "one", "choice_value": "1", "sequence": 0}]))
+
+	# Wording AND layout together is neither gate: the reason would describe half.
+	both = after(question_text="Teaching quality", layout_width="half")
+	assert not correctable_only_change(base, both)
+	from versioning import presentation_only_change
+	assert not presentation_only_change(base, both)
+
+	# The two exemptions must stay disjoint or one rule silently stops applying.
+	assert not (PRESENTATION_FIELDS & CORRECTABLE_FIELDS)
+	assert CORRECTABLE_FIELDS == {"question_text"}
+
+
 if __name__ == "__main__":
 	test_frozen()
 	test_transitions()
@@ -144,5 +183,6 @@ if __name__ == "__main__":
 	test_presentation_only_change_on_choices()
 	test_presentation_field_whitelist_stays_small()
 	test_blank_and_unset_are_the_same()
+	test_correctable_only_change()
 	assert FROZEN_STATUSES == {"Published", "Closed"}
 	print("versioning logic: all checks passed")

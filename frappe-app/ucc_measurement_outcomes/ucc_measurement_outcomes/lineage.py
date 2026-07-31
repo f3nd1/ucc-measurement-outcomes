@@ -26,15 +26,27 @@ def _split(s):
 	return [p.strip() for p in (s or "").split(",") if p.strip()]
 
 
-def build_report(result, breakdown, question_text=None, objective_names=None):
+def build_report(result, breakdown, question_text=None, objective_names=None,
+				 corrections=None):
 	"""result:    {index, index_version, period, entity, value, target, calculation_date}
 	breakdown:    UCC Score Breakdown rows, the SNAPSHOT taken at calculation.
 	question_text/objective_names: display lookups only; never affect structure.
+	corrections:  {question_name: reason} for questions whose WORDING was
+	              corrected after publication (decision 2026-07-29).
+
+	Why corrections have to appear here. No answer row snapshots the wording a
+	respondent saw, and this report resolves question_text live - so after a
+	correction it would print the new wording as though it were the original,
+	with nothing saying otherwise. That is precisely the failure the
+	frozen-content rule exists to prevent, so the exemption only holds while the
+	correction is visible at the point the evidence is READ, not merely recorded
+	in a version history nobody opens.
 
 	Returns {header, components, objectives, untraceable, snapshot_complete}.
 	"""
 	question_text = question_text or {}
 	objective_names = objective_names or {}
+	corrections = corrections or {}
 
 	components = []
 	for b in breakdown:
@@ -87,7 +99,8 @@ def build_report(result, breakdown, question_text=None, objective_names=None):
 				# divided. The note is what stops it being read as additive.
 				"note": SHARED_NOTE.format(", ".join(others)) if others else None,
 				"questions": [
-					{"name": q, "text": question_text.get(q, q)} for q in c["questions"]
+					{"name": q, "text": question_text.get(q, q),
+					 "corrected": corrections.get(q)} for q in c["questions"]
 				],
 			})
 		objectives.append({

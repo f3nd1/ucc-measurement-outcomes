@@ -731,3 +731,22 @@ None of those paths invent an objective.
 4. **The version history tab** on that answer shows old → new, who and when.
    `track_changes` is already 1 on UCC Survey Answer; this confirms Frappe is
    actually recording it rather than the flag merely being set.
+
+## Post-publish wording correction (verify live, v0.12.0)
+
+1. **The happy path.** On a PUBLISHED version, edit a question's text only,
+   save with no `correction_reason` → must throw. Add a reason → must save.
+2. **The freeze still holds.** On the same published question, change
+   `question_type`, a choice label, `is_required`, `matrix_rows` or
+   `display_logic` — with or without a reason → must all throw.
+3. **Both at once.** Change wording AND `layout_width` in one save → must throw.
+   Neither gate accepts it, deliberately: the reason would describe half the
+   change.
+4. **The marker.** With responses against that question, open Campaign
+   Analytics → its distribution row shows a "wording corrected" pill, reason on
+   hover. Open the Lineage Report for a result that includes it → the same pill
+   beside the question. **If either is missing, the exemption is not safe to
+   keep** — the whole basis for allowing it is that a correction is visible
+   where the evidence is read.
+5. **Version history** on the question shows old → new text.
+6. Correcting a question on a DRAFT version needs no reason (nothing is frozen).

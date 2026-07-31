@@ -186,15 +186,18 @@ def campaign_analytics(survey_tracking):
 			filters={"submission": ["in", [s["name"] for s in submissions]]},
 			fields=["question", "answer_value"],
 		)
-		texts = {
-			q["name"]: q["question_text"]
-			for q in frappe.get_all(
-				QUESTION, filters={"survey_version": version},
-				fields=["name", "question_text"]
-			)
-		} if version else {}
+		# correction_reason travels with the wording: these distributions count
+		# answers given to the wording as it was, so a question corrected since
+		# must not be relabelled silently (decision 2026-07-29).
+		qrows = frappe.get_all(
+			QUESTION, filters={"survey_version": version},
+			fields=["name", "question_text", "correction_reason"]) if version else []
+		texts = {q["name"]: q["question_text"] for q in qrows}
+		fixed = {q["name"]: q["correction_reason"] for q in qrows
+				 if (q["correction_reason"] or "").strip()}
 		for a in answers:
 			a["question_text"] = texts.get(a["question"], a["question"])
+			a["corrected"] = fixed.get(a["question"])
 
 	out = summarise(submissions, answers, target=_target(doc))
 	out["campaign"] = survey_tracking

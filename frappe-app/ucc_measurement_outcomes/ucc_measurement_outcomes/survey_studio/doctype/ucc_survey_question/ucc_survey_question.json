@@ -21,7 +21,8 @@
   "choices",
   "section_break_logic",
   "display_logic",
-  "display_logic_config"
+  "display_logic_config",
+  "correction_reason"
  ],
  "fields": [
   {
@@ -92,11 +93,11 @@
    "label": "Choices"
   },
   {
+   "depends_on": "eval:['Likert Matrix','Multiple Choice Grid','Checkbox Grid'].includes(doc.question_type)",
+   "description": "The statements/questions down the left side of the grid. Columns (response options) are configured below in Choices, reused as-is - the same fixed-option shape a grid's columns need.",
    "fieldname": "matrix_rows",
    "fieldtype": "Small Text",
-   "label": "Matrix Rows (one per line)",
-   "depends_on": "eval:['Likert Matrix','Multiple Choice Grid','Checkbox Grid'].includes(doc.question_type)",
-   "description": "The statements/questions down the left side of the grid. Columns (response options) are configured below in Choices, reused as-is - the same fixed-option shape a grid's columns need."
+   "label": "Matrix Rows (one per line)"
   },
   {
    "fieldname": "choices",
@@ -123,6 +124,12 @@
    "fieldname": "display_logic_config",
    "fieldtype": "Small Text",
    "label": "Display Logic Config"
+  },
+  {
+   "description": "Why the wording was corrected after this version was published. Required for that change and shown wherever this question's results are read, so a corrected question is never mistaken for the wording respondents actually saw.",
+   "fieldname": "correction_reason",
+   "fieldtype": "Small Text",
+   "label": "Correction Reason"
   }
  ],
  "index_web_pages_for_search": 1,

@@ -55,18 +55,22 @@ def get_lineage(index_result):
 	]
 
 	# Display lookups only - these never change the report's structure, which
-	# comes entirely from the snapshot. Question text is safe to read live
-	# because a published version's questions are frozen.
+	# comes entirely from the snapshot. Question text is read LIVE, and since
+	# 2026-07-29 a published question's wording can be corrected - so the
+	# correction reason is read alongside it and travels into the report. A
+	# corrected question that looks identical to an uncorrected one would make
+	# this report quietly assert wording nobody was shown.
 	names = sorted({q.strip() for b in breakdown
 					for q in (b["lineage_questions"] or "").split(",") if q.strip()})
 	question_text = {}
+	corrections = {}
 	if names:
-		question_text = {
-			q["name"]: q["question_text"]
-			for q in frappe.get_all("UCC Survey Question",
-									filters={"name": ["in", names]},
-									fields=["name", "question_text"])
-		}
+		rows = frappe.get_all("UCC Survey Question",
+							  filters={"name": ["in", names]},
+							  fields=["name", "question_text", "correction_reason"])
+		question_text = {q["name"]: q["question_text"] for q in rows}
+		corrections = {q["name"]: q["correction_reason"] for q in rows
+					   if (q["correction_reason"] or "").strip()}
 	codes = sorted({c.strip() for b in breakdown
 					for c in (b["lineage_objectives"] or "").split(",") if c.strip()})
 	objective_names = {}
@@ -88,4 +92,5 @@ def get_lineage(index_result):
 		breakdown,
 		question_text,
 		objective_names,
+		corrections,
 	)

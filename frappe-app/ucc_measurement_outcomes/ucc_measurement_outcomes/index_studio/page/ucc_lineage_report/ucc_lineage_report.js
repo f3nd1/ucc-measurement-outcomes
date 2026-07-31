@@ -72,6 +72,8 @@ class LineageReport {
 		.ucc-lin-ohead .cl{color:#8b95a5;font-size:11px}
 		.ucc-lin-row{padding:9px 12px 9px 24px;border-top:1px solid #eef2f7;font-size:12px}
 		.ucc-lin-q{color:#1f272e}
+		.ucc-lin-corrected{margin-left:7px;font-size:10px;padding:1px 7px;border-radius:20px;
+			background:#fff4e0;color:#8a6d1f;border:1px solid #ecd6aa;cursor:help;white-space:nowrap}
 		.ucc-lin-flow{font-size:11px;color:#5b6672;margin-top:3px}
 		.ucc-lin-flow b{color:#1f272e}
 		.ucc-lin-shared{font-size:10px;color:#6f58a8;background:#f1edf9;border-radius:20px;padding:1px 8px;margin-left:6px}
@@ -170,7 +172,14 @@ class LineageReport {
 				${o.rows.map((r) => `
 					<div class="ucc-lin-row">
 						${r.questions.length
-							? r.questions.map((q) => `<div class="ucc-lin-q">${esc(q.text)}</div>`).join("")
+							// A corrected question says so HERE, where the evidence is
+							// read. The wording is resolved live, so without this the
+							// report would print post-correction text as though it were
+							// what respondents saw.
+							? r.questions.map((q) => `<div class="ucc-lin-q">${esc(q.text)}${
+								q.corrected ? `<span class="ucc-lin-corrected" title="${
+									esc(q.corrected)}">${__("wording corrected")}</span>` : ""
+								}</div>`).join("")
 							: `<div class="text-muted">${__("no source questions recorded")}</div>`}
 						<div class="ucc-lin-flow">→ ${esc(r.component.metric || "")} ·
 							${__("normalised")} <b>${num(r.component.value)}</b> ·
