@@ -817,3 +817,46 @@ data patch was needed.
 campaign. `campaign_qr` was reading the retired `UCC Survey Campaign` and would
 have thrown; it now reads `Survey Tracking.ucc_public_token`. Needs the
 `qrcode` package present in the bench env.
+
+## Measurement Outcomes redesign (verify live, v0.14.0)
+
+New Desk page `/app/measurement-outcomes`, five parallel workspaces. The old
+five pages are untouched and still reachable — nothing was deleted, so a
+rollback is removing one workspace link.
+
+**Deploy:** `bench build --app ucc_measurement_outcomes` (new CSS bundle AND new
+bundled JS), then `bench --site <site> clear-cache`. A `bench build` whose
+`File | Size` table is empty means nothing bundled — red flag, not a normal run.
+
+1. **Scoping — check this first.** Open any OTHER Desk page (a DocType list, the
+   Frappe workspace). Buttons, tabs and form controls must look exactly as they
+   did. `ucc_mo.bundle.css` styles `.btn`, `.field`, `.pane`, `.tab`, `.icon`,
+   `.count`, `.search`, `.status` — if any of those changed elsewhere, the
+   scoping failed and the CSS must be pulled immediately.
+2. **The shell fits.** No whole-page scrollbar on a desktop viewport; each pane
+   scrolls on its own. `--ucc-mo-offset` is measured from the mounted element's
+   own top, so a different navbar height should still fit.
+3. **Published vs draft is REAL.** Open a published version: fields disabled,
+   "Review mode, answer-determining fields are protected" in the status strip,
+   "Create editable version" as the primary action. That lock comes from
+   `get_survey_builder.editable`, not from JS parsing a status string — confirm
+   a draft of the same survey unlocks add/delete/reorder.
+4. **The wording correction still gates.** On a published version, Content tab →
+   corrected wording + reason → saves. Without a reason → refused by
+   `versioning.py`, not by the browser.
+5. **Metrics workspace, the cross-survey proof.** New metric → Add source →
+   search returns questions from EVERY survey → add two from different surveys
+   → the status strip reads "2 surveys". Preview calculation shows a value and
+   an unscoreable count without writing a UCC Metric Result.
+6. **Weights show as recorded, not required.** The source table's total says
+   "Recorded only…". This is deliberate: `weight_within_metric` is read by
+   nothing and `aggregate_metric` is a plain mean over answers. Do NOT ship an
+   amber "add 10% more" bar until the aggregation rule is decided — see the
+   2026-07-31 OPEN entry in the decision log.
+7. **Indices.** Draft → Calculate disabled with a reason. Publish → Calculate
+   writes a result → Results tab lists it with who and when → clicking one shows
+   the frozen breakdown.
+8. **Criterion 7 reads snapshots only.** A question corrected after a result was
+   calculated must still show the "wording corrected" chip beside its old
+   wording in the lineage — that marker is the condition the correction
+   exemption was granted on.

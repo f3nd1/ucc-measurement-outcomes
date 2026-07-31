@@ -870,3 +870,45 @@ if orphans or stale:
 print("All %d whitelisted methods are reachable (%d declared API-only)."
       % (len(whitelisted), len(API_ONLY)))
 PY
+
+# The Measurement Outcomes stylesheet must never escape .ucc-mo.
+#
+# It styles .btn, .field, .pane, .tab, .icon, .search, .count, .status - every
+# one a name Frappe Desk uses for its own chrome. One unscoped selector in this
+# file restyles every page in the bench, and it would look like "Frappe broke"
+# rather than "we shipped a global override". This is the brief's first hard
+# constraint, so it is checked rather than remembered.
+python3 - <<'PY'
+import pathlib, re, sys
+
+css = pathlib.Path(
+	"frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes/public/css/ucc_mo.bundle.css")
+text = re.sub(r"/\*.*?\*/", "", css.read_text(), flags=re.S)
+
+# Selectors allowed to name something outside .ucc-mo: the host wrapper this app
+# puts on Frappe's own page container, and nothing else.
+HOST_OK = re.compile(r"^[.\w\s>-]*\.ucc-mo(-host)?\b")
+
+bad = []
+for block in re.finditer(r"([^{}@]+)\{[^{}]*\}", text):
+	head = block.group(1).strip()
+	if not head or head.startswith("@") or head.endswith(("%", "from", "to")):
+		continue
+	for sel in head.split(","):
+		sel = sel.strip()
+		if not sel or sel[0].isdigit():
+			continue          # keyframe stop
+		if not HOST_OK.match(sel):
+			bad.append(sel)
+
+if bad:
+	print("ucc_mo.bundle.css has selectors outside .ucc-mo:", file=sys.stderr)
+	for s in sorted(set(bad))[:20]:
+		print("  - " + s, file=sys.stderr)
+	print("  (this restyles the whole bench - rerun scripts/scope_prototype_css.py)", file=sys.stderr)
+	sys.exit(1)
+if ".ucc-mo" not in text:
+	print("ucc_mo.bundle.css no longer scopes anything - did it get replaced?", file=sys.stderr)
+	sys.exit(1)
+print("Measurement Outcomes CSS is fully scoped to .ucc-mo.")
+PY

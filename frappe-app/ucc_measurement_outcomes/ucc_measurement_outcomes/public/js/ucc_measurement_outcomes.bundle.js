@@ -27,3 +27,9 @@ import "./version_picker.js";
 // real page rather than a parallel approximation of it. Same file the website
 // loads via ucc_survey_form.bundle.js; never on the same page as that one.
 import "./survey_form.js";
+// Measurement Outcomes redesign: the icon sprite and the component library the
+// five workspaces render with. Bundled for the same cache-safety reason as
+// everything above - mo_ui.js will change often, and a year-cached copy of a
+// component library is the worst version of this bug.
+import "./mo_icons.js";
+import "./mo_ui.js";

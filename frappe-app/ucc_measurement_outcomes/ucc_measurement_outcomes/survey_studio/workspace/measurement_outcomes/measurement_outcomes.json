@@ -24,6 +24,16 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Measurement Outcomes (new)",
+   "link_count": 0,
+   "link_to": "measurement-outcomes",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Survey Builder",
    "link_count": 0,
    "link_to": "ucc-survey-builder",
