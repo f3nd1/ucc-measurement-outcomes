@@ -860,3 +860,40 @@ bundled JS), then `bench --site <site> clear-cache`. A `bench build` whose
    calculated must still show the "wording corrected" chip beside its old
    wording in the lineage — that marker is the condition the correction
    exemption was granted on.
+
+## Route collision fixed: measurement-outcomes -> ucc-workbench (v0.14.1)
+
+Felix confirmed on ucc-sms-v2.orb.local: `/app/measurement-outcomes` opened the
+OLD Studios/Records Workspace, not the new build. Root cause verified against
+Frappe's real router source (`frappe/public/js/frappe/router.js`, v15.83.0):
+
+    convert_to_standard_route(route) {
+        if (frappe.workspaces[route[0]]) {           // checked FIRST
+            route = ["Workspaces", frappe.workspaces[route[0]].title];
+        } else if (...) { ... }
+        else if (this.routes[route[0]]) { ... }       // Page falls through to here
+    }
+
+`frappe.workspaces` is keyed by `slug(title)` (`toLowerCase().replace(/ /g,"-")`).
+The pre-existing Workspace is titled "Measurement Outcomes" -> slug
+`measurement-outcomes`. The new Page's `page_name` was also
+`measurement-outcomes`. The Workspace branch runs unconditionally before a Page
+is ever considered, so the new Page was NEVER reachable at that URL - not a
+caching issue, `bench build`/`clear-cache` could not have fixed it.
+
+**Fixed by renaming the Page** (not the Workspace, which is the pre-existing
+Studios/Records directory): `measurement-outcomes` -> `ucc-workbench`.
+
+**The real, confirmed URL is now:**
+
+    /app/ucc-workbench
+
+Verify:
+1. `/app/ucc-workbench` opens the five-workspace redesign.
+2. `/app/measurement-outcomes` opens the OLD Workspace (Studios/Records) again,
+   unaffected - it was never broken, it was just winning the collision.
+3. That old Workspace's "Open the new Workbench" link now points at
+   `ucc-workbench` and works.
+4. `bench build --app ucc_measurement_outcomes && bench --site <site> clear-cache`
+   required - the Page's route name changed, and page JS is served from the
+   getpage response keyed by page name.

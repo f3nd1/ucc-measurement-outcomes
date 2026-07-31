@@ -19,21 +19,21 @@
 // Every visible class comes from the design prototype, scoped under .ucc-mo by
 // public/css/ucc_mo.bundle.css. No Frappe form layouts, no .form-control.
 
-frappe.pages["measurement-outcomes"].on_page_load = function (wrapper) {
+frappe.pages["ucc-workbench"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "", single_column: true });
 	try {
 		wrapper.ucc = new MeasurementOutcomes(page);
 	} catch (e) {
-		console.error("[UCC] measurement-outcomes failed to initialise:", e);
+		console.error("[UCC] ucc-workbench failed to initialise:", e);
 		frappe.msgprint({
 			title: __("Page failed to load"), indicator: "red",
-			message: __("measurement-outcomes could not initialise: ") + (e && e.message ? e.message : e),
+			message: __("ucc-workbench could not initialise: ") + (e && e.message ? e.message : e),
 		});
 		throw e;
 	}
 };
 
-frappe.pages["measurement-outcomes"].on_page_show = function (wrapper) {
+frappe.pages["ucc-workbench"].on_page_show = function (wrapper) {
 	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
 };
 

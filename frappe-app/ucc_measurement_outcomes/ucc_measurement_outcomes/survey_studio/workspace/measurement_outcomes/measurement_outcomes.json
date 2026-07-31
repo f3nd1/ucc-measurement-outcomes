@@ -24,9 +24,9 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Measurement Outcomes (new)",
+   "label": "Open the new Workbench",
    "link_count": 0,
-   "link_to": "measurement-outcomes",
+   "link_to": "ucc-workbench",
    "link_type": "Page",
    "onboard": 1,
    "type": "Link"
