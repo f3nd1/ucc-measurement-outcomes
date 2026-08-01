@@ -2322,7 +2322,9 @@ class IndexWorkspace {
 			// there is no coordinate contract to honour and nothing to redraw.
 			requestAnimationFrame(() => {
 				const $surface = this.$el.find(".formula-surface");
-				this._zoom = window.UCCZoom.attach($surface.parent().get(0), $surface.get(0), null);
+				this._zoom = window.UCCZoom.attach($surface.parent().get(0), $surface.get(0),
+					() => this._drawTreeEdges());
+				this._drawTreeEdges();
 				if (this._zoom && this._fitted !== this.s.indexVersion) {
 					this._fitted = this.s.indexVersion;
 					this._zoom.fit();
@@ -2363,6 +2365,57 @@ class IndexWorkspace {
 	// Publish, so a Draft reaches this renderer unchecked. The UI therefore has
 	// to be total: draw the tree where there is one, and put whatever is left
 	// over in a clearly-labelled group rather than dropping it on the floor.
+	// Round-11 Item 2: real connectors on the formula tree.
+	//
+	// ORG-CHART elbows, not the Beziers used on Objectives/Metrics. Those two
+	// are left-to-right flows between separate columns, where a curve reads as
+	// "flows into". This tree is `justify-items: center` - a parent sits ABOVE
+	// its children, all centred on the same axis - so the shape that reads
+	// correctly is the org-chart one: down from the parent, across a shared
+	// horizontal rail, then down into each child. (First attempt assumed a
+	// left-indented file tree and produced stubs pointing the wrong way; the
+	// layout is centred, so this follows the layout rather than the assumption.)
+	//
+	// Coordinates go through the SAME divide-by-scale correction as the other
+	// two canvases (see mo_zoom.js) - the bug class that has bitten this project
+	// repeatedly, so the contract is honoured rather than rediscovered.
+	_drawTreeEdges() {
+		const surface = this.$el.find(".formula-surface").get(0);
+		const svg = this.$el.find("[data-tree-edges]").get(0);
+		if (!surface || !svg) return;
+		const k = (this._zoom && this._zoom.scale) || 1;
+		const box = surface.getBoundingClientRect();
+		svg.setAttribute("viewBox", `0 0 ${box.width / k} ${box.height / k}`);
+		const at = {};
+		this.$el.find(".tree-row [data-node]").each((_, el) => {
+			const r = el.getBoundingClientRect();
+			at[el.dataset.node] = {
+				cx: (r.left + r.width / 2 - box.left) / k,
+				top: (r.top - box.top) / k,
+				bottom: (r.bottom - box.top) / k,
+			};
+		});
+		const byParent = {};
+		this.nodes.forEach((n) => (byParent[n.parent_key || ""] ||= []).push(n));
+		let paths = "";
+		Object.keys(byParent).forEach((pk) => {
+			const parent = at[pk];
+			if (!parent) return;                     // root row, or a collapsed branch
+			const kids = byParent[pk].map((n) => at[n.node_key]).filter(Boolean);
+			if (!kids.length) return;
+			// Rail sits midway between the parent's bottom and the nearest child.
+			const firstTop = Math.min(...kids.map((c) => c.top));
+			const rail = parent.bottom + (firstTop - parent.bottom) / 2;
+			paths += `<path class="tree-edge" d="M ${parent.cx} ${parent.bottom} L ${parent.cx} ${rail}"></path>`;
+			const xs = kids.map((c) => c.cx).concat([parent.cx]);
+			paths += `<path class="tree-edge" d="M ${Math.min(...xs)} ${rail} L ${Math.max(...xs)} ${rail}"></path>`;
+			kids.forEach((c) => {
+				paths += `<path class="tree-edge" d="M ${c.cx} ${rail} L ${c.cx} ${c.top}"></path>`;
+			});
+		});
+		svg.innerHTML = paths;
+	}
+
 	// Creates a Draft version from one of the standard templates, via the
 	// existing create_index_from_template - the same starter graph the old Index
 	// Studio used, so a new index arrives with real nodes rather than empty.
@@ -2446,7 +2499,7 @@ class IndexWorkspace {
 		if (!tree && !orphans.length) {
 			return `<div class="tree formula-surface">${U.empty(__("This version has no nodes yet."))}</div>`;
 		}
-		return `<div class="tree formula-surface">${tree}${orphans.length ? `
+		return `<div class="tree formula-surface"><svg class="tree-edges" data-tree-edges></svg>${tree}${orphans.length ? `
 			<div class="published-lock-row" style="max-width:520px">${U.icon("i-warning", "xs")}<div>
 				<b>${__("{0} node(s) are not connected to a root", [orphans.length])}</b><br>${
 				__("Their parent is missing, is another unconnected node, or every node has a parent so there is no root. They are shown below and can still be edited; Validate explains what to fix.")}

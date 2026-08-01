@@ -1832,3 +1832,35 @@ Verify on the bench: confirm Email and Page Break no longer appear as
 compatible; confirm a Likert metric refuses Yes/No and suggests the right rule;
 confirm adding from two survey versions in one go updates the canvas, connectors
 and validation.
+
+## Wheel reversed, formula connectors built (verify live, v0.20.0)
+
+**ITEM 1 - wheel gestures swapped, deliberately reversing rounds 8-9.**
+Plain wheel now ZOOMS on all three node canvases, no modifier. The round-9
+reasoning (don't strand users below the fold) is answered rather than ignored -
+reaching overflowing content has three routes still open:
+1. **Ctrl/Cmd + wheel** now does the native scroll (the two gestures simply
+   swapped jobs), and pans if there is nothing left to scroll, so it is never a
+   dead gesture either;
+2. **drag-to-pan** from empty canvas, unchanged;
+3. **Fit**, which frames every node in one click.
+Measured: plain wheel over the formula canvas 1.0 -> 1.15.
+
+**ITEM 2 - real connectors on the Indices formula tree.**
+Chose **org-chart elbows, not Béziers**, and the reason is the layout: the
+other two canvases are left-to-right flows between separate columns, where a
+curve reads as "flows into". The formula tree is `justify-items: center` - the
+parent sits ABOVE its children on a shared axis - so the correct shape is down
+from the parent, across a horizontal rail, then down into each child.
+(First attempt assumed a left-indented file tree and produced stubs pointing
+the wrong way; corrected to follow the layout rather than the assumption.)
+Coordinates go through the SAME divide-by-scale correction as the other two
+canvases, which is the point - this is the bug class that has bitten this
+project repeatedly.
+Measured: 5 edges for a root + 3 children (spine, rail, one drop per child),
+and **connector drift 0 at 1.0, 1.3 and 0.7 zoom**. Metrics' own connectors
+re-checked and still drift 0 after fitting.
+
+Verify on the bench: lines run from the Index node to every Metric node;
+zooming in and out keeps them attached; collapsing a branch removes its lines
+with it.

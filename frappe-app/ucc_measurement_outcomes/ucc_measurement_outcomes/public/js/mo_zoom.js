@@ -145,16 +145,18 @@ window.UCCZoom = {
 			panning = false;
 			viewport.classList.remove("mx-panning");
 		};
-		// Ctrl/Cmd + wheel zooms. Bare wheel is left to the browser so the pane
-		// scrolls exactly as it always did - measured: with anything to scroll it
-		// scrolls (73px when zoomed to 1.3x, 200px with a tall column).
+		// REVERSED in round 11, deliberately. Rounds 8-9 gave bare wheel to
+		// scrolling and Ctrl/Cmd+wheel to zoom, reasoning that hijacking the
+		// wheel would strand users below the fold on a tall canvas. Felix has
+		// reversed that: on a node canvas, zoom is the primary gesture and
+		// should need no modifier.
 		//
-		// The round-9 report was still right, though, and the measurement is why:
-		// when the stage FITS its viewport there is no scrollable overflow, and
-		// the workbench shell is overflow:hidden by design, so the wheel moved
-		// nothing anywhere - it felt broken even though the handler was correct.
-		// So when an axis has nothing to scroll, the wheel pans that axis instead.
-		// The wheel always moves the canvas; it just never steals a real scroll.
+		// The old concern is answered rather than ignored - reaching content
+		// below the fold has TWO routes still open:
+		//   1. Ctrl/Cmd + wheel now does the native scroll (the gestures simply
+		//      swapped jobs), and
+		//   2. drag-to-pan from empty canvas, unchanged.
+		// Plus the Fit button, which frames every node in one click.
 		const canScroll = (el, dy) => {
 			const room = el.scrollHeight - el.clientHeight;
 			if (room <= 1) return false;
@@ -162,14 +164,16 @@ window.UCCZoom = {
 		};
 		const wheel = (e) => {
 			if (e.ctrlKey || e.metaKey) {
+				// Scroll if there is anything to scroll; otherwise pan, so the
+				// modifier is never a dead gesture either.
+				if (canScroll(viewport, e.deltaY)) return;
 				e.preventDefault();
-				c.zoomTo(c.scale + (e.deltaY < 0 ? window.UCCZoom.STEP : -window.UCCZoom.STEP));
+				if (e.shiftKey) c.x -= e.deltaY; else c.y -= e.deltaY;
+				c._apply();
 				return;
 			}
-			if (canScroll(viewport, e.deltaY)) return;   // real scroll wins, untouched
 			e.preventDefault();
-			if (e.shiftKey) c.x -= e.deltaY; else c.y -= e.deltaY;
-			c._apply();
+			c.zoomTo(c.scale + (e.deltaY < 0 ? window.UCCZoom.STEP : -window.UCCZoom.STEP));
 		};
 
 		viewport.addEventListener("mousedown", down);

@@ -731,3 +731,11 @@
 .ucc-mo-metrics .source-selection-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
 .ucc-mo-metrics .mx-drawer.wide { width: min(920px, 94%); grid-template-rows: 42px auto minmax(0, 1fr) auto; }
 .ucc-mo-metrics .mx-library-wrap { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+/* Round-11 Item 2: connectors on the Indices formula tree. Elbows, not curves -
+ * this is a nested hierarchy drawn as an indented list, so the shape that reads
+ * correctly is a file-tree spine, not the left-to-right Bezier the other two
+ * canvases use between separate columns. */
+.ucc-mo .formula-surface { position: relative; }
+.ucc-mo .tree-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+.ucc-mo .tree-edge { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
+.ucc-mo .tree-row { position: relative; z-index: 1; }
