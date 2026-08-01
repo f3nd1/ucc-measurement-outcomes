@@ -52,3 +52,27 @@ is explicitly an interim choice. Revisit with a controlled `survey_type`
 Select (or a `category` converted to Select) once that list exists; the
 browser's first column reads from one endpoint (`api.metrics.source_categories`)
 precisely so swapping the grouping field is a one-function change.
+
+## 2026-08-01 — The demo dataset states a fixed score, and refuses to invent a target
+
+`demo_data.py` set A builds distributions, not random samples: every question
+carries an exact (value, count) list and the seeded RNG only decides which
+respondent gave which answer. So the calculated SEQI is **76.31**, asserted in
+`test_demo_data.py` against the real `metric_engine` and `index_engine` rather
+than read off a bench run.
+
+The alternative — sampling from a mean — would have made the sign-off demo's
+headline number drift on every reseed, and there would be no way to tell a
+drifted sample from a broken calculation. A demo whose number cannot be
+predicted cannot detect a regression in the thing it exists to demonstrate.
+
+Weights are the real SEQI dimension weights (Reliability 20, Tangibles 20,
+Assurance / Empathy / Responsiveness / Outcome Alignment 15 each). `target` is
+left **unset**: the institutional benchmark was not supplied, and a plausible
+threshold on an EduTrust evidence record is a fabricated standard. Same refusal
+as the borrowed-objectives rule (2026-07-26) — the demo may be less complete,
+never wrong about the institutional record.
+
+Tangibles is deliberately the weak dimension (65.0). A demo where everything
+passes cannot show the one workflow Criterion 7.1.1 exists for: a weak result
+leading somewhere.

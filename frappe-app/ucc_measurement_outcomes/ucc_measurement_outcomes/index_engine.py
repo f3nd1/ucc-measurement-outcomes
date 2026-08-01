@@ -10,6 +10,15 @@ def _clamp(v, lo, hi):
 	return max(lo, min(hi, v))
 
 
+# A "Yes / No" question built in the Survey Builder stores the word, not a digit:
+# api/builder.CHOICE_DEFAULTS gives it labels "Yes"/"No" with no choice_value, and
+# survey_form.js falls back to the label. float("Yes") raises, so before this the
+# Yes/No rule scored every such answer as None - a Yes/No metric over a Yes/No
+# question came out empty and no error said why.
+_YES = frozenset({"yes", "y", "true", "t"})
+_NO = frozenset({"no", "n", "false", "f"})
+
+
 def normalise(value, rule, reverse=False):
 	"""Convert a raw metric value to a 0-100 score per the given rule.
 
@@ -20,6 +29,11 @@ def normalise(value, rule, reverse=False):
 		return None
 	if rule == "Category Only (No Score)":
 		return None
+	if rule == "Yes/No to 100/0" and isinstance(value, str):
+		word = value.strip().lower()
+		if word in _YES or word in _NO:
+			out = 100.0 if word in _YES else 0.0
+			return 100 - out if reverse else out
 	try:
 		v = float(value)
 	except (TypeError, ValueError):

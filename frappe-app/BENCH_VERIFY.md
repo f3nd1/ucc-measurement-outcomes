@@ -1864,3 +1864,60 @@ re-checked and still drift 0 after fitting.
 Verify on the bench: lines run from the Index node to every Metric node;
 zooming in and out keeps them attached; collapsing a branch removes its lines
 with it.
+
+## Full end-to-end demo dataset (verify live, v0.21.0)
+
+`demo_data.seed()` set A is no longer the 4-question toy. It now builds:
+2 surveys (12 questions / 3 pages + 3 questions), 84 submissions, **538 answer
+rows**, 6 borrowed objectives across 9 mapping rows, 6 metrics on the real SEQI
+weights, a published index version and one calculated result.
+
+**The score is a fixed number, not a sample.** Each question carries an exact
+(value, count) distribution and the seeded RNG only decides which respondent
+gave which answer, so:
+
+| dimension | weight | n | value |
+|---|---|---|---|
+| Reliability (spans BOTH surveys) | 20 | 84 | 77.6786 |
+| Assurance | 15 | 60 | 82.0833 |
+| Tangibles | 20 | 60 | 65.0000 |
+| Empathy | 15 | 57 | 75.0000 |
+| Responsiveness | 15 | 57 | 84.2105 |
+| Outcome Alignment | 15 | 57 | 77.1930 |
+| **SEQI** | **100** | | **76.3087** |
+
+`test_demo_data.py` asserts that figure through the real `metric_engine` +
+`index_engine`, so a changed weight or distribution fails there first.
+
+**Verify on the bench after seeding:**
+1. `UCC Index Result` value reads **76.31**, coverage across all 6 breakdown rows.
+2. `UCC Metric Result` for `DEMO-SEQI-REL` has `response_count` **84** and
+   `source_version` naming **two** survey versions — that field is the only
+   proof cross-survey aggregation actually happened.
+3. Breakdown rows carry `lineage_objectives` with **two** objectives on the
+   Reliability / Tangibles / Responsiveness lines.
+4. `remove(dry_run=1)` reports ~640 records and touches nothing outside `DEMO-`.
+5. Timing: ~640 individual `insert()` calls. If seeding is unacceptably slow,
+   the answer rows are the batch-insert candidate.
+
+**Two things the demo deliberately does NOT do, both needing a decision:**
+
+* **NPS is collected but not scored.** No normalisation rule covers a 0-10
+  scale. `source_eligibility` currently calls NPS *Compatible* with
+  `Likert 1-5 to 0-100`, which is wrong in the same way the round-10 mislabels
+  were: `normalise(8, "Likert 1-5 to 0-100")` = 175, clamped to 100, so every
+  score of 5 and above would tie. The honest fix is a new
+  `NPS 0-10 to 0-100` option on the three normalisation Selects plus a branch in
+  `normalise` — a schema change, so it is flagged here rather than smuggled in.
+* **No `target` on `DEMO-SEQI`.** The real SEQI benchmark score was not
+  supplied; an invented threshold on an EduTrust evidence record is worse than
+  a blank one. Set `UCC Index Definition DEMO-SEQI.target` once it is known.
+
+**Fixed on the way (real bug, not demo-only):** a `Yes / No` question stores the
+WORD — `api/builder.CHOICE_DEFAULTS` gives labels `Yes`/`No` with no
+`choice_value`, and `survey_form.js` falls back to the label. `float("Yes")`
+raises, so `normalise` returned None and a Yes/No metric over a Yes/No question
+scored **nothing, silently**. `normalise` now reads yes/y/true/t and no/n/false/f
+for that rule only; anything outside the vocabulary still refuses to score.
+Verify live: build a Yes / No question, answer it, calculate a metric on the
+`Yes/No to 100/0` rule, confirm a non-null `UCC Metric Result.value`.

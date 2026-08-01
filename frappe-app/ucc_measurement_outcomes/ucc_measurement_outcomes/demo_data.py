@@ -7,13 +7,21 @@
     bench --site <site> execute ucc_measurement_outcomes.demo_data.seed
     bench --site <site> execute ucc_measurement_outcomes.demo_data.remove
 
-Set A (DEMO-SEQI) runs the whole chain: published survey -> responses ->
-objective + metric mapping -> published index -> calculated result. Every
-stage of the pipeline stepper reads done.
+Set A (DEMO-SEQI) runs the whole chain at realistic scale: a 12-question,
+3-page published survey with 60 responses at 95% completion, a second smaller
+survey so one metric genuinely spans two surveys, six borrowed Survey
+Objectives (three questions carrying two each), six metrics on the real SEQI
+dimension weights, a published index and one calculated result with full
+Criterion 7.1.1 lineage. Every stage of the pipeline stepper reads done.
 
 Set B (DEMO-SAPI) is parked mid-pipeline: half its questions unmapped and its
 index version still Draft, so the stepper shows a current stage and real
 "what's next" notes instead.
+
+DETERMINISM. Set A's answers are not sampled - each question carries an exact
+(value, count) distribution, and the seeded RNG only decides WHICH respondent
+gave which answer. So the calculated SEQI score is a fixed number, asserted
+against the real engines in test_demo_data.py rather than eyeballed after a run.
 
 SAFETY. This writes to a shared site that holds real quality data, so two
 guards sit in front of every write and every delete:
@@ -29,9 +37,14 @@ without a bench. Deletion runs with link checks ON: if a real record has come
 to depend on a demo record, the delete fails loudly rather than orphaning it.
 """
 
+import random
+
 import frappe
 
 DEMO_PREFIX = "DEMO-"
+DEMO_SEED = 20260801        # pin the shuffle so a reseed reproduces the same demo
+LIKERT = "Likert 1-5 to 0-100"
+YESNO = "Yes/No to 100/0"
 
 # Every DocType in this app's five modules. The allowlist IS the "must not write
 # outside our own DocTypes" constraint - there is no path around it.
@@ -78,23 +91,111 @@ def _new(doctype, **kwargs):
 	return frappe.get_doc({"doctype": doctype, **kwargs}).insert(ignore_permissions=True)
 
 
-# --- the two datasets -------------------------------------------------------
-# (question text, per-submission answer values). Means are chosen so the SEQI
-# components land on distinct, readable scores rather than all the same number.
+# --- set A: the full end-to-end demo ----------------------------------------
+# Answers are DISTRIBUTIONS, not samples: [(answer_value, how many respondents
+# gave it)]. Totals below a question's reachable respondent count are the people
+# who skipped it, which is how the open-comment questions get realistic partial
+# response without any randomness in the score.
+
+
+def _rating(*counts):
+	"""Counts for the five Rating options, 1 through 5."""
+	return [(str(i + 1), c) for i, c in enumerate(counts)]
+
+
+# Chosen to skew positive the way real course-experience data does, with
+# Tangibles deliberately the weak dimension so the demo has something worth
+# raising a Quality Action about.
 SET_A = {
-	"survey": "DEMO- Student Experience Survey",
-	"index": ("DEMO-SEQI", "Student Experience Quality Index", 75),
+	"survey": "DEMO- Student Experience Survey 2026",
+	"description": "Demo data. End-of-semester experience survey feeding the SEQI.",
+	"campaign": "SEQI 2026 Semester 1",
+	"index": ("DEMO-SEQI", "Student Experience Quality Index"),
+	"responses": 60,
+	"abandoned": 3,   # ~95% completion; a partial respondent stops at the first page break
 	"questions": [
-		# text, objective code, objective name, metric code, answers -> mean -> score
-		("The programme was delivered as promised", "REL", "Reliability",
-		 "DEMO-SEQI-REL", ["4", "4", "4", "4", "4"]),           # 4.0 -> 75
-		("Teaching staff were knowledgeable and professional", "ASR", "Assurance",
-		 "DEMO-SEQI-ASR", ["5", "4", "5", "4", "4"]),           # 4.4 -> 85
-		("Facilities and learning materials were adequate", "TAN", "Tangibles",
-		 "DEMO-SEQI-TAN", ["3", "4", "4", "3", "4"]),           # 3.6 -> 65
-		("Staff understood my individual needs", "EMP", "Empathy",
-		 "DEMO-SEQI-EMP", ["4", "5", "4", "4", "4"]),           # 4.2 -> 80
+		# key, question type, text, answer distribution (None = structural)
+		("intro", "Section Heading", "Section 1 — Your programme experience", None),
+		("rel", "Rating", "The programme was delivered as promised in the course information",
+		 _rating(0, 2, 9, 28, 21)),
+		("asr", "Rating", "Teaching staff were knowledgeable and professional",
+		 _rating(0, 1, 7, 26, 26)),
+		("tan", "Rating", "Classrooms, equipment and learning materials were adequate",
+		 _rating(2, 6, 17, 24, 11)),
+		("break1", "Page Break", "Section 2 — Support and communication", None),
+		("emp", "Rating", "Staff understood and responded to my individual needs",
+		 _rating(1, 2, 10, 27, 17)),
+		("rsp", "Yes / No", "Were your enquiries answered within the stated response time?",
+		 [("Yes", 48), ("No", 9)]),
+		("out", "Yes / No", "Did the programme meet the learning outcomes it advertised?",
+		 [("Yes", 44), ("No", 13)]),
+		# NPS collects 0-10 and is deliberately NOT wired to a metric: no
+		# normalisation rule covers a 0-10 scale, and the Likert rule would score
+		# an 8 as 175 clamped to 100. See BENCH_VERIFY.md.
+		("nps", "NPS", "How likely are you to recommend United Ceres College to a friend?",
+		 [("10", 9), ("9", 13), ("8", 14), ("7", 8), ("6", 5),
+		  ("5", 4), ("4", 2), ("3", 1), ("2", 1)]),
+		("break2", "Page Break", "Section 3 — Your comments", None),
+		("best", "Paragraph", "What worked best for you this semester?", [
+			("The lecturers were approachable and explained things clearly.", 7),
+			("Small class sizes meant I could actually ask questions.", 6),
+			("Assignment feedback came back quickly and was specific.", 5),
+			("The timetable was predictable, which helped me plan work shifts.", 5),
+			("Practical sessions were the most useful part of the module.", 4),
+			("Admin staff sorted out my enrolment issue the same day.", 4),
+		]),
+		("improve", "Paragraph", "What should the College improve first?", [
+			("The air-conditioning in the third floor rooms is unreliable.", 6),
+			("More computers in the study room, especially near submission dates.", 5),
+			("Some course materials were uploaded late.", 5),
+			("Wi-fi drops out in the back classrooms.", 4),
+			("Clearer information about resit dates and fees.", 4),
+			("More one-to-one time with tutors before assessments.", 3),
+		]),
 	],
+}
+
+# A second, smaller survey. It exists so Reliability draws on TWO surveys and the
+# cross-survey aggregation is demonstrated with real rows rather than asserted -
+# its other two questions stay unmapped, which is also what makes the source
+# browser's "eligible but not yet connected" state visible.
+SET_A2 = {
+	"survey": "DEMO- Learning Support Pulse 2026",
+	"description": "Demo data. Mid-semester pulse; shares the SEQI Reliability metric.",
+	"campaign": "Support pulse 2026",
+	"responses": 24,
+	"abandoned": 0,
+	"questions": [
+		("d_rel", "Rating", "Classes and timetabled sessions ran as published",
+		 _rating(0, 1, 4, 12, 7)),
+		("d_space", "Rating", "Library and study spaces were available when I needed them",
+		 _rating(0, 2, 7, 10, 5)),
+		("d_fee", "Rating", "Fee and payment information was easy to understand",
+		 _rating(0, 1, 5, 13, 5)),
+	],
+}
+
+SURVEYS_A = {"A": SET_A, "A2": SET_A2}
+
+# The real SEQI dimensions and weights (sum 100). No target is set on the index:
+# the institution's benchmark score was not supplied, and inventing one would put
+# a made-up threshold on an EduTrust evidence record.
+SEQI_METRICS = [
+	# metric code, name, weight, normalisation, [(survey key, question key)]
+	("DEMO-SEQI-REL", "Reliability", 20, LIKERT, [("A", "rel"), ("A2", "d_rel")]),
+	("DEMO-SEQI-ASR", "Assurance", 15, LIKERT, [("A", "asr")]),
+	("DEMO-SEQI-TAN", "Tangibles", 20, LIKERT, [("A", "tan")]),
+	("DEMO-SEQI-EMP", "Empathy", 15, LIKERT, [("A", "emp")]),
+	("DEMO-SEQI-RSP", "Responsiveness", 15, YESNO, [("A", "rsp")]),
+	("DEMO-SEQI-OUT", "Outcome Alignment", 15, YESNO, [("A", "out")]),
+]
+
+# Question -> slots in the borrowed Survey Objective pool. rel, tan and rsp carry
+# two objectives each, because real UCC questions do and anything reading these
+# has to cope with a list rather than one row.
+OBJECTIVE_SLOTS = {
+	"rel": (0, 1), "asr": (1,), "tan": (2, 3), "emp": (3,),
+	"rsp": (4, 5), "out": (5,), "d_rel": (0,),
 }
 
 SET_B = {
@@ -183,6 +284,144 @@ def _build(spec, publish_index):
 	return iv, metrics
 
 
+def reachable(spec, question_key, respondent):
+	"""Did respondent number `respondent` get as far as this question?
+
+	Pure so test_demo_data can check every distribution fits its audience without
+	a bench - a count larger than the number of people who saw the question would
+	silently make up respondents.
+	"""
+	if respondent not in _abandoned(spec):
+		return True
+	stop = next((i for i, q in enumerate(spec["questions"]) if q[1] == "Page Break"),
+				len(spec["questions"]))
+	return question_key in {q[0] for q in spec["questions"][:stop]}
+
+
+def _abandoned(spec):
+	"""Which respondent numbers gave up. Seeded, so it is the same set every run."""
+	return set(random.Random(DEMO_SEED).sample(range(spec["responses"]), spec.get("abandoned", 0)))
+
+
+def audience(spec, question_key):
+	"""Respondent numbers who saw this question."""
+	return [i for i in range(spec["responses"]) if reachable(spec, question_key, i)]
+
+
+CHOICES = {
+	"Rating": [{"choice_label": str(i), "choice_value": str(i)} for i in range(1, 6)],
+	# Labels only, exactly as the Survey Builder creates them - the Yes/No
+	# normalisation rule reads the word.
+	"Yes / No": [{"choice_label": "Yes"}, {"choice_label": "No"}],
+}
+
+
+def _survey(spec):
+	"""Survey -> Draft version -> questions -> Published. Returns (version, {key: doc})."""
+	survey = _new("UCC Survey", title=spec["survey"], status="Active",
+				  description=spec.get("description"), owner_department=_department())
+	version = _new("UCC Survey Version", survey=survey.name, version_number="01", status="Draft")
+	questions = {}
+	for seq, (key, qtype, text, _dist) in enumerate(spec["questions"]):
+		questions[key] = _new(
+			"UCC Survey Question", survey_version=version.name, question_type=qtype,
+			question_text=text, sequence=seq, choices=CHOICES.get(qtype, []),
+		)
+	version.status = "Published"
+	version.save(ignore_permissions=True)
+	return version, questions
+
+
+def _responses(spec, version, questions):
+	"""One submission per respondent, one Answer row per question they answered."""
+	campaign = _new("UCC Survey Campaign", campaign_name=spec["campaign"],
+					survey_version=version.name, status="Open",
+					target_responses=spec["responses"])
+	gave_up = _abandoned(spec)
+	submissions = [
+		_new("UCC Survey Submission", campaign=campaign.name, survey_version=version.name,
+			 status="Abandoned" if i in gave_up else "Completed",
+			 respondent_key=f"{DEMO_PREFIX}R{i:03d}", source="demo_data")
+		for i in range(spec["responses"])
+	]
+
+	rng = random.Random(DEMO_SEED)
+	for key, _qtype, _text, dist in spec["questions"]:
+		if not dist:
+			continue
+		saw = audience(spec, key)
+		values = [v for v, count in dist for _ in range(count)]
+		if len(values) > len(saw):
+			raise ValueError(f"{key}: {len(values)} answers but only {len(saw)} respondents saw it")
+		values += [None] * (len(saw) - len(values))   # the rest skipped the question
+		rng.shuffle(values)
+		for respondent, value in zip(saw, values):
+			if value is None:
+				continue
+			_new("UCC Survey Answer", submission=submissions[respondent].name,
+				 question=questions[key].name, survey_version=version.name,
+				 answer_value=value)
+	return campaign
+
+
+def _department():
+	"""An existing Department for the source browser to group by, or None.
+
+	Department is not ours to create (it is not in OWNED), so the demo borrows one
+	the same way it borrows objectives, and simply groups under "Unassigned" if
+	the site has none.
+	"""
+	rows = frappe.get_all("Department", pluck="name", order_by="name asc", limit=1)
+	return rows[0] if rows else None
+
+
+def _build_full():
+	"""Set A: two surveys -> responses -> objectives + metrics -> published SEQI."""
+	built = {}
+	for skey, spec in SURVEYS_A.items():
+		version, questions = _survey(spec)
+		_responses(spec, version, questions)
+		built[skey] = (version, questions)
+
+	standard = _demo_standard()
+	pool = _objective_pool()
+	if pool:
+		for skey, spec in SURVEYS_A.items():
+			version, questions = built[skey]
+			for key, _qtype, _text, _dist in spec["questions"]:
+				slots = OBJECTIVE_SLOTS.get(key)
+				if not slots:
+					continue
+				# Dedupe: a short pool would otherwise put the same objective on a
+				# question twice, which is a duplicate row, not two objectives.
+				for objective in sorted({pool[s % len(pool)] for s in slots}):
+					_new("UCC Question Mapping", question=questions[key].name,
+						 survey_version=version.name, objective=objective,
+						 standard=standard.name, primary_clause="7.1.1")
+
+	for code, name, _weight, norm, sources in SEQI_METRICS:
+		_new("UCC Metric Definition", metric_code=code, metric_name=name,
+			 default_normalisation=norm,
+			 description=f"Demo data. SEQI {name} dimension.",
+			 sources=[{"source_type": "Survey Question",
+					   "source_question": built[skey][1][qkey].name,
+					   "normalisation": norm} for skey, qkey in sources])
+
+	index_code, index_name = SET_A["index"]
+	_get_or_create("UCC Index Definition", index_code, index_code=index_code,
+				   index_name=index_name)
+	root = index_code.lower().replace("-", "_")
+	nodes = [{"node_key": root, "node_type": "Index", "label": index_name}]
+	for i, (code, name, weight, _n, _s) in enumerate(SEQI_METRICS):
+		nodes.append({"node_key": f"{root}_{i}", "node_type": "Metric", "parent_key": root,
+					  "label": name, "weight": weight, "source_metric": code})
+	version = _new("UCC Index Version", index=index_code, version_number="01",
+				   status="Draft", nodes=nodes)
+	version.status = "Published"
+	version.save(ignore_permissions=True)
+	return version, [m[0] for m in SEQI_METRICS]
+
+
 def _objective_pool(limit=6):
 	"""Real Survey Objective docnames for the demo mappings to point at.
 
@@ -221,7 +460,7 @@ def seed():
 		print(f"Already seeded ({SET_A['index'][0]} exists). Run remove first to rebuild.")
 		return
 
-	iv_a, metrics_a = _build(SET_A, publish_index=True)
+	iv_a, metrics_a = _build_full()
 	for metric_code in metrics_a:
 		calculate_metric_result(metric_code)
 	calculate_index(iv_a.name)

@@ -20,10 +20,18 @@ sys.modules.setdefault("frappe", types.ModuleType("frappe"))
 
 try:
 	from ucc_measurement_outcomes.demo_data import (
-		DEMO_PREFIX, OWNED, assert_demo, assert_owned,
+		DEMO_PREFIX, OWNED, SEQI_METRICS, SET_A, SURVEYS_A,
+		assert_demo, assert_owned, audience,
 	)
+	from ucc_measurement_outcomes.index_engine import compute_index
+	from ucc_measurement_outcomes.metric_engine import aggregate_metric
 except ImportError:
-	from demo_data import DEMO_PREFIX, OWNED, assert_demo, assert_owned
+	from demo_data import (
+		DEMO_PREFIX, OWNED, SEQI_METRICS, SET_A, SURVEYS_A,
+		assert_demo, assert_owned, audience,
+	)
+	from index_engine import compute_index
+	from metric_engine import aggregate_metric
 
 
 class TestOwnership(unittest.TestCase):
@@ -100,6 +108,67 @@ class TestDeletionGuard(unittest.TestCase):
 		# Even a perfectly DEMO-named row in someone else's DocType is refused.
 		with self.assertRaises(PermissionError):
 			assert_demo("Quality Action", DEMO_PREFIX + "ANYTHING")
+
+
+class TestSetAShape(unittest.TestCase):
+	"""The demo's advertised shape and score, checked against the REAL engines.
+
+	The seed builds distributions, not samples, so the SEQI score it produces is a
+	fixed number. Asserting it here means a change to a distribution, a weight or
+	a normalisation rule fails in CI rather than quietly moving the number the
+	sign-off demo is described by.
+	"""
+
+	def test_advertised_survey_shape(self):
+		types = [q[1] for q in SET_A["questions"]]
+		self.assertEqual(len(types), 12)
+		self.assertEqual(types.count("Page Break"), 2)
+		self.assertEqual(types.count("Section Heading"), 1)
+		self.assertEqual(len([t for t in types if t not in ("Page Break", "Section Heading")]), 9)
+		self.assertEqual(SET_A["responses"], 60)
+		# ~95% completion.
+		self.assertEqual(SET_A["responses"] - SET_A["abandoned"], 57)
+
+	def test_no_question_has_more_answers_than_respondents(self):
+		# Counts above the audience would be invented respondents.
+		for spec in SURVEYS_A.values():
+			for key, _t, _text, dist in spec["questions"]:
+				if not dist:
+					continue
+				given = sum(c for _v, c in dist)
+				self.assertLessEqual(given, len(audience(spec, key)), key)
+
+	def test_a_metric_spans_two_surveys(self):
+		spans = [m for m in SEQI_METRICS if len({s for s, _q in m[4]}) > 1]
+		self.assertTrue(spans, "no metric draws on two surveys - cross-survey aggregation unproven")
+
+	def test_weights_sum_to_100(self):
+		self.assertEqual(sum(m[2] for m in SEQI_METRICS), 100)
+
+	def _metric_values(self):
+		values = {}
+		for code, _name, _w, norm, sources in SEQI_METRICS:
+			entries = []
+			for skey, qkey in sources:
+				dist = next(q[3] for q in SURVEYS_A[skey]["questions"] if q[0] == qkey)
+				entries += [{"value": v, "normalisation": norm} for v, c in dist for _ in range(c)]
+			values[code] = aggregate_metric(entries)["value"]
+		return values
+
+	def test_every_metric_scores(self):
+		# A Yes/No question stores the word "Yes"; if normalise ever stops reading
+		# it, these come back None and the index quietly drops two dimensions.
+		for code, value in self._metric_values().items():
+			self.assertIsNotNone(value, code)
+
+	def test_calculated_seqi_score(self):
+		root = "demo_seqi"
+		nodes = [{"key": root, "type": "Index", "label": "SEQI", "parent_key": None, "weight": 0}]
+		for i, (code, name, weight, _n, _s) in enumerate(SEQI_METRICS):
+			nodes.append({"key": f"{root}_{i}", "type": "Metric", "label": name,
+						  "parent_key": root, "weight": weight, "source_metric": code})
+		result = compute_index(nodes, self._metric_values())
+		self.assertAlmostEqual(result["value"], 76.31, places=2)
 
 
 if __name__ == "__main__":

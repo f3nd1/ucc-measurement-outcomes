@@ -20,6 +20,14 @@ def test_normalise():
 	assert normalise(5, "Likert 1-5 to 0-100", reverse=True) == 0
 	assert normalise(1, "Yes/No to 100/0") == 100
 	assert normalise(0, "Yes/No to 100/0") == 0
+	# The builder stores the WORD for a Yes / No question, not a digit.
+	for yes in ("Yes", "yes", " YES ", "true", "Y"):
+		assert normalise(yes, "Yes/No to 100/0") == 100, yes
+	for no in ("No", "no", "false", "N"):
+		assert normalise(no, "Yes/No to 100/0") == 0, no
+	assert normalise("Yes", "Yes/No to 100/0", reverse=True) == 0
+	# Anything outside the vocabulary still refuses to score rather than guessing.
+	assert normalise("Maybe", "Yes/No to 100/0") is None
 	assert normalise(30, "Reverse 0-100") == 70
 	assert normalise(0.8, "Ratio to Percentage") == 80
 	assert normalise(7, "Hours") == 7                         # raw, not scored
