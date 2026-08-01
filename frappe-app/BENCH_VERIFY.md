@@ -1979,3 +1979,34 @@ and its conversion (`1 + score/25`) in the description instead.
    invented target. There is no patch: overwriting a target on a live index is
    not a migration to run silently. **Check `SEQI`, `TEI`, `FSI`, `ESI`, `QIPI`,
    `API` on the site and clear any `target` of 75 or 4.2 that came from here.**
+
+## Demo mappings now borrow the REAL SEQI objectives (verify live, v0.24.0)
+
+`demo_data` used to map its questions to whichever six `Survey Objective`
+records sorted first, which read as nonsense ("facilities were adequate" against
+"ensure data security"). It now names the objectives UCC's own SEQI mapping uses
+(`reference-documents/03-…-seqi.pdf`, 101 rows over 15 objectives):
+
+| question | objectives |
+|---|---|
+| programme delivered as promised | OBJ-0400, OBJ-0397 |
+| staff knowledgeable | OBJ-0403 |
+| classrooms / materials adequate | OBJ-0399, OBJ-0402 |
+| staff understood my needs | OBJ-0398 |
+| enquiries answered in time | OBJ-0400, OBJ-0398 |
+| met advertised learning outcomes | OBJ-0420 |
+| timetable ran as published (survey 2) | OBJ-0400 |
+
+**7 distinct objectives, not the 6 originally proposed** — OBJ-0420 was added
+because "met its advertised learning outcomes" has a right answer in the real
+register and forcing it into one of six would have been a worse mapping than an
+honest seventh. Three questions still carry two objectives each.
+
+Still borrowed, never created. If the site holds none of these IDs the seed
+falls back to the alphabetical pool in the same shape, and creates no mappings
+at all if the register is empty.
+
+**Verify on the bench:** after seeding, the Objectives workspace shows these
+questions against recognisable UCC objectives; if it shows unrelated ones, the
+site's `Survey Objective` names differ from the document's and the fallback
+fired — check `frappe.db.exists("Survey Objective", "OBJ-0400")`.

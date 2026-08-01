@@ -20,15 +20,15 @@ sys.modules.setdefault("frappe", types.ModuleType("frappe"))
 
 try:
 	from ucc_measurement_outcomes.demo_data import (
-		DEMO_PREFIX, OWNED, SEQI_METRICS, SET_A, SURVEYS_A,
-		assert_demo, assert_owned, audience,
+		DEMO_PREFIX, FALLBACK_SLOTS, OWNED, SEQI_METRICS, SEQI_OBJECTIVES,
+		SET_A, SURVEYS_A, assert_demo, assert_owned, audience,
 	)
 	from ucc_measurement_outcomes.index_engine import compute_index
 	from ucc_measurement_outcomes.metric_engine import aggregate_metric
 except ImportError:
 	from demo_data import (
-		DEMO_PREFIX, OWNED, SEQI_METRICS, SET_A, SURVEYS_A,
-		assert_demo, assert_owned, audience,
+		DEMO_PREFIX, FALLBACK_SLOTS, OWNED, SEQI_METRICS, SEQI_OBJECTIVES,
+		SET_A, SURVEYS_A, assert_demo, assert_owned, audience,
 	)
 	from index_engine import compute_index
 	from metric_engine import aggregate_metric
@@ -137,6 +137,17 @@ class TestSetAShape(unittest.TestCase):
 					continue
 				given = sum(c for _v, c in dist)
 				self.assertLessEqual(given, len(audience(spec, key)), key)
+
+	def test_three_questions_carry_two_objectives(self):
+		# Real UCC questions carry several, so anything reading a mapping has to
+		# cope with a list. A demo where every question has exactly one would
+		# never exercise that.
+		two = [k for k, objs in SEQI_OBJECTIVES.items() if len(objs) == 2]
+		self.assertEqual(len(two), 3, two)
+		self.assertEqual(set(SEQI_OBJECTIVES), set(FALLBACK_SLOTS))
+		for key, objs in SEQI_OBJECTIVES.items():
+			self.assertEqual(len(objs), len(FALLBACK_SLOTS[key]), key)
+			self.assertEqual(len(set(objs)), len(objs), key)   # no duplicate row
 
 	def test_a_metric_spans_two_surveys(self):
 		spans = [m for m in SEQI_METRICS if len({s for s, _q in m[4]}) > 1]

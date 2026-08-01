@@ -15,7 +15,7 @@ Four passes: verify prior claims, fresh bug hunt, vague-spec areas, this report.
 | "Explorer rejects anything off-catalogue" | Held, except filter values | List values smuggled frappe *operators* (`like`/`in`/`between`) past the equality-only contract (F6). Fixed to scalar-only. |
 | "9 suites pass" | Pass — but see §4 | The versioning suite *asserted the F1 hole was fine*. Passing is not the same as testing the right thing. |
 
-## 2. Bugs — 14 findings, 12 fixed, 2 documented
+## 2. Bugs — 17 findings, 15 fixed, 2 documented
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
@@ -32,6 +32,9 @@ Four passes: verify prior claims, fresh bug hunt, vague-spec areas, this report.
 | F12 | Sparse sequences after deletion broke every insert path (drop-at-position landed one slot late; duplicates misplaced) | Medium | Fixed at root (`_resequence`) + 3 bench tests |
 | F13 | Template version numbering crashed (DuplicateEntry) after deleting an old version | Medium | Fixed + bench test |
 | F14 | Filter bar filtered on a no-longer-existing option (stale tracked value) | Low-med | Fixed (inspection-verified; no JS harness exists) |
+| F15 | A `Yes / No` question scored **nothing, silently**. The builder gives its choices labels `Yes`/`No` with no `choice_value` and `survey_form.js` falls back to the label, so `float("Yes")` raised inside `normalise` and every such answer was dropped from the mean — a Yes/No metric over a Yes/No question produced an empty result with no error anywhere | **High** | Fixed (v0.21.0) + pure tests |
+| F16 | `source_eligibility` called **NPS compatible with `Likert 1-5 to 0-100`**, where `normalise(8, …)` = 175 clamped to 100 — every answer from 5 upward tying at the top. Same mislabel class as the round-10 findings, one layer deeper: numeric ≠ on this scale | **High** | Fixed (v0.22.0): new `NPS 0-10 to 0-100` rule + `LIKERT_SCALE` excludes NPS |
+| F17 | **Five of the seven index templates were invented.** Only SEQI and SAPI matched `reference-documents/01-…-workflow.pdf`; TEI carried generic Kirkpatrick levels, FSI carried "Revenue Growth / Surplus Margin", ESI / API / QIPI carried components that exist nowhere in UCC's framework. Root cause was a CLAUDE.md note asserting the PDFs were image-only and needed OCR — untested, and false: they have a text layer `pymupdf` reads in one command. Templates also wrote invented **targets** (SEQI 4.2, else 75) into a field the dashboard renders as the institution's threshold | **High** | Fixed (v0.23.0): all 7 transcribed + asserted against a transcription table; targets removed; CLAUDE.md corrected |
 | #44 | Undo/redo desync | Medium | **Characterised, not fixed.** Boundary: any name-embedding history action (reorder list, bulk-delete list) replayed after a delete+undo pair recreated one of its names under a new id. The server rejects the dead name and the failed action is silently lost from both stacks (the `_call` wrapper only resolves on success). Fix = id-remapping table in all six action constructors — not surgical. Linear undo/redo without interleaved deletes is correct. |
 
 Reported, deliberately untouched (working or latent-only): mixed-type sort

@@ -190,10 +190,29 @@ SEQI_METRICS = [
 	("DEMO-SEQI-OUT", "Outcome Alignment", 15, YESNO, [("A", "out")]),
 ]
 
-# Question -> slots in the borrowed Survey Objective pool. rel, tan and rsp carry
-# two objectives each, because real UCC questions do and anything reading these
-# has to cope with a list rather than one row.
-OBJECTIVE_SLOTS = {
+# Question -> the REAL Survey Objectives, read from
+# reference-documents/03-quality-performance-outcomes-survey-mapping-seqi.pdf,
+# which is UCC's own SEQI mapping (101 rows over 15 objectives). Borrowing these
+# where the site has them makes the demo mapping read sensibly - "facilities were
+# adequate" against "adequacy of physical and academic resources" - instead of
+# pointing at whichever objectives happen to sort first.
+#
+# rel, tan and rsp carry TWO objectives each, because real UCC questions do and
+# anything reading these has to cope with a list rather than one row.
+SEQI_OBJECTIVES = {
+	"rel": ("OBJ-0400", "OBJ-0397"),    # reliability of institutional info; overall satisfaction
+	"asr": ("OBJ-0403",),               # academic staff performance
+	"tan": ("OBJ-0399", "OBJ-0402"),    # physical/academic resources; learning resources
+	"emp": ("OBJ-0398",),               # quality of support services
+	"rsp": ("OBJ-0400", "OBJ-0398"),
+	"out": ("OBJ-0420",),               # graduate outcomes and learner readiness
+	"d_rel": ("OBJ-0400",),
+}
+
+# Used only when the site has none of the named objectives: keep the same shape
+# (which questions carry two) against whatever the register does hold, rather
+# than seeding a demo with no mappings at all.
+FALLBACK_SLOTS = {
 	"rel": (0, 1), "asr": (1,), "tan": (2, 3), "emp": (3,),
 	"rsp": (4, 5), "out": (5,), "d_rel": (0,),
 }
@@ -385,19 +404,13 @@ def _build_full():
 
 	standard = _demo_standard()
 	pool = _objective_pool()
-	if pool:
-		for skey, spec in SURVEYS_A.items():
-			version, questions = built[skey]
-			for key, _qtype, _text, _dist in spec["questions"]:
-				slots = OBJECTIVE_SLOTS.get(key)
-				if not slots:
-					continue
-				# Dedupe: a short pool would otherwise put the same objective on a
-				# question twice, which is a duplicate row, not two objectives.
-				for objective in sorted({pool[s % len(pool)] for s in slots}):
-					_new("UCC Question Mapping", question=questions[key].name,
-						 survey_version=version.name, objective=objective,
-						 standard=standard.name, primary_clause="7.1.1")
+	for skey, spec in SURVEYS_A.items():
+		version, questions = built[skey]
+		for key, _qtype, _text, _dist in spec["questions"]:
+			for objective in _objectives_for(key, pool):
+				_new("UCC Question Mapping", question=questions[key].name,
+					 survey_version=version.name, objective=objective,
+					 standard=standard.name, primary_clause="7.1.1")
 
 	for code, name, _weight, norm, sources in SEQI_METRICS:
 		_new("UCC Metric Definition", metric_code=code, metric_name=name,
@@ -427,6 +440,22 @@ def _build_full():
 	version.status = "Published"
 	version.save(ignore_permissions=True)
 	return version, [m[0] for m in SEQI_METRICS]
+
+
+def _objectives_for(key, fallback):
+	"""The objectives this demo question should map to, all of them real.
+
+	Prefers the ones UCC's own SEQI mapping names. Falls back to the borrowed
+	pool only when the site holds none of them, and returns nothing at all when
+	the register is empty - the demo may be less complete, never invented.
+	"""
+	named = [o for o in SEQI_OBJECTIVES.get(key, ()) if frappe.db.exists("Survey Objective", o)]
+	if named:
+		return named
+	slots = FALLBACK_SLOTS.get(key, ())
+	# Dedupe: a short pool would otherwise put the same objective on a question
+	# twice, which is a duplicate row, not two objectives.
+	return sorted({fallback[s % len(fallback)] for s in slots}) if fallback else []
 
 
 def _objective_pool(limit=6):
