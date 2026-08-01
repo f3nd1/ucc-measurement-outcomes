@@ -41,6 +41,12 @@ def normalise(value, rule, reverse=False):
 		return None
 	if rule == "Likert 1-5 to 0-100":
 		out = (v - 1) / 4 * 100
+	elif rule == "NPS 0-10 to 0-100":
+		# The 0-10 recommend scale, scored as position on the scale. NOT the NPS
+		# promoters-minus-detractors formula: that is a -100..100 figure for a
+		# WHOLE population, and this function scores ONE answer at a time, so
+		# there is no population here to compute it over.
+		out = v / 10 * 100
 	elif rule == "Yes/No to 100/0":
 		out = 100.0 if v else 0.0
 	elif rule == "Reverse 0-100":

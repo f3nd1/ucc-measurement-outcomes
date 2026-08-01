@@ -76,3 +76,22 @@ never wrong about the institutional record.
 Tangibles is deliberately the weak dimension (65.0). A demo where everything
 passes cannot show the one workflow Criterion 7.1.1 exists for: a weak result
 leading somewhere.
+
+## 2026-08-01 — NPS scores as scale position, not promoters-minus-detractors
+
+`NPS 0-10 to 0-100` normalises an answer to `v / 10 * 100`. It is NOT the
+Net Promoter Score formula (%promoters − %detractors).
+
+`normalise` scores one answer at a time and the metric layer averages the
+results, so there is no population inside the function for a
+promoters-minus-detractors calculation to run over. Implementing real NPS means
+a population-level metric with its own aggregation and a −100..100 range that
+`weighted_score` and every 0–100 assumption above it would have to learn — a
+different change, not a normalisation rule. The label says "0-10 to 0-100" and
+the help text says so in the UI, so nothing claims to be NPS proper.
+
+What forced the decision was the alternative being actively wrong rather than
+merely absent: `source_eligibility` called NPS compatible with
+`Likert 1-5 to 0-100`, and that rule scores an 8 as 175, clamped to 100 — every
+answer from 5 upward tying at the top with no error anywhere. Numeric is not the
+same as "on this scale", which is now the distinction `LIKERT_SCALE` encodes.

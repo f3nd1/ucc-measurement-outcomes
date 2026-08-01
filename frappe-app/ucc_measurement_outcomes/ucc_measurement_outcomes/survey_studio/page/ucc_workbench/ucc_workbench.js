@@ -101,7 +101,7 @@ const TYPES = [
 ];
 
 const NORMALISATIONS = [
-	"Likert 1-5 to 0-100", "Yes/No to 100/0", "Reverse 0-100",
+	"Likert 1-5 to 0-100", "NPS 0-10 to 0-100", "Yes/No to 100/0", "Reverse 0-100",
 	"Ratio to Percentage", "Count", "Hours", "Category Only (No Score)",
 ];
 

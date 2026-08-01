@@ -1902,13 +1902,6 @@ gave which answer, so:
 
 **Two things the demo deliberately does NOT do, both needing a decision:**
 
-* **NPS is collected but not scored.** No normalisation rule covers a 0-10
-  scale. `source_eligibility` currently calls NPS *Compatible* with
-  `Likert 1-5 to 0-100`, which is wrong in the same way the round-10 mislabels
-  were: `normalise(8, "Likert 1-5 to 0-100")` = 175, clamped to 100, so every
-  score of 5 and above would tie. The honest fix is a new
-  `NPS 0-10 to 0-100` option on the three normalisation Selects plus a branch in
-  `normalise` — a schema change, so it is flagged here rather than smuggled in.
 * **No `target` on `DEMO-SEQI`.** The real SEQI benchmark score was not
   supplied; an invented threshold on an EduTrust evidence record is worse than
   a blank one. Set `UCC Index Definition DEMO-SEQI.target` once it is known.
@@ -1921,3 +1914,30 @@ scored **nothing, silently**. `normalise` now reads yes/y/true/t and no/n/false/
 for that rule only; anything outside the vocabulary still refuses to score.
 Verify live: build a Yes / No question, answer it, calculate a metric on the
 `Yes/No to 100/0` rule, confirm a non-null `UCC Metric Result.value`.
+
+## NPS normalisation rule (verify live, v0.22.0)
+
+New Select option **`NPS 0-10 to 0-100`** on all three normalisation fields
+(`UCC Metric Definition.default_normalisation`, `UCC Metric Source.normalisation`,
+`UCC Index Node.normalisation`), with a matching branch in
+`index_engine.normalise`: `v / 10 * 100`, clamped.
+
+Deliberately **position on the 0-10 scale, not promoters-minus-detractors**.
+That formula produces a -100..100 figure for a whole population; `normalise`
+scores ONE answer at a time, so there is no population there to compute it over,
+and a per-answer value is what the metric layer averages. A true NPS would have
+to be a population-level metric with its own aggregation, which is a bigger
+change than a normalisation rule.
+
+**This closes a real mislabel, not just a gap.** `source_eligibility` called NPS
+*Compatible* with `Likert 1-5 to 0-100`, where `normalise(8, ...)` = 175 clamped
+to 100 — every answer of 5 and up tying at the top, silently. NPS is now excluded
+from the Likert rule (`LIKERT_SCALE`) and suggests its own.
+
+Verify on the bench:
+1. The three Selects each offer `NPS 0-10 to 0-100` (a Select option change needs
+   no patch, but confirm the field renders it after migrate).
+2. Add the demo's NPS question to a Likert metric: the drawer refuses it and
+   suggests `NPS 0-10 to 0-100`, rather than calling it Compatible.
+3. A metric on the new rule over the demo's NPS answers scores **76.8421**
+   (57 answers, mean 7.6842 of 10).

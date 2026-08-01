@@ -18,6 +18,12 @@ def test_normalise():
 	assert normalise(5, "Likert 1-5 to 0-100") == 100
 	assert normalise(6, "Likert 1-5 to 0-100") == 100        # clamped
 	assert normalise(5, "Likert 1-5 to 0-100", reverse=True) == 0
+	# NPS is position on the 0-10 scale, NOT promoters-minus-detractors:
+	# normalise scores one answer, and that formula needs a whole population.
+	assert normalise(0, "NPS 0-10 to 0-100") == 0
+	assert normalise(5, "NPS 0-10 to 0-100") == 50
+	assert normalise(10, "NPS 0-10 to 0-100") == 100
+	assert normalise(11, "NPS 0-10 to 0-100") == 100   # clamped, not 110
 	assert normalise(1, "Yes/No to 100/0") == 100
 	assert normalise(0, "Yes/No to 100/0") == 0
 	# The builder stores the WORD for a Yes / No question, not a digit.

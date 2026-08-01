@@ -28,7 +28,7 @@ frappe.pages["index-studio"].on_page_show = function (wrapper) {
 
 const IAPI = "ucc_measurement_outcomes.api.index_studio.";
 const NORMALISATIONS = [
-	"Likert 1-5 to 0-100", "Yes/No to 100/0", "Reverse 0-100",
+	"Likert 1-5 to 0-100", "NPS 0-10 to 0-100", "Yes/No to 100/0", "Reverse 0-100",
 	"Ratio to Percentage", "Count", "Hours", "Category Only (No Score)",
 ];
 
@@ -37,6 +37,7 @@ const NORMALISATIONS = [
 // about where a 4 lands.
 const NORM_HELP = {
 	"Likert 1-5 to 0-100": "1 → 0, 3 → 50, 5 → 100. Anything outside 1–5 is clamped.",
+	"NPS 0-10 to 0-100": "0 → 0, 5 → 50, 10 → 100. Position on the 0–10 scale, not the promoters-minus-detractors formula.",
 	"Yes/No to 100/0": "Any non-zero value → 100, zero → 0.",
 	"Reverse 0-100": "Flips an existing 0–100 score: 30 → 70. Already reversed, so the Reverse Scored box is ignored.",
 	"Ratio to Percentage": "Multiplies by 100: 0.8 → 80. Clamped to 0–100.",

@@ -35,7 +35,7 @@
    "fieldname": "default_normalisation",
    "fieldtype": "Select",
    "label": "Default Normalisation",
-   "options": "Likert 1-5 to 0-100\nYes/No to 100/0\nReverse 0-100\nRatio to Percentage\nCount\nHours\nCategory Only (No Score)"
+   "options": "Likert 1-5 to 0-100\nNPS 0-10 to 0-100\nYes/No to 100/0\nReverse 0-100\nRatio to Percentage\nCount\nHours\nCategory Only (No Score)"
   },
   {
    "fieldname": "description",

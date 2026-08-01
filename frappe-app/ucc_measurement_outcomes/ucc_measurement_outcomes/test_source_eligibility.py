@@ -9,6 +9,7 @@ except ImportError:
 	from source_eligibility import verdict, is_structural
 
 LIKERT = "Likert 1-5 to 0-100"
+NPS = "NPS 0-10 to 0-100"
 
 
 def check():
@@ -25,9 +26,17 @@ def check():
 		assert is_structural(qt)
 
 	# --- what genuinely works for a Likert metric ---
-	for qt in ("Rating", "NPS", "Slider", "Number", "Likert Matrix"):
+	for qt in ("Rating", "Slider", "Number", "Likert Matrix"):
 		v = verdict(qt, LIKERT, answers=3)
 		assert v["eligible"] and v["state"] == "eligible", (qt, v)
+
+	# NPS runs 0-10, so the Likert rule would score an 8 as 175 clamped to 100 -
+	# every answer of 5 and up tying at the top. Numeric is not the same as
+	# "on this scale", and the drawer must not call that Compatible.
+	v = verdict("NPS", LIKERT, answers=57)
+	assert not v["eligible"] and v["state"] == "incompatible", v
+	assert v["suggested_normalisation"] == NPS, v
+	assert verdict("NPS", NPS, answers=57)["eligible"]
 
 	# Yes/No is NOT Likert-compatible: normalise() would map 1 -> (1-1)/4*100 = 0,
 	# scoring every "yes" as zero. Silent wrongness is worse than refusing.

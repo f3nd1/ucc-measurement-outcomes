@@ -23,6 +23,10 @@ STRUCTURAL = ("Section Heading", "Page Break")
 
 # Stored as a number the engine can read directly.
 NUMERIC = ("Rating", "NPS", "Slider", "Number", "Likert Matrix")
+# ...but "numeric" is not "on a 1-5 scale". NPS runs 0-10, so the Likert rule
+# would score an 8 as (8-1)/4*100 = 175, clamped to 100 - every answer from 5
+# upwards tying at the top. It has its own rule and is excluded here.
+LIKERT_SCALE = tuple(t for t in NUMERIC if t != "NPS")
 # Stored as 1/0.
 BINARY = ("Yes / No",)
 # Free text, files, dates, orderings: float() fails, so normalise() returns
@@ -37,7 +41,8 @@ CHOICE = ("Single Choice", "Multiple Choice", "Dropdown",
 # What each normalisation rule can actually convert, derived from
 # index_engine.normalise()'s own branches.
 _ACCEPTS = {
-	"Likert 1-5 to 0-100": NUMERIC,
+	"Likert 1-5 to 0-100": LIKERT_SCALE,
+	"NPS 0-10 to 0-100": ("NPS", "Slider", "Number"),
 	"Yes/No to 100/0": BINARY + ("Rating", "Number"),
 	"Reverse 0-100": ("Number", "Rating", "Slider"),
 	"Ratio to Percentage": ("Number",),
@@ -51,7 +56,7 @@ _SUGGESTS = {
 	"Rating": "Likert 1-5 to 0-100",
 	"Likert Matrix": "Likert 1-5 to 0-100",
 	"Slider": "Likert 1-5 to 0-100",
-	"NPS": "Likert 1-5 to 0-100",
+	"NPS": "NPS 0-10 to 0-100",
 	"Yes / No": "Yes/No to 100/0",
 	"Number": "Ratio to Percentage",
 }
