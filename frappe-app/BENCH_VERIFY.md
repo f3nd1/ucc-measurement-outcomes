@@ -2010,3 +2010,26 @@ at all if the register is empty.
 questions against recognisable UCC objectives; if it shows unrelated ones, the
 site's `Survey Objective` names differ from the document's and the fallback
 fired — check `frappe.db.exists("Survey Objective", "OBJ-0400")`.
+
+## The seed now runs before it runs (v0.25.0)
+
+`test_demo_seed_dry.py` executes `demo_data._build_full()` on this machine
+against a stub `frappe` that validates every field name and Select value against
+the DocType JSONs on disk. It is the first code in this repo where a
+controller-shaped path has ever actually run.
+
+It produces exactly the advertised shape — 2 surveys, 15 questions, 84
+submissions, **538 answers**, 6 metrics, 1 published index version with weights
+[20, 15, 20, 15, 15, 15], 10 mapping rows — and covers three site conditions:
+the real objectives present, absent (falls back, same shape), and an empty
+register (no mappings, everything else still seeds).
+
+Four negative tests prove the stub bites rather than merely mocking: unknown
+fieldname, Select value outside the options, missing required field, and a bad
+field inside a child-table row.
+
+**What it still cannot check** — the honest limit: it has no database, so Link
+targets are not resolved, controller `validate`/`before_save` hooks do not fire,
+and `frappe.db.count` returns 0. So version-number probing, the published-version
+immutability guards and link validation remain first-run-on-bench risks. The
+seed's *shape* is proven; its interaction with real controllers is not.

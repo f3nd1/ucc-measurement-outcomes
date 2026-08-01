@@ -29,12 +29,21 @@ There is no bench in this environment. The real test tier is the **pure, Frappe-
 
 ```bash
 cd frappe-app/ucc_measurement_outcomes/ucc_measurement_outcomes
-for t in test_versioning_logic test_submission_utils test_index_engine test_explorer_agg \
-         test_metric_engine test_chain_contract test_coverage test_index_templates test_bulk_parse \
-         test_display_logic test_dashboard_export test_theme; do
-  python3 $t.py    # each is self-contained; run a single one the same way
+# Every suite except test_integration_chain, which needs a real bench. Globbed
+# on purpose: a hardcoded list silently stops running the suites added after it.
+for t in test_*.py; do
+  [ "$t" = "test_integration_chain.py" ] && continue
+  python3 "$t" >/dev/null || echo "FAIL $t"    # run a single one the same way, without >/dev/null
 done
 ```
+
+One of them is not a pure-logic suite: **`test_demo_seed_dry.py` actually executes
+`demo_data`'s Frappe half** against a stub bench that validates every field and
+Select value against the DocType JSONs on disk. It is the only place in this repo
+where controller-shaped code runs at all, and it catches the three things that
+kill a seed on a real bench — a typo'd fieldname, a Select value outside the
+options, a missing required field. Copy the pattern before writing more
+bench-path code rather than shipping it unrun.
 
 Before committing, sanity-check the whole app:
 
