@@ -1458,3 +1458,107 @@ green; every prior round's regression check re-run and still passing. Items
 bundled CSS and mocked endpoints, then measuring geometry and clicking with a
 real mouse - much closer to the bench than component snippets, but still not
 the bench. Confirm on ucc-sms-v2.orb.local.
+
+## Round-5 QA on ucc-workbench (verify live, v0.16.0)
+
+**ITEM 8 FIRST, because it changes how to read this whole report: the round-4
+fix was never deployed.** Felix tested v0.14.4. The Item 9 formula fix exists
+only in commit 2b59350 = **v0.15.0**, which is one release later - confirmed
+with `git log -S"orphans"` and by reading `__init__.py` at each commit. So this
+is the "undeployed fix" case, NOT a wrong diagnosis; nothing about the original
+root cause needs redoing. It also means round 4's Items 1-7 (canvas-help
+escaping its pane, popover anchoring, drag-to-resize, the source-row width, the
+page-head gap) were all absent from what Felix tested, so some round-5 symptoms
+may already be fixed in v0.15.0. **Deploy v0.16.0 and re-test before filing
+round 6.**
+
+**ITEM 1 - Frappe Desk was leaking INTO our markup.** Every icon+text control
+rendered as "+        Add page". `frappe/public/scss/common/icons.scss`
+(v15.83.0) declares a global `.icon { ... margin: 0 auto; ... }`, and our icons
+carry `class="icon"` too. In a flex container auto left AND right margins absorb
+every pixel of free space, pushing icon and label to opposite ends - which is
+why one rule fixes every button and why the gap scaled with button width.
+Fixed with `margin: 0` on `.ucc-mo svg.icon`. Measured with Frappe's real rule
+loaded first: **51px / 320px / 80px before, 6px / 6px / 7px after** (removing
+our line reproduces the break, so the check is real). This file's own header
+warns that `.icon` is a name Frappe already uses; scoping stopped us leaking
+OUT and nothing had stopped Frappe leaking IN. Its other declarations
+(width/height/display/stroke/fill) were already overridden at higher
+specificity - margin was the only gap.
+Verify: Add page, Add another question, Apply changes, Save metric all read as
+"+ Label", and check one OTHER Desk page still looks normal.
+
+**ITEM 2 - Theme Settings tab added, but read the scope note.** New local tab
+between Build and Preview. Every control, option list and default is rendered
+from what `api/theme.get_theme` returns, which reads the pure `theme` module the
+respondent stylesheet is itself built from - no colour or option literal is
+duplicated in the browser. Two new whitelisted endpoints (`get_theme`,
+`save_theme`); `save_theme` is `frappe.only_for("System Manager")`, validates
+every colour through `theme.normalise_colour` and every Select against
+`theme.SELECT_CHOICES`, ignores unknown field names, and clears only that one
+Single's document cache (never a site-wide wipe).
+**It is SITE-WIDE, not per-survey.** `UCC Survey Theme` is a Single DocType -
+one theme for the whole bench. Felix asked for it "scoped to whichever survey/
+version is currently open"; that is a schema change (an override on UCC Survey
+Version), so it is flagged rather than faked, and the tab says so on screen:
+"These settings apply to EVERY survey on this site." Say the word if the
+per-survey override is wanted and it becomes a data-model decision entry.
+Verify: colours and sizing load with current values; saving as System Manager
+persists and the respondent page picks up the change; saving as a non-System
+Manager is refused by the server, not the browser.
+
+**ITEM 3 - the outline label collided with the prototype's own `.page-title`.**
+Our inline label used `class="page-title"`, which in the prototype is a
+CONTAINER rule (`display:flex; justify-content:space-between; margin-bottom:8px`).
+Applied to a label inside `.page-item-btn`'s own space-between row, the 8px
+bottom margin pushed the text off the count badge's centre line. Renamed to
+`.page-name` with its own rule so the collision cannot return. Measured:
+vertical misalignment **4px -> 0px**, display flex -> block, margin-bottom
+8px -> 0.
+
+**ITEM 4 - a regression I introduced in round 4.** Making `.question-list` a
+12-column grid (Item 7's width port) turned the empty state into a grid item
+too, so it took ONE column - 63px of an 822px list - and the sentence wrapped
+into four stacked lines. It is not a question and now spans the row. Measured:
+width **63px -> 822px**, text height **75px -> 15px (one line)**. Fixed by
+widening the container, not by shrinking the font.
+
+**ITEM 5 - question label and status line were literally identical.**
+`questionRow()` emits `<div class="question">` and `<div class="question-meta">
+<span>`, but the prototype only ever styled `.question-copy strong` - so both
+fell through to the inherited 13px/`var(--text)`, measured identical in size,
+colour and weight. The status line is secondary and now says so. Measured:
+question **12px navy**, meta **10px muted** - was 13px/navy for both.
+
+**ITEM 6 - Objectives works with well-formed data; the empty state was lying.**
+Instantiated the real `ObjectiveWorkspace` with real jQuery and endpoint shapes
+taken from `api/mapping.py` itself: the queue lists both unmapped questions, the
+canvas renders the question node and its linked objective node, no JS errors.
+So no functional break reproduced - and note Felix is on v0.14.4, so this may
+also be round-4 fallout.
+What I DID find, by first mocking the shape wrongly: when `get_mapping_overview`
+returns no questions, the queue rendered "Questions 0" and the empty state read
+**"Nothing needs attention. Every question has an objective."** - a success
+message that is indistinguishable from a failed load, and exactly the kind of
+thing that makes a workspace read as broken. It now distinguishes the two: a
+version with no questions says so and points at the Surveys workspace.
+Verify on the bench: if Objectives still misbehaves on v0.16.0, capture what
+`api.mapping.get_mapping_overview` actually returns for that version - the
+renderer is fine, so the answer will be in the payload.
+
+**ITEM 7 - the green number was an unlabelled source count.** It rendered as
+`3 ▸` - the metric's source-question count plus a stray glyph, with nothing
+saying what it counted. Now `"3 sources"` with a link icon, so it explains
+itself without a tooltip.
+
+**ITEM 10 - demo dataset: SHAPE ONLY, not built.** Felix asked for the planned
+shape before anything is generated, so nothing was written this round. The
+proposal is in the report accompanying this release; `demo_data.py` is
+unchanged.
+
+**Verification:** all 21 pure suites and all 20 check_repo.sh guard groups green
+(now 94 Desk-page calls and 66 whitelisted methods, both resolving after the two
+new theme endpoints); every prior round's regression check re-run and passing.
+Items 1/3/4/5 were measured against the real bundled CSS **with Frappe's own
+`.icon` rule loaded first**, and Item 1's check was confirmed to fail without
+the fix. Still not a live bench - deploy and confirm.

@@ -38,7 +38,21 @@
  * there. Fixing the reset rather than the 21 elements means the next bare tag
  * added inside a button inherits correctly instead of reintroducing this. */
 .ucc-mo button { cursor: pointer; color: inherit; }
-.ucc-mo svg.icon { width: 16px; height: 16px; display: block; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* margin:0 is a guard against Frappe leaking IN, and it is the whole of round-5
+ * Item 1 (every icon+text control rendering as "+        Add page").
+ * frappe/public/scss/common/icons.scss, v15.83.0, declares a GLOBAL
+ *     .icon { display:inline-block; font-size:0; width:20px; height:20px;
+ *             margin: 0 auto; ... }
+ * and our icons carry class="icon" too. Inside a flex container an auto left
+ * AND right margin absorbs every pixel of free space, so the icon was shoved to
+ * one end of the button and the label to the other - which is why one rule fixes
+ * .btn, .add-page, .mini and any future icon+text control at once, and why it
+ * never reproduced in a harness that loads only this stylesheet.
+ * The scoping header at the top of this file warns that .icon is a name Frappe
+ * Desk already uses; scoping stops US leaking OUT, this stops Frappe leaking IN.
+ * Its other declarations are already overridden above (width/height/display/
+ * stroke/fill all set here, at higher specificity); margin was the only gap. */
+.ucc-mo svg.icon { width: 16px; height: 16px; display: block; margin: 0; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ucc-mo svg.icon.sm { width: 14px; height: 14px; }
 .ucc-mo svg.icon.xs { width: 12px; height: 12px; }
 /* 2026-08-01: topbar (brand block + global search) removed - the workspace
@@ -153,6 +167,14 @@
 .ucc-mo .page-item.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
 .ucc-mo .page-item-btn { width: 100%; border: 0; background: transparent; padding: 9px; display: flex; align-items: center; justify-content: space-between; text-align: left; }
 .ucc-mo .page-item-btn strong { font-size: 12px; }
+/* Round-5 Item 3. The outline's label used class="page-title", which is the
+ * PROTOTYPE's rule for a page-title CONTAINER (display:flex, space-between,
+ * margin-bottom:8px) - applied to an inline label inside .page-item-btn's own
+ * space-between row it pushed the text 4px off the count badge's centre line,
+ * reading as the two overlapping. Renamed to .page-name so the collision cannot
+ * come back; the prototype's .page-title block now matches nothing in this app,
+ * which is what it always effectively did. */
+.ucc-mo .page-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .ucc-mo .page-item-btn small { color: var(--muted); font-size: 10px; }
 .ucc-mo .outline-list { border-top: 1px solid var(--border); display: grid; }
 .ucc-mo .outline-question { width: 100%; border: 0; background: transparent; text-align: left; padding: 6px 8px 6px 10px; color: var(--muted); font-size: 11px; display: grid; grid-template-columns: 22px minmax(0,1fr) 8px; align-items: center; gap: 7px; }
@@ -203,6 +225,11 @@
  * shape, same four spans and same class-per-span approach as .ucc-sb-list, so
  * the canvas and the respondent page agree about what a width means. */
 .ucc-mo .question-list { display: grid; grid-template-columns: repeat(12, 1fr); gap: 7px; align-items: start; }
+/* Round-5 Item 4, and a regression from round 4: making .question-list a
+ * 12-column grid turned the empty state into a grid item too, so it took ONE
+ * column - 63px of an 822px list - and "This page has no questions yet." wrapped
+ * into four stacked lines. It is not a question and spans the row. */
+.ucc-mo .question-list > .mapping-empty { grid-column: 1 / -1; justify-content: center; }
 .ucc-mo .question-row { grid-column: span 12; position: relative; border: 1px solid var(--border); border-radius: 9px; background: white; display: grid; grid-template-columns: 18px 32px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 9px; min-height: 56px; transition: .12s ease; }
 .ucc-mo .question-row.qw-8 { grid-column: span 8; }
 .ucc-mo .question-row.qw-6 { grid-column: span 6; }
@@ -221,6 +248,16 @@
 .ucc-mo .drag { color: var(--subtle); text-align: center; user-select: none; }
 .ucc-mo .question-copy { min-width: 0; }
 .ucc-mo .question-copy strong { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Round-5 Item 5. questionRow() emits <div class="question"> and
+ * <div class="question-meta"><span>, but the prototype only ever styled
+ * .question-copy strong - so the question label AND its status line both fell
+ * through to the inherited 13px/var(--text), measured identical. The status
+ * line is secondary information and now says so: 10px, muted, matching every
+ * other secondary label in this system. The question keeps the 12px the
+ * prototype intended for it, with the same truncation. */
+.ucc-mo .question-copy .question { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ucc-mo .question-meta span { color: var(--muted); font-size: 10px; }
+.ucc-mo .question-meta .chip { font-size: 10px; }
 .ucc-mo .question-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
 /* 10px, not 9px (round-4 Item 8). Measured, the green chip's contrast is fine -
  * #087a52 on #eaf8f2 is 4.9:1, passing WCAG AA - so the "unreadable green text"
@@ -291,6 +328,10 @@
  * given var(--text) - full ink, not the muted grey body text uses - so it
  * reads as a header, not another line of body copy. Uppercase/letter-spacing/
  * weight kept; those already did their job, size and colour didn't. */
+/* Theme Settings (round-5 Item 2): two columns of compact fields, and a colour
+ * input sized like one rather than the browser's default swatch button. */
+.ucc-mo .theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.ucc-mo .field input[type="color"] { height: 34px; padding: 2px; cursor: pointer; }
 .ucc-mo .section-label { font-size: 12px; color: var(--text); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin: 12px 0 7px; }
 .ucc-mo .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .ucc-mo .switch-row:last-child { border-bottom: 0; }

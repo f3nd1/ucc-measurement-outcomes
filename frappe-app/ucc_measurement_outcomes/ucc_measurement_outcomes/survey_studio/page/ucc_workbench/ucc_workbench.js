@@ -58,6 +58,7 @@ const IAPI = "ucc_measurement_outcomes.api.index_studio.";
 const CAPI = "ucc_measurement_outcomes.api.campaign.";
 const DAPI = "ucc_measurement_outcomes.api.dashboard.";
 const LAPI = "ucc_measurement_outcomes.api.lineage.";
+const TAPI = "ucc_measurement_outcomes.api.theme.";
 
 // Mirrors api/builder.CHOICE_DEFAULTS + MATRIX_ROW_DEFAULTS' key space. The
 // picker shows what the backend can actually create; a type offered here that
@@ -292,7 +293,8 @@ class SurveyWorkspace {
 				],
 			})}
 			${U.tabs([
-				{ key: "build", label: __("Build") }, { key: "preview", label: __("Preview") },
+				{ key: "build", label: __("Build") }, { key: "theme", label: __("Theme Settings") },
+				{ key: "preview", label: __("Preview") },
 				{ key: "share", label: __("Share") }, { key: "responses", label: __("Responses") },
 				{ key: "exports", label: __("Exports") },
 			], tab)}
@@ -309,6 +311,7 @@ class SurveyWorkspace {
 
 		const body = {
 			build: () => this._build3(),
+			theme: () => this._themeTab(),
 			preview: () => this._previewTab(),
 			share: () => this._shareTab(),
 			responses: () => this._responsesTab(),
@@ -351,7 +354,7 @@ class SurveyWorkspace {
 			<div class="page-item ${i === this.pageIndex ? "active" : ""}">
 				<button class="page-item-btn" data-page="${i}">
 					${U.icon("i-page", "sm")}
-					<span class="page-title">${U.esc(p.title)}</span>
+					<span class="page-name">${U.esc(p.title)}</span>
 					<span class="count">${p.items.length}</span>
 				</button>
 				${i === this.pageIndex ? `<div class="outline-list">${p.items.map((q) => `
@@ -507,6 +510,73 @@ class SurveyWorkspace {
 	}
 
 	// ------------------------------------------------------------- non-build tabs
+	// Theme Settings (round-5 Item 2). Surfaces the existing UCC Survey Theme
+	// rather than reimplementing it: every control, option list and default is
+	// rendered from what api/theme.get_theme returns, which in turn reads the
+	// pure `theme` module that the stylesheet itself is built from. No colour or
+	// option literal lives in this file.
+	//
+	// SITE-WIDE, and it says so on screen. UCC Survey Theme is a Single DocType -
+	// one theme for the whole bench, not one per survey - so "scoped to the
+	// survey currently open" is not something the UI can honour today. Making it
+	// per-survey is a schema change (an override on UCC Survey Version); it is
+	// flagged, not faked.
+	_themeTab() {
+		const U = window.UCCMO;
+		return `<section class="pane" style="height:100%">
+			<header class="pane-head">
+				<div class="pane-title-with-icon">${U.icon("i-settings", "sm")}<strong>${
+					__("Theme Settings")}</strong></div>
+				${U.button({ label: __("Save theme"), tone: "primary", small: true, icon: "i-save", act: "save-theme" })}
+			</header>
+			<div class="pane-body" data-theme><div class="canvas-help">${__("Loading theme…")}</div></div>
+		</section>`;
+	}
+
+	_fillTheme() {
+		const U = window.UCCMO;
+		this.app.call(TAPI + "get_theme", {}).then((t) => {
+			const $b = this.$el.find("[data-theme]");
+			if (!$b.length) return;
+			if (!t) return $b.html(U.empty(__("Could not load the theme.")));
+			this.theme = t;
+			const colour = (key) => U.field({
+				label: __(key.replace(/_/g, " ")), name: "th-" + key, type: "color",
+				value: t.colours[key] || t.colour_defaults[key] || "#ffffff",
+			});
+			const select = (field) => U.field({
+				label: __(field.replace(/^ucc_/, "").replace(/_/g, " ")), name: "th-" + field,
+				type: "select", value: t.selects[field] || "",
+				options: (t.select_choices[field] || []),
+			});
+			$b.html(`<div style="padding:12px;max-width:760px">
+				<div class="canvas-help">${__("These settings apply to EVERY survey on this site - UCC Survey Theme is a single site-wide record, not a per-survey one. Changing a colour here changes it for every published survey.")}</div>
+				<div class="section-label">${__("Colours")}</div>
+				<div class="theme-grid">${Object.keys(t.colour_defaults).map(colour).join("")}</div>
+				<div class="section-label">${__("Type and sizing")}</div>
+				<div class="theme-grid">${Object.keys(t.select_choices).map(select).join("")}</div>
+				<div class="help">${t.is_default
+					? __("This site is still on the default theme.")
+					: __("This site has customised the theme.")}</div>
+			</div>`);
+		});
+	}
+
+	_saveTheme() {
+		const payload = {};
+		if (!this.theme) return;
+		Object.keys(this.theme.colour_defaults).forEach((k) => {
+			payload[k] = this.$el.find(`[data-f="th-${k}"]`).val() || "";
+		});
+		Object.keys(this.theme.select_choices).forEach((f) => {
+			payload[f] = this.$el.find(`[data-f="th-${f}"]`).val() || "";
+		});
+		this.app.call(TAPI + "save_theme", { payload: JSON.stringify(payload) }).then((r) => {
+			if (!r) return;
+			this.app.toast(__("Theme saved. It applies to every survey on this site."));
+		});
+	}
+
 	// Embedded, not just a link out (round-4 Item 3). The iframe loads the REAL
 	// respondent page (/survey?preview=…), same-origin, so it is the same
 	// renderer and stylesheet a respondent gets rather than a mock that can
@@ -621,6 +691,7 @@ class SurveyWorkspace {
 		$el.on("click.mo", '[data-act="apply"]', () => this._apply());
 		$el.on("click.mo", '[data-act="apply-correction"]', () => this._applyCorrection());
 		$el.on("click.mo", '[data-act="preview"]', () => this._preview());
+		$el.on("click.mo", '[data-act="save-theme"]', () => this._saveTheme());
 		$el.on("click.mo", '[data-act="new-version"]', () => this._newVersion());
 		$el.on("click.mo", '[data-act="new-survey"]', () => this._newSurvey());
 		$el.on("click.mo", '[data-act="save-draft"]', () => this._apply());
@@ -632,6 +703,7 @@ class SurveyWorkspace {
 		if (tab === "share") this._fillShare();
 		if (tab === "responses") this._fillResponses();
 		if (tab === "preview") this._fillPreview();
+		if (tab === "theme") this._fillTheme();
 	}
 
 	_val(f) {
@@ -972,7 +1044,15 @@ class ObjectiveWorkspace {
 								${this.unmapped.has(r.name)
 									? U.chip(__("Unmapped"), "warn") : U.chip(__("Mapped"), "ok")}
 							</button>`).join("")
-							: U.empty(__("Nothing needs attention. Every question has an objective.")),
+							: U.empty(this.rows.length
+							// Round-5 Item 6: this used to claim "every question has an
+							// objective" whenever the queue was empty - including when the
+							// version had NO questions at all, which is indistinguishable
+							// from a failed load and is what makes the workspace read as
+							// broken. Say which of the two it actually is.
+							? (showAll ? __("This version has no questions to map.")
+									   : __("Nothing needs attention. Every question has an objective."))
+							: __("This survey version has no questions yet. Add questions in the Surveys workspace first.")),
 					})}
 					<section class="pane mapping-pane">
 						<header class="pane-head">
@@ -1260,7 +1340,7 @@ class MetricWorkspace {
 							<span class="type-icon metric">${U.icon("i-metric", "sm")}</span>
 							<span class="question-copy"><b>${U.esc(x.metric_name || x.name)}</b>
 								<span class="eyebrow">${U.esc(x.name)}</span></span>
-							${x.sourceless ? U.chip(__("No sources"), "warn") : U.chip(x.sources + " ▸", "ok")}
+							${x.sourceless ? U.chip(__("No sources"), "warn") : U.chip(__("{0} sources", [x.sources]), "ok", "i-link")}
 						</button>`).join("") || U.empty(__("No metrics defined yet."))
 						// Round-4 Item 1: this list had no in-body affordance to grow
 						// into its empty space (New metric lives in the context bar).
