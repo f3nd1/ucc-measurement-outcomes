@@ -2033,3 +2033,24 @@ targets are not resolved, controller `validate`/`before_save` hooks do not fire,
 and `frappe.db.count` returns 0. So version-number probing, the published-version
 immutability guards and link validation remain first-run-on-bench risks. The
 seed's *shape* is proven; its interaction with real controllers is not.
+
+## All seven templates proven to create, offline (v0.26.0)
+
+`test_index_studio_dry.py` runs the REAL `api/index_studio.create_index_from_template`
+against the same field-validating stub bench, for all seven templates, in both
+site states: **no metrics defined** (every site on day one — the state that used
+to fail 6 of 7) and metrics defined.
+
+Asserted: each template creates a Draft version with the right child count
+(API 6, SAPI 4, SEQI 6, FSI 3, QIPI 1, ESI 9, TEI 6), weights totalling 100,
+unresolvable metric links blanked rather than written, the msgprint gap warning
+naming the missing codes, no warning for the dimension-only templates, the
+description carrying the scale and clause with `target` unset, an unknown code
+refused, and permission checked before anything is written.
+
+Both round-10 findings on this endpoint were found by a person clicking the
+button on a live site. Neither can reach a site that way again.
+
+Same honest limit as the seed test: no database, so Link *targets* are not
+resolved and controller hooks do not fire. `frappe.db.count` returns 0, so the
+version-number probe is exercised only on its first branch.
