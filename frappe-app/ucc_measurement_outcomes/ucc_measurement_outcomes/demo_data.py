@@ -409,7 +409,14 @@ def _build_full():
 
 	index_code, index_name = SET_A["index"]
 	_get_or_create("UCC Index Definition", index_code, index_code=index_code,
-				   index_name=index_name)
+				   index_name=index_name,
+				   # No target: the governing document states SEQI's SCALE
+				   # ("Total Score: 5"), not a benchmark. Same statement of fact
+				   # the templates carry, rather than an invented threshold.
+				   description="Demo data. Calculated 0-100; the institutional "
+							   "scale is 0-5, so the 5-point equivalent is "
+							   "1 + score/25. Weights are the real SEQI "
+							   "dimension weights (clause GD4 7.2.2).")
 	root = index_code.lower().replace("-", "_")
 	nodes = [{"node_key": root, "node_type": "Index", "label": index_name}]
 	for i, (code, name, weight, _n, _s) in enumerate(SEQI_METRICS):

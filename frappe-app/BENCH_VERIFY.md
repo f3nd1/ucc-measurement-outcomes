@@ -1941,3 +1941,41 @@ Verify on the bench:
    suggests `NPS 0-10 to 0-100`, rather than calling it Compatible.
 3. A metric on the new rule over the demo's NPS answers scores **76.8421**
    (57 answers, mean 7.6842 of 10).
+
+## Index templates rebuilt from the governing document (verify live, v0.23.0)
+
+The reference PDFs **are text-extractable** (`pip install pymupdf`; poppler is
+absent, which is what made them look image-only). Reading
+`01-criterion-7-1-1-measurement-outcomes-workflow.pdf` pp. 205-210 showed that
+**five of the seven index templates were invented**:
+
+| index | was | now (from the document, clause) |
+|---|---|---|
+| API | 6 index roll-ups (SEQI 30 / SAPI 30 / …) | Balanced Scorecard perspectives — Financial 22, Customer 22, Internal Processes 22, Innovation & Learning 22, CSR Impact 6, Risk Management 6 (GD4 7.1.1) |
+| FSI | Revenue Growth 30, Surplus Margin 30, Liquidity 20, Cost Efficiency 20 | Liquidity Ratio 35, Debt-Equity Ratio 35, Credit Rating 30 (GD4 7.2.3) |
+| TEI | Kirkpatrick — Reaction / Learning / Behaviour / Results | Training Needs Alignment 10, Participation 15, Satisfaction 15, Knowledge Retention 20, Application of Skills 25, Training ROE 15 (GD4 7.2.4) |
+| ESI | 5 invented components | the institution's 9 — Staff Satisfaction 20, HR Policy Effectiveness 15, Professional Development Impact 15, Resource & Facility Adequacy 10, Staff Engagement 15, Staff Turnover 10, Communication Effectiveness 10, Teaching & Learning Resources 3, Assessment Strategies & Alignment 2 (GD4 7.2.4) |
+| QIPI | 4 invented components | one component at 100% (GD4 6.3.1/7.2.3) — the document really does define it that way |
+| SAPI | already correct | unchanged (GD4 7.2.1) |
+| SEQI | already correct | unchanged (GD4 7.2.2) — and it confirms the demo's weights |
+
+`test_index_templates.test_matches_the_governing_document` asserts every label,
+weight and clause against a transcription table, so a future edit that drifts
+fails there.
+
+**Targets removed.** The document states a *scale* — "Total Score: 5" for SEQI /
+FSI / ESI / TEI, 100 for API / SAPI / QIPI — not a benchmark. The old templates
+wrote invented numbers (SEQI 4.2, everything else 75) into
+`UCC Index Definition.target`, which the dashboard renders as the institution's
+threshold. `create_index_from_template` now writes no target and puts the scale
+and its conversion (`1 + score/25`) in the description instead.
+
+**Verify on the bench:**
+1. Create each of the 7 templates. All 7 succeed (round-10 fix), and each
+   Index Definition shows the scale in its description with `target` blank.
+2. API and ESI create **Dimension** nodes with no `source_metric` — they should
+   report as "node has no metric yet" in Validation, not as errors.
+3. Existing Index Definitions created by the OLD templates still carry the
+   invented target. There is no patch: overwriting a target on a live index is
+   not a migration to run silently. **Check `SEQI`, `TEI`, `FSI`, `ESI`, `QIPI`,
+   `API` on the site and clear any `target` of 75 or 4.2 that came from here.**

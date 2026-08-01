@@ -95,3 +95,34 @@ merely absent: `source_eligibility` called NPS compatible with
 `Likert 1-5 to 0-100`, and that rule scores an 8 as 175, clamped to 100 — every
 answer from 5 upward tying at the top with no error anywhere. Numeric is not the
 same as "on this scale", which is now the distinction `LIKERT_SCALE` encodes.
+
+## 2026-08-01 — Five of the seven index templates were invented; rebuilt from the document
+
+`index_templates.py` now transcribes
+`reference-documents/01-criterion-7-1-1-measurement-outcomes-workflow.pdf`
+pp. 205-210. Only SEQI and SAPI had ever matched it. TEI carried the generic
+Kirkpatrick four levels, FSI carried "Revenue Growth / Surplus Margin", ESI and
+API and QIPI carried components that exist nowhere in UCC's quality framework —
+all of it plausible enough to survive review, none of it the institution's.
+
+**What allowed it: a note in CLAUDE.md saying the reference PDFs were
+image-based and needed OCR.** They are not. They have a real text layer;
+`pymupdf` reads all eight in one command. Nobody checked, so for months the
+authoritative source sat unread in the repo while the templates were written
+from general knowledge of what such an index usually contains. The note is now
+corrected with the command that works, because the wrong note was more expensive
+than the missing tool.
+
+The lesson generalises past this file: **an "unavailable" that was never tested
+is indistinguishable from a fact, and it silently licenses invention.** Same
+failure shape as the unverified Frappe API guesses recorded in the working
+rules — assert the blocker, then work around it, and the workaround outlives the
+assertion.
+
+Targets are also removed. The document states a SCALE ("Total Score: 5" for
+SEQI / FSI / ESI / TEI, 100 for API / SAPI / QIPI), not a benchmark, and the
+templates were writing invented numbers into `UCC Index Definition.target` — a
+field the dashboard renders as the institution's threshold. The scale and its
+conversion (`1 + score/25`) go in the description, where they are a statement of
+fact. No patch fixes existing records: overwriting a target on a live index is
+not something to do silently, so it is a listed manual check instead.

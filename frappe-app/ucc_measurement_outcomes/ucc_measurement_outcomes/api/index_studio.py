@@ -46,7 +46,14 @@ def create_index_from_template(template_code):
 	if not frappe.db.exists(INDEX_DEF, template_code):
 		frappe.get_doc({
 			"doctype": INDEX_DEF, "index_code": template_code,
-			"index_name": meta[template_code], "target": index_templates.template_target(template_code),
+			"index_name": meta[template_code],
+			# No target. The governing document states a SCALE ("Total Score: 5"
+			# for SEQI, 100 for SAPI), not a benchmark, and the previous version
+			# wrote invented numbers (SEQI 4.2, everything else 75) into a field
+			# the dashboard renders as the institution's threshold. The scale and
+			# its conversion go in the description, where they are a statement of
+			# fact rather than a made-up standard.
+			"description": index_templates.template_description(template_code),
 		}).insert()
 
 	# Next free version number. count() alone collides after a deletion

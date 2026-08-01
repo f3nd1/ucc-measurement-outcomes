@@ -105,4 +105,8 @@ bench --site <site> run-tests --module ucc_measurement_outcomes.test_integration
 - `docs/09-decision-log.md` — architecture decisions (notably: normalise once at the metric layer).
 - `frappe-app/BENCH_VERIFY.md` — every unresolved bench-dependent assumption.
 - `docs/01-product-scope.md`, `docs/03-data-model.md`, `docs/04-architecture.md` — original scope/model/security intent.
-- Reference PDFs (`reference-documents/`): Criterion 7.1.1 workflow (`01`), objective-question mapping (`02`), SEQI mapping (`03`), SAPI (`04`), plus the real survey instruments. Note: these are image-based — text isn't extractable without OCR/poppler on the bench.
+- Reference PDFs (`reference-documents/`): Criterion 7.1.1 workflow (`01`), objective-question mapping (`02`), SEQI mapping (`03`), SAPI (`04`), plus the real survey instruments. **These carry a real text layer — read them, do not guess around them.** `pip install pymupdf`, then:
+  ```python
+  import fitz; print("\n".join(p.get_text() for p in fitz.open("reference-documents/01-....pdf")))
+  ```
+  (`pdftotext`/poppler is absent, and the Read tool's PDF path needs `pdftoppm`, which is why this was long believed to be image-only. It is not. Five of the seven index templates were invented while that note stood — see the 2026-08-01 decision-log entry.)
