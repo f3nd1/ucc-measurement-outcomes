@@ -581,3 +581,100 @@
 .ucc-mo .context-picker .ucc-vp-title { font-weight: inherit; }
 .ucc-mo .context-picker .ucc-vp-pill { display: none; }
 .ucc-mo .context-picker .ucc-vp-panel { font-size: 13px; }
+
+/* ============================================ METRICS NODE BUILDER (round 7) ===
+ * Scoped under .ucc-mo-metrics, which only ever appears on the Metrics
+ * workarea inside .ucc-mo - so these rules cannot reach another workspace, let
+ * alone another Desk page. Tokens are inherited from .ucc-mo rather than
+ * redeclared: the prototype's palette and this app's are the same design
+ * system, and a second copy of --primary is how two screens drift apart.
+ * Reuses .pane/.pane-head/.chip/.field/.type-icon rather than reinventing them. */
+.ucc-mo .ucc-mo-metrics { min-height: 0; }
+.ucc-mo-metrics .mx-build { height: 100%; min-height: 0; display: grid; grid-template-columns: 228px minmax(0, 1fr) 302px; gap: 10px; position: relative; }
+.ucc-mo-metrics .mx-library { height: 100%; min-height: 0; display: grid; grid-template-columns: 228px minmax(0, 1fr) 280px; gap: 10px; }
+.ucc-mo-metrics .mx-validation { height: 100%; min-height: 0; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 10px; }
+
+/* metric list */
+.ucc-mo-metrics .mx-item { width: 100%; border: 1px solid transparent; border-radius: 9px; background: transparent; padding: 9px; text-align: left; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; color: inherit; }
+.ucc-mo-metrics .mx-item:hover { background: var(--surface-2); border-color: var(--border); }
+.ucc-mo-metrics .mx-item.selected { background: var(--primary-soft); border-color: #abc1f8; }
+.ucc-mo-metrics .mx-item-meta { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+
+/* canvas */
+.ucc-mo-metrics .mx-tools { display: flex; align-items: center; gap: 8px; }
+.ucc-mo-metrics .mx-legend { color: var(--muted); font-size: 10px; display: inline-flex; align-items: center; gap: 5px; }
+.ucc-mo-metrics .mx-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.ucc-mo-metrics .mx-legend i.q { background: #6d7f96; }
+.ucc-mo-metrics .mx-legend i.m { background: var(--purple); }
+.ucc-mo-metrics .mx-legend i.x { background: var(--warning); }
+.ucc-mo-metrics .mx-stage { min-height: 0; overflow: auto; padding: 0; background: radial-gradient(circle, #dce4ee 1px, transparent 1px) 0 0/20px 20px, #fbfcfe; }
+/* Three real tracks AND three real children, so connectors have a gutter to
+ * cross - the round-7 Objectives bug was exactly this template with only two. */
+/* Wide gutters: the connectors have to be readable curves, not 24px stubs.
+ * Matches the prototype's 70px column gap. */
+.ucc-mo-metrics .mx-stage-inner { position: relative; min-width: 860px; min-height: 100%; padding: 34px 30px; display: grid; grid-template-columns: 240px minmax(200px, 1fr) 230px; align-items: center; gap: 0 68px; }
+.ucc-mo-metrics .mx-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+/* The label layer must be an OVERLAY, not a grid item. Caught by the round-7
+ * metrics test: .mx-edges is absolute and takes no cell, but this sibling was
+ * still in flow, so it consumed track 1 and pushed sources/metric/indices one
+ * track right (measured column lefts 555 / 843 / 287, one edge spanning -792px
+ * backwards). Exactly the bug just fixed in the Objectives canvas - a
+ * three-track grid must get three real items and nothing else. */
+.ucc-mo-metrics .mx-stage-inner > [data-edge-labels] { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.ucc-mo-metrics .mx-edge { fill: none; stroke: #9fb1c7; stroke-width: 2; }
+.ucc-mo-metrics .mx-edge.src { stroke: #8b6bd8; }
+.ucc-mo-metrics .mx-edge.idx { stroke: #d49a31; }
+.ucc-mo-metrics .mx-edge-label { position: absolute; z-index: 3; transform: translate(-50%, -50%); height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface); color: var(--muted); display: flex; align-items: center; white-space: nowrap; font-size: 9px; }
+.ucc-mo-metrics .mx-col { position: relative; z-index: 2; display: grid; gap: 10px; align-content: center; min-width: 0; }
+.ucc-mo-metrics .mx-col-title { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; display: flex; justify-content: space-between; gap: 8px; }
+.ucc-mo-metrics .mx-none { border: 1px dashed var(--border-strong); border-radius: 10px; padding: 12px; color: var(--muted); font-size: 10px; text-align: center; }
+
+/* nodes */
+.ucc-mo-metrics .mx-node { width: 100%; border: 1px solid var(--border); border-left: 4px solid #6d7f96; border-radius: 10px; background: var(--surface); padding: 11px; text-align: left; position: relative; color: inherit; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+.ucc-mo-metrics .mx-node:hover { border-color: var(--border-strong); }
+.ucc-mo-metrics .mx-node.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.ucc-mo-metrics .mx-node.metric { border-left-color: var(--purple); background: #fcfbff; }
+.ucc-mo-metrics .mx-node.index { border-left-color: var(--warning); background: #fffdf8; }
+.ucc-mo-metrics .mx-node-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ucc-mo-metrics .mx-kind { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.ucc-mo-metrics .mx-title { font-size: 12px; font-weight: 700; line-height: 1.35; margin-top: 4px; }
+.ucc-mo-metrics .mx-sub { color: var(--muted); font-size: 9px; margin-top: 5px; }
+.ucc-mo-metrics .mx-pills { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.ucc-mo-metrics .mx-port { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: white; border: 2px solid #6d7f96; top: 50%; transform: translateY(-50%); }
+.ucc-mo-metrics .mx-port.in { left: -6px; }
+.ucc-mo-metrics .mx-port.out { right: -6px; }
+.ucc-mo-metrics .mx-node.metric .mx-port { border-color: var(--purple); }
+.ucc-mo-metrics .mx-node.index .mx-port { border-color: var(--warning); }
+
+/* inspector info blocks, library rows, validation rows */
+.ucc-mo-metrics .mx-info { border: 1px solid var(--border); border-radius: 9px; padding: 10px; background: var(--surface-2); margin-top: 10px; }
+.ucc-mo-metrics .mx-info > div { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; margin-top: 7px; }
+.ucc-mo-metrics .mx-info > div:first-child { margin-top: 0; }
+.ucc-mo-metrics .mx-info span { color: var(--muted); }
+.ucc-mo-metrics .mx-lib-row { border: 1px solid var(--border); border-radius: 9px; padding: 10px; display: grid; grid-template-columns: auto 30px minmax(0, 1fr) auto; gap: 9px; align-items: center; margin-bottom: 6px; cursor: pointer; }
+.ucc-mo-metrics .mx-lib-row:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.ucc-mo-metrics .mx-check { border: 1px solid var(--border); border-radius: 9px; padding: 11px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-bottom: 6px; }
+.ucc-mo-metrics .mx-check .type-icon.warn { background: var(--warning-soft); color: var(--warning); }
+.ucc-mo-metrics .mx-preview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.ucc-mo-metrics .mx-preview > div { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.ucc-mo-metrics .mx-preview span { color: var(--muted); font-size: 10px; display: block; }
+.ucc-mo-metrics .mx-preview b { font-size: 22px; display: block; margin-top: 6px; }
+
+/* add-source drawer: overlays the build layout, metric stays visible behind */
+.ucc-mo-metrics .mx-drawer-back { position: absolute; inset: 0; background: rgba(15,23,42,.42); z-index: 50; }
+.ucc-mo-metrics .mx-drawer { position: absolute; top: 0; right: 0; width: min(560px, 94%); height: 100%; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); display: grid; grid-template-rows: 42px auto minmax(0, 1fr) auto; }
+.ucc-mo-metrics .mx-drawer-search { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.ucc-mo-metrics .mx-drawer-search input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; outline: none; }
+.ucc-mo-metrics .mx-drawer-list { overflow: auto; padding: 10px 12px; }
+.ucc-mo-metrics .mx-drawer-foot { padding: 10px 12px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+@media (max-width: 1120px) {
+	.ucc-mo-metrics .mx-build { grid-template-columns: 210px minmax(0, 1fr); }
+	.ucc-mo-metrics .mx-build > [data-inspector] { display: none; }
+	.ucc-mo-metrics .mx-library { grid-template-columns: 210px minmax(0, 1fr); }
+	.ucc-mo-metrics .mx-library > .pane:last-child { display: none; }
+}
+/* Round-7 Item 2: Coverage/Governance chips are now the way back into the Map
+ * tab, so they must read as pressable rather than as labels. */
+.ucc-mo .chip-link { border: 1px solid var(--border); cursor: pointer; margin: 0 4px 5px 0; }
+.ucc-mo .chip-link:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }

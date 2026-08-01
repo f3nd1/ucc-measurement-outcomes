@@ -1595,3 +1595,59 @@ track becomes the connector gutter it was designed to be. Measured path after:
 Verify: open Objectives → Map, pick a question, and confirm a curved line runs
 from the question node across a visible gap to each objective node, green when
 linked. Resize the window and confirm the lines redraw against the nodes.
+
+## Metrics node builder + Objectives Coverage/Governance (verify live, v0.17.0)
+
+**Metrics workspace rebuilt as a node model.** Build tab is now
+metric list | node canvas | contextual inspector, with the canvas showing
+Source Question → Metric → Index as selectable nodes joined by vanilla SVG
+Bézier connectors (no D3, no new dependency). Source library and Validation
+keep the selected metric in the context bar. All three settled decisions are
+enforced in the code, not just the copy:
+- **No missing-response / minimum-sample controls.** Those fields do not exist
+  on UCC Metric Definition and `aggregate_metric` has no concept of them.
+- **`weight_within_metric` is gone from the workflow.** It is stored and read
+  by nothing; the Calculation tab states the real rule instead ("average
+  eligible answers equally") and cites the engine.
+- **Operational Field sources are hidden** — `metric_calc` skips them, so they
+  are not drawn on a canvas claiming to show what feeds the score.
+Backend is untouched: every screen binds to the existing `api/metrics.py`
+endpoints (`list_metrics`, `get_metric`, `search_questions`, `new_metric`,
+`save_metric`, `add_metric_source`, `remove_metric_source`,
+`set_source_normalisation`, `preview_metric`). **Preview already existed** and
+is reused — it runs the same `aggregate_metric` and writes no
+UCC Metric Result, and the modal says so.
+CSS is scoped under `.ucc-mo-metrics`, which only ever appears on the Metrics
+workarea inside `.ucc-mo`; tokens are inherited, not redeclared.
+
+**Two grid-placement bugs, the same class, found and fixed:**
+1. Objectives canvas (round-7 Item 1): three-track grid, two flow children,
+   connectors collapsed to a 0px stub → **232px span** after placing columns
+   explicitly.
+2. Metrics canvas, caught by this workspace's own test before it shipped: the
+   `[data-edge-labels]` layer was in flow and consumed track 1, pushing every
+   column one track right (measured lefts 555/843/287, one edge spanning
+   **-792px backwards**). Made an overlay → lefts **287/555/843**, all spans
+   positive. Gutters widened to 68px so connectors read as curves.
+
+Verify on the bench:
+1. Select each metric — nodes, status strip and validation all change together.
+2. Click a source, the metric, and an index node — the inspector changes each
+   time; the index inspector is read-only and links out to Indices.
+3. Add source from the canvas drawer (metric stays visible behind it) and from
+   the Source library tab — both return to Build with the metric still selected.
+4. A metric with no sources, and one with no consuming index — both should read
+   as actionable warnings, not errors, and Validation should name the fix.
+5. Resize the window; connectors redraw against the nodes.
+6. Preview calculation shows a score and creates **no** UCC Metric Result —
+   confirm the result list is unchanged afterwards.
+7. Confirm no source-weight control appears anywhere.
+
+**Objectives Coverage/Governance (round-7 Item 2).** Both tabs open with a
+caption saying what they are for. Coverage's "questions mapped X/Y" is now a
+button into the Map tab filtered to unmapped, and each unreached-objective chip
+is clickable. Governance shows the real audit trail via a new whitelisted
+`mapping_history()` reading core's own `Version` records for
+UCC Question Mapping — no new storage; if Frappe did not record it, the tab
+says so rather than inventing a log. Duplicate-wording chips jump to the
+question. Both tabs have honest empty states.

@@ -1072,6 +1072,7 @@ class ObjectiveWorkspace {
 			this._renderNodeEditor();
 			requestAnimationFrame(() => this._drawLines());
 		}
+		if (tab === "governance") this._fillHistory();
 	}
 
 	_canvas() {
@@ -1182,6 +1183,128 @@ class ObjectiveWorkspace {
 		}));
 	}
 
+	// Round-7 Item 2: both tabs used to be passive read-outs with nothing to
+	// click, which is why they read as "dunno how to use". Each now opens with a
+	// caption saying what it is FOR, and every number and chip is a way back into
+	// the Map tab rather than a dead label.
+	_otherTab(tab) {
+		const U = window.UCCMO;
+		const c = this.coverage.counts || {};
+		if (tab === "coverage") {
+			const idle = this.coverage.unmapped_objectives || [];
+			const unmapped = this.unmapped.size;
+			return `<div class="pane" style="height:100%"><div class="pane-body" style="padding:12px">
+				<div class="canvas-help">${__("Which objectives this survey reaches, and which it misses. Mapping is evidence lineage - it changes no index score. Click any figure or objective below to work on it in the Map tab.")}</div>
+				<div class="status-strip" style="border:0;padding:0;margin-bottom:12px">
+					<button class="stat status-link" data-act="go-unmapped" title="${
+						__("Show the questions that still need an objective")}">
+						<b>${c.questions_mapped || 0}/${c.questions || 0}</b> <span>${__("questions mapped")}</span></button>
+					<span class="stat-divider"></span>
+					<span class="stat"><b>${c.objectives_used || 0}/${c.objectives || 0}</b>
+						<span>${__("objectives reached")}</span></span>
+				</div>
+				${unmapped ? `<div class="published-lock-row">${U.icon("i-warning", "xs")}<div>
+					<b>${__("{0} question(s) still have no objective", [unmapped])}</b><br>${
+					__("Those questions still score normally; they just carry no governance lineage into Criterion 7.")}
+					</div></div>` : ""}
+				<div class="section-label">${__("Objectives this survey does not reach")} (${idle.length})</div>
+				${idle.length ? `<div>${idle.slice(0, 40).map((o) =>
+					`<button class="chip chip-link" data-objective="${U.esc(o)}" title="${
+						__("Open the Map tab and look for a question to link to {0}", [o])}">${
+						U.icon("i-target", "xs")}${U.esc(o)}</button>`).join(" ")}${
+					idle.length > 40 ? `<span class="eyebrow"> +${idle.length - 40} ${__("more")}</span>` : ""}</div>`
+					: `<div class="help">${__("Every objective in the register is reached by at least one question in this survey.")}</div>`}
+			</div></div>`;
+		}
+		return `<div class="pane" style="height:100%"><div class="pane-body" style="padding:12px">
+			<div class="canvas-help">${__("Who changed a mapping and when, plus data-quality warnings worth resolving before this survey is published.")}</div>
+			<div class="section-label">${__("Recent mapping changes")}</div>
+			<div data-history>${U.empty(__("Loading history…"))}</div>
+			<div class="section-label" style="margin-top:12px">${__("Duplicate question text")}</div>
+			${(this.coverage.duplicate_questions || []).length
+				? `<div>${(this.coverage.duplicate_questions || []).map((g) =>
+					`<button class="chip warn chip-link" data-dupe="${U.esc(g[0])}" title="${
+						__("Open the first of these questions in the Map tab")}">${U.esc(g.join(" / "))}</button>`).join(" ")}</div>
+				   <div class="help">${__("Identical wording in two questions makes an objective mapping ambiguous to read later. Rename one, or map both deliberately.")}</div>`
+				: `<div class="help">${__("No two questions in this version share the same wording.")}</div>`}
+		</div></div>`;
+	}
+
+	_fillHistory() {
+		const U = window.UCCMO;
+		this.app.call(MAPI + "mapping_history", { survey_version: this.s.surveyVersion, limit: 25 })
+			.then((rows) => {
+				const $h = this.$el.find("[data-history]");
+				if (!$h.length) return;
+				if (!rows || !rows.length) {
+					return $h.html(U.empty(__("No mapping changes recorded yet for this survey version.")));
+				}
+				$h.html(rows.map((r) => `<div class="source-row" style="margin-bottom:6px">
+					<span class="type-icon">${U.icon(r.created ? "i-plus" : "i-history", "sm")}</span>
+					<div><b>${U.esc(r.mapping)}</b><div class="eyebrow">${
+						r.created ? __("created") : __("changed {0}", [r.fields.join(", ") || __("a field")])} · ${
+						U.esc(r.user)} · ${r.on ? frappe.datetime.str_to_user(r.on) : ""}</div></div>
+					<span></span><span></span></div>`).join(""));
+			});
+	}
+
+	_renderNodeEditor() {
+		const U = window.UCCMO;
+		const $slot = this.$el.find("[data-node-editor]");
+		const q = this.question;
+		if (!this.sel || this.sel === "question") {
+			$slot.html(U.inspector({
+				title: __("Question"), icon: q ? window.UCCMOIcons.forQuestionType(q.question_type) : "i-survey",
+				body: q ? U.field({ label: __("Question"), name: "qt", type: "textarea",
+									value: q.question_text, locked: true,
+									lockReason: __("Wording is managed in the Survey workspace.") })
+					+ U.field({ label: __("Survey version"), name: "sv", value: this.s.surveyVersion, locked: true })
+					+ U.field({ label: __("Type"), name: "qty", value: q.question_type, locked: true })
+					+ U.button({ label: __("Open in Survey workspace"), small: true, icon: "i-survey", act: "goto-survey" })
+					: U.empty(__("Select a node.")),
+			}));
+			return;
+		}
+		const linked = q && (q.objectives || []).indexOf(this.sel) !== -1;
+		const otab = this.otab || "details";
+		const detail = (this.masters.objectives || []).find((o) => o.name === this.sel) || {};
+		let body;
+		if (otab === "details") {
+			body = U.field({ label: __("Objective code"), name: "oc", value: this.sel, locked: true })
+				+ (detail.objective_name ? U.field({ label: __("Name"), name: "on", value: detail.objective_name, locked: true }) : "")
+				+ (detail.clause_or_criterion ? U.field({ label: __("Clause / criterion"), name: "occ", value: detail.clause_or_criterion, locked: true }) : "")
+				+ (detail.status ? U.field({ label: __("Status"), name: "os", value: detail.status, locked: true }) : "")
+				+ `<div class="help">${__("The objective itself belongs to the institutional register and is not edited here.")}</div>`
+				+ U.button({ label: __("Open in register"), small: true, icon: "i-link", act: "open-register" });
+		} else if (otab === "mapping") {
+			body = `<div class="switch-row"><button class="switch ${linked ? "on" : ""}" data-act="toggle-link"></button>
+					<span>${linked ? __("Linked to this question") : __("Not linked")}</span></div>
+				<div class="help">${__("Linking records evidence lineage. It does not change the index score.")}</div>`
+				+ U.field({ label: __("Primary clause"), name: "primary_clause",
+							value: (q && q.primary_clause) || "", placeholder: __("e.g. 7.1.1") })
+				+ U.field({ label: __("Rationale"), name: "related_clauses", type: "textarea", rows: 3,
+							value: (q && q.related_clauses) || "",
+							placeholder: __("Why this question evidences this objective") });
+		} else {
+			body = `<div class="help">${__("Who linked this and when comes from Frappe's own document history on UCC Question Mapping - there is no second log to disagree with it.")}</div>`
+				+ U.field({ label: __("Source survey version"), name: "asv", value: this.s.surveyVersion, locked: true })
+				+ U.field({ label: __("Question"), name: "aq", value: this.s.question, locked: true })
+				+ U.button({ label: __("Open mapping records"), small: true, icon: "i-history", act: "open-mappings" });
+		}
+		$slot.html(U.inspector({
+			title: this.sel, icon: "i-target",
+			tabs: [{ key: "details", label: __("Details") }, { key: "mapping", label: __("Mapping") },
+				   { key: "audit", label: __("Audit") }],
+			tab: otab, body,
+			footer: otab === "mapping" ? U.footerActions([
+				linked
+					? { label: __("Unlink"), tone: "ghost", icon: "i-unlink", act: "unlink" }
+					: { label: __("Link objective"), tone: "primary", icon: "i-link", act: "link" },
+				{ label: __("Save rationale"), icon: "i-save", act: "save-mapping", disabled: !linked },
+			]) : "",
+		}));
+	}
+
 	_otherTab(tab) {
 		const U = window.UCCMO;
 		const c = this.coverage.counts || {};
@@ -1213,6 +1336,18 @@ class ObjectiveWorkspace {
 		$el.on("click.mo", "[data-q]", (e) => {
 			this.s.question = $(e.currentTarget).data("q");
 			this.sel = "question";
+			this._draw();
+		});
+		// Coverage/Governance chips are the way back into the Map tab.
+		$el.on("click.mo", '[data-act="go-unmapped"]', () => {
+			this.queueShowAll = false;
+			this.app.state.objectivesTab = "map";
+			this._draw();
+		});
+		$el.on("click.mo", "[data-objective], [data-dupe]", (e) => {
+			const dupe = $(e.currentTarget).data("dupe");
+			if (dupe) this.s.question = dupe;
+			this.app.state.objectivesTab = "map";
 			this._draw();
 		});
 		$el.on("click.mo", "[data-map-node]", (e) => {
@@ -1284,12 +1419,36 @@ class ObjectiveWorkspace {
 		}).then(() => { this.app.toast(__("Mapping saved")); this._load(); });
 	}
 }
-
-// ============================================================== METRICS ===
-// The gap the model always allowed and no UI ever offered: assembling one
-// metric from questions across SEVERAL surveys.
+// =============================================================== METRICS ===
+// A node builder, not three unrelated panels.
+//
+// The one thing this workspace exists to make obvious is the real calculation
+// chain: Source Question -> Metric -> Index. Everything else is subordinate to
+// that. Three settled decisions from the 2026-08-01 brief are load-bearing here
+// and are why some prototype affordances are deliberately absent:
+//
+//   1. No "missing response handling" / "minimum sample size" controls.
+//      UCC Metric Definition has no such fields and aggregate_metric has no
+//      concept of either, so a control would be a setting that does nothing.
+//   2. weight_within_metric is NOT shown at all. It is stored and read by
+//      nothing (api/metrics.py says so in its own docstring); aggregate_metric
+//      takes a plain mean over scoreable answers. A visible weight would be a
+//      fake operational control, which is the exact confusion this redesign
+//      was asked to remove.
+//   3. Operational Field sources are hidden. metric_calc skips them and their
+//      external DocTypes are unconfirmed, so they are not drawn as nodes in a
+//      canvas whose whole claim is "this is what actually feeds the score".
+//
+// Objectives are never nodes here: they are governance and lineage annotation,
+// not part of the scoring chain (docs/09-decision-log.md).
 class MetricWorkspace {
-	constructor(app, $el) { this.app = app; this.$el = $el; }
+	constructor(app, $el) {
+		this.app = app;
+		this.$el = $el;
+		this.sel = { type: "metric" };
+		this.itab = "details";
+		this.picked = new Set();
+	}
 	get s() { return this.app.state; }
 
 	render() {
@@ -1298,258 +1457,586 @@ class MetricWorkspace {
 			this.metrics = metrics || [];
 			if (!this.s.metric && this.metrics.length) this.s.metric = this.metrics[0].name;
 			this.app.counts = Object.assign(this.app.counts || {}, { metrics: this.metrics.length });
-			if (!this.s.metric) return this._draw(null);
-			this.app.call(XAPI + "get_metric", { metric_code: this.s.metric }).then((m) => this._draw(m));
+			if (!this.s.metric) return this._drawEmpty();
+			this._load();
 		});
 	}
 
-	_draw(m) {
+	_load() {
+		this.app.call(XAPI + "get_metric", { metric_code: this.s.metric }).then((m) => {
+			if (!m) return this._drawEmpty();
+			this.m = m;
+			// Decision 3: the canvas shows only what actually feeds the score.
+			this.sources = (m.sources || []).filter((s) => s.kind === "question");
+			this.indices = m.used_by || [];
+			this._draw();
+		});
+	}
+
+	_drawEmpty() {
 		const U = window.UCCMO;
-		this.metric = m;
+		this.$el.html(`${U.contextBar({
+			eyebrow: __("Metrics workspace"), title: __("No metrics yet"),
+			actions: [{ label: __("New metric"), tone: "primary", icon: "i-plus", act: "new-metric" }],
+		})}<div class="workarea">${U.empty(
+			__("Create a metric, then connect the survey questions that feed it."),
+			{ label: __("New metric"), tone: "primary", act: "new-metric" })}</div>`);
+		this.$el.off("click.mo").on("click.mo", '[data-act="new-metric"]', () => this._newMetric());
+	}
+
+	_draw() {
+		const U = window.UCCMO;
+		const m = this.m;
 		const tab = this.app.tab("build");
+		const warn = this.sources.filter((s) => !s.answers).length;
 		this.$el.html(`
 			${U.contextBar({
 				eyebrow: __("Metrics workspace"),
-				title: m ? (m.metric_name || m.name) : __("No metrics yet"),
-				version: m ? m.name : "",
-				status: m ? (m.sources.length ? __("{0} sources", [m.sources.length]) : __("No sources"))
-						  : "",
-				statusTone: m && m.sources.length ? "ok" : "warn",
+				title: m.metric_name || m.name,
+				version: m.name,
+				status: __("{0} sources", [this.sources.length]),
+				statusTone: this.sources.length ? "ok" : "warn",
 				actions: [
 					{ label: __("New metric"), icon: "i-plus", act: "new-metric" },
-					{ label: __("Preview calculation"), tone: "primary", icon: "i-chart",
-					  act: "preview", disabled: !m },
+					{ label: __("Preview calculation"), tone: "primary", icon: "i-chart", act: "preview" },
 				],
 			})}
 			${U.tabs([{ key: "build", label: __("Build") },
 					  { key: "library", label: __("Source library") },
 					  { key: "validation", label: __("Validation") }], tab)}
-			${U.statusStrip(m ? [
-				{ value: m.sources.length, label: __("source questions") },
-				{ value: m.survey_count, label: __("surveys") },
-				{ value: (m.used_by || []).length, label: __("index nodes") },
-			] : [{ value: this.metrics.length, label: __("metrics") }],
-			m && m.survey_count > 1
-				? { text: __("This metric draws on {0} survey versions.", [m.survey_count]), tone: "", icon: "i-check" }
-				: null)}
-			<div class="workarea"><div class="metric-layout">
-				${U.pane({
-					cls: "metric-list", title: __("Metrics"), icon: "i-metric", count: this.metrics.length,
-					body: this.metrics.map((x) => `
-						<button class="metric-item ${x.name === this.s.metric ? "selected" : ""}" data-metric="${U.esc(x.name)}">
-							<span class="type-icon metric">${U.icon("i-metric", "sm")}</span>
-							<span class="question-copy"><b>${U.esc(x.metric_name || x.name)}</b>
-								<span class="eyebrow">${U.esc(x.name)}</span></span>
-							${x.sourceless ? U.chip(__("No sources"), "warn") : U.chip(__("{0} sources", [x.sources]), "ok", "i-link")}
-						</button>`).join("") || U.empty(__("No metrics defined yet."))
-						// Round-4 Item 1: this list had no in-body affordance to grow
-						// into its empty space (New metric lives in the context bar).
-						// Same dashed pattern and same data-act as that button, so no
-						// new handler - it just gives the pane something deliberate to
-						// fill with, exactly like the outline's "Add page".
-						+ `<button class="add-page" data-act="new-metric">${
-							U.icon("i-plus", "sm")}${__("New metric")}</button>`,
-				})}
-				${tab === "build" ? this._centre(m) : this._otherTab(tab, m)}
-				${tab === "build" ? this._scoring(m) : ""}
-			</div></div>`);
+			${U.statusStrip([
+				{ value: this.sources.length, label: __("source questions") },
+				{ value: m.survey_count, label: __("survey versions") },
+				{ value: this.indices.length, label: __("index nodes"), ws: "indices", wsLabel: __("Indices") },
+			], warn
+				? { text: __("{0} source has no submitted answers, so it contributes nothing yet.", [warn]),
+					tone: "warn", icon: "i-warning" }
+				: { text: __("Question → Metric → Index. Normalisation runs once, here at the metric layer."),
+					tone: "", icon: "i-check" })}
+			<div class="workarea ucc-mo-metrics" data-body></div>`);
+		this.$el.find("[data-body]").html(
+			tab === "build" ? this._build() : tab === "library" ? this._library() : this._validation());
 		this._wire();
-	}
-
-	_centre(m) {
-		const U = window.UCCMO;
-		if (!m) return U.pane({ title: __("Sources"), body: U.empty(__("Create a metric to begin.")) });
-		const rows = m.sources.map((s) => s.kind === "operational"
-			? `<div class="source-row"><span class="type-icon">${U.icon("i-settings", "sm")}</span>
-				<div><b>${U.esc(s.reference || __("Operational field"))}</b>
-				<div class="eyebrow">${__("Not read by the calculation yet")}</div></div>
-				<span></span><span></span></div>`
-			: `<div class="source-row">
-				<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(s.question_type), "sm")}</span>
-				<div><b>${U.esc((s.text || "").slice(0, 66))}</b>
-					<div class="eyebrow">${U.esc(s.survey || "")} ${U.esc(s.version_number ? "v" + s.version_number : "")}
-						· ${U.esc(s.answers)} ${__("answers")} · ${U.esc(s.normalisation || m.default_normalisation)}</div></div>
-				<select class="mini-select" data-norm="${U.esc(s.question)}" title="${
-					__("Normalisation for this source")}">${NORMALISATIONS.map((n) =>
-					`<option ${n === (s.normalisation || m.default_normalisation) ? "selected" : ""}>${
-						U.esc(n)}</option>`).join("")}</select>
-				<button class="mini" data-act="rm-source" data-q="${U.esc(s.question)}" title="${
-					__("Remove")}">${U.icon("i-trash", "sm")}</button>
-			</div>`).join("");
-
-		// The weight total is shown as RECORDED, never as a requirement. The
-		// engine takes a plain mean over answers and reads weight_within_metric
-		// nowhere, so an amber "add 10% more" bar would be demanding something
-		// that changes no number. See the decision log: the aggregation rule is
-		// an open decision, and this states the truth until it is made.
-		const total = m.sources.reduce((a, s) => a + (s.weight || 0), 0);
-		return `<section class="pane">
-			<header class="pane-head">
-				<div class="pane-title-with-icon">${U.icon("i-metric", "sm")}<strong>${__("Source questions")}</strong>
-					<span class="count">${m.sources.length}</span></div>
-				${U.button({ label: __("Add source"), tone: "primary", small: true, icon: "i-plus", act: "add-source" })}
-			</header>
-			<div class="pane-body">
-				<div class="source-table">${rows || U.empty(
-					__("No sources. A metric with no source questions scores nothing."),
-					{ label: __("Add source"), tone: "primary", act: "add-source" })}</div>
-				<div class="total-row">
-					<span>${__("Recorded weights")}</span>
-					<b>${total}%</b>
-					<span class="eyebrow">${__("Recorded only. The calculation currently averages every answer equally; weighting is an open decision (see the decision log).")}</span>
-				</div>
-			</div>
-		</section>`;
-	}
-
-	_scoring(m) {
-		const U = window.UCCMO;
-		if (!m) return "<div></div>";
-		return U.inspector({
-			title: __("Scoring"), icon: "i-settings",
-			body: U.field({ label: __("Metric name"), name: "metric_name", value: m.metric_name })
-				+ U.field({ label: __("Default normalisation"), name: "default_normalisation",
-							type: "select", value: m.default_normalisation, options: NORMALISATIONS })
-				+ U.field({ label: __("Description"), name: "description", type: "textarea", rows: 3,
-							value: m.description })
-				+ `<div class="help">${__("Normalisation runs once, here at the metric layer. The index applies weights only and never re-normalises.")}</div>`
-				+ ((m.used_by || []).length
-					? `<div class="section-label">${__("Consumed by")}</div>` + m.used_by.map((u) =>
-						U.chip(u.parent + " · " + (u.label || ""), "")).join(" ")
-					: `<div class="help">${__("No index node uses this metric yet.")}</div>`),
-			footer: U.footerActions([{ label: __("Save metric"), tone: "primary", icon: "i-save", act: "save-metric" }]),
-		});
-	}
-
-	_otherTab(tab, m) {
-		const U = window.UCCMO;
-		if (tab === "validation") {
-			const issues = [];
-			this.metrics.forEach((x) => {
-				if (x.sourceless) issues.push({ metric: x.name, text: __("No source questions — scores nothing") });
-				else if (!x.used_by) issues.push({ metric: x.name, text: __("Not used by any index node") });
-			});
-			return `<section class="pane"><div class="pane-body" style="padding:12px">
-				${issues.length ? issues.map((i) => `<div class="source-row" style="margin-bottom:6px">
-					<span class="type-icon">${U.icon("i-warning", "sm")}</span>
-					<div><b>${U.esc(i.metric)}</b><div class="eyebrow">${U.esc(i.text)}</div></div>
-					<span></span><span></span></div>`).join("")
-					: U.empty(__("Every metric has sources and is used by an index."))}
-			</div></section>`;
+		if (tab === "build") {
+			this._renderInspector();
+			requestAnimationFrame(() => this._drawEdges());
 		}
-		return `<section class="pane"><div class="pane-body" style="padding:12px">
-			<div class="help">${__("Search every question in every survey. This is what makes a cross-survey metric possible.")}</div>
-			<div class="field"><input type="text" data-lib-search placeholder="${
-				__("Search question wording…")}"></div>
-			<div data-lib></div>
-		</div></section>`;
+		if (tab === "library") this._searchLibrary("");
 	}
 
-	_wire() {
-		const $el = this.$el;
-		$el.off("click.mo input.mo change.mo");
-		$el.on("click.mo", "[data-metric]", (e) => {
-			this.s.metric = $(e.currentTarget).data("metric");
-			this.render();
+	// ------------------------------------------------------------- build ---
+	_build() {
+		const U = window.UCCMO;
+		return `<div class="mx-build">
+			${this._metricList()}
+			<section class="pane mx-canvas">
+				<header class="pane-head">
+					<div class="pane-title-with-icon">${U.icon("i-metric", "sm")}<strong>${
+						__("Metric model")}</strong><span class="count">${__("cross-survey lineage")}</span></div>
+					<div class="mx-tools">
+						<span class="mx-legend"><i class="q"></i>${__("Question")}</span>
+						<span class="mx-legend"><i class="m"></i>${__("Metric")}</span>
+						<span class="mx-legend"><i class="x"></i>${__("Index")}</span>
+						${U.button({ label: __("Fit"), small: true, act: "fit" })}
+						${U.button({ label: __("Add source"), small: true, tone: "primary", icon: "i-plus", act: "add-source" })}
+					</div>
+				</header>
+				<div class="pane-body mx-stage" data-stage>
+					<div class="mx-stage-inner">
+						<svg class="mx-edges" data-edges></svg>
+						<div data-edge-labels></div>
+						<div class="mx-col">
+							<div class="mx-col-title"><span>${__("Source questions")}</span><span>${this.sources.length}</span></div>
+							${this.sources.map((s) => this._sourceNode(s)).join("")
+								|| `<div class="mx-none">${__("No sources yet.")}</div>`}
+							<button class="add-page" data-act="add-source">${
+								U.icon("i-plus", "sm")}${__("Add source question")}</button>
+						</div>
+						<div class="mx-col mx-col-mid">
+							<div class="mx-col-title"><span>${__("Metric")}</span><span>${__("normalises once")}</span></div>
+							${this._metricNode()}
+						</div>
+						<div class="mx-col">
+							<div class="mx-col-title"><span>${__("Consumed by index")}</span><span>${this.indices.length}</span></div>
+							${this.indices.map((i) => this._indexNode(i)).join("")
+								|| `<div class="mx-none">${__("No index uses this metric yet.")}</div>`}
+						</div>
+					</div>
+				</div>
+			</section>
+			<div data-inspector></div>
+		</div>`;
+	}
+
+	_metricList() {
+		const U = window.UCCMO;
+		return U.pane({
+			cls: "mx-list", title: __("Metrics"), icon: "i-metric", count: this.metrics.length,
+			body: this.metrics.map((x) => `
+				<button class="mx-item ${x.name === this.s.metric ? "selected" : ""}" data-metric="${U.esc(x.name)}">
+					<span class="type-icon metric">${U.icon("i-metric", "sm")}</span>
+					<span class="question-copy"><b>${U.esc(x.metric_name || x.name)}</b>
+						<span class="eyebrow">${U.esc(x.name)}</span>
+						<span class="mx-item-meta">
+							${U.chip(__("{0} sources", [x.sources]), x.sourceless ? "warn" : "ok")}
+							${U.chip(__("{0} index", [x.used_by]), x.used_by ? "" : "warn")}
+						</span></span>
+				</button>`).join("") || U.empty(__("No metrics defined yet.")),
 		});
-		$el.on("click.mo", '[data-act="new-metric"]', () => this._newMetric());
-		$el.on("click.mo", '[data-act="add-source"]', () => this._addSource());
-		$el.on("click.mo", '[data-act="rm-source"]', (e) => {
-			const q = $(e.currentTarget).data("q");
-			this.app.call(XAPI + "remove_metric_source", { metric_code: this.s.metric, question: q })
-				.then(() => { this.app.toast(__("Source removed")); this.render(); });
+	}
+
+	_sourceNode(s) {
+		const U = window.UCCMO;
+		const on = this.sel.type === "source" && this.sel.id === s.question;
+		return `<button class="mx-node source ${on ? "selected" : ""}" data-node="source" data-id="${U.esc(s.question)}">
+			<span class="mx-port out"></span>
+			<div class="mx-node-top">
+				<div><div class="mx-kind">${__("Question")}</div>
+					<div class="mx-title">${U.esc((s.text || "").slice(0, 72))}</div></div>
+				<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(s.question_type), "sm")}</span>
+			</div>
+			<div class="mx-sub">${U.esc(s.survey || "")} ${U.esc(s.version_number ? "v" + s.version_number : "")} · ${
+				U.esc(s.question_type || "")}</div>
+			<div class="mx-pills">${U.chip(__("{0} answers", [s.answers]), s.answers ? "ok" : "warn")}
+				${U.chip(U.esc(s.normalisation || this.m.default_normalisation || ""), "")}</div>
+		</button>`;
+	}
+
+	_metricNode() {
+		const U = window.UCCMO;
+		const on = this.sel.type === "metric";
+		return `<button class="mx-node metric ${on ? "selected" : ""}" data-node="metric" data-id="${U.esc(this.m.name)}">
+			<span class="mx-port in"></span><span class="mx-port out"></span>
+			<div class="mx-node-top">
+				<div><div class="mx-kind">${__("Metric")}</div>
+					<div class="mx-title">${U.esc(this.m.metric_name || this.m.name)}</div></div>
+				<span class="type-icon metric">${U.icon("i-metric", "sm")}</span>
+			</div>
+			<div class="mx-sub">${U.esc(this.m.name)}</div>
+			<div class="mx-pills">${U.chip(U.esc(this.m.default_normalisation || __("No normalisation")), "primary")}
+				${U.chip(__("Average eligible answers equally"), "")}</div>
+		</button>`;
+	}
+
+	_indexNode(i) {
+		const U = window.UCCMO;
+		const on = this.sel.type === "index" && this.sel.id === i.parent;
+		return `<button class="mx-node index ${on ? "selected" : ""}" data-node="index" data-id="${U.esc(i.parent)}">
+			<span class="mx-port in"></span>
+			<div class="mx-node-top">
+				<div><div class="mx-kind">${__("Index")}</div>
+					<div class="mx-title">${U.esc(i.label || i.parent)}</div></div>
+				<span class="type-icon index">${U.icon("i-index", "sm")}</span>
+			</div>
+			<div class="mx-sub">${U.esc(i.parent)}</div>
+			<div class="mx-pills">${U.chip(__("Weight {0}%", [i.weight || 0]), "")}</div>
+		</button>`;
+	}
+
+	// Vanilla SVG Beziers, measured against the stage the nodes actually sit in -
+	// the same approach node_canvas.js uses, and the same trap round-7 hit in
+	// Objectives: every coordinate is relative to ONE box, and the columns must
+	// really be separated or the curves collapse to a stub.
+	_drawEdges() {
+		const $inner = this.$el.find(".mx-stage-inner");
+		const svg = this.$el.find("[data-edges]").get(0);
+		const $labels = this.$el.find("[data-edge-labels]");
+		const $metric = this.$el.find('.mx-node.metric');
+		if (!svg || !$inner.length || !$metric.length) return;
+		const box = $inner.get(0).getBoundingClientRect();
+		svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+		const mr = $metric.get(0).getBoundingClientRect();
+		const mLeft = { x: mr.left - box.left, y: mr.top + mr.height / 2 - box.top };
+		const mRight = { x: mr.right - box.left, y: mr.top + mr.height / 2 - box.top };
+		let paths = "", labels = "";
+		const curve = (a, b, cls) => {
+			const c = Math.max(40, (b.x - a.x) / 2);
+			paths += `<path class="mx-edge ${cls}" d="M ${a.x} ${a.y} C ${a.x + c} ${a.y}, ${
+				b.x - c} ${b.y}, ${b.x} ${b.y}"></path>`;
+		};
+		const label = (a, b, text) => {
+			labels += `<span class="mx-edge-label" style="left:${(a.x + b.x) / 2}px;top:${
+				(a.y + b.y) / 2}px">${window.UCCMO.esc(text)}</span>`;
+		};
+		this.$el.find(".mx-node.source").each((i, el) => {
+			const r = el.getBoundingClientRect();
+			const a = { x: r.right - box.left, y: r.top + r.height / 2 - box.top };
+			curve(a, mLeft, "src");
+			const s = this.sources[i];
+			if (s) label(a, mLeft, s.answers ? __("{0} eligible", [s.answers]) : __("No answers"));
 		});
-		$el.on("click.mo", '[data-act="save-metric"]', () => {
-			this.app.call(XAPI + "save_metric", {
-				metric_code: this.s.metric,
-				metric_name: $el.find('[data-f="metric_name"]').val(),
-				default_normalisation: $el.find('[data-f="default_normalisation"]').val(),
-				description: $el.find('[data-f="description"]').val(),
-			}).then(() => { this.app.toast(__("Metric saved")); this.render(); });
+		this.$el.find(".mx-node.index").each((i, el) => {
+			const r = el.getBoundingClientRect();
+			const b = { x: r.left - box.left, y: r.top + r.height / 2 - box.top };
+			curve(mRight, b, "idx");
+			const n = this.indices[i];
+			if (n) label(mRight, b, __("{0}% in index", [n.weight || 0]));
 		});
-		$el.on("click.mo", '[data-act="preview"]', () => this._preview());
-		$el.on("input.mo", "[data-lib-search]", (e) => this._searchLibrary(e.target.value));
-		// Per-source normalisation is the one source setting that DOES reach a
-		// score, so it is an inline control rather than buried in a dialog.
-		$el.on("change.mo", "[data-norm]", (e) => {
-			const $s = $(e.currentTarget);
-			this.app.call(XAPI + "set_source_normalisation", {
-				metric_code: this.s.metric, question: $s.data("norm"), normalisation: $s.val(),
-			}).then(() => { this.app.toast(__("Normalisation updated")); this.render(); });
+		svg.innerHTML = paths;
+		$labels.html(labels);
+	}
+
+	// --------------------------------------------------------- inspector ---
+	_renderInspector() {
+		const U = window.UCCMO;
+		const $slot = this.$el.find("[data-inspector]");
+		if (!$slot.length) return;
+		const tabs = [{ key: "details", label: __("Details") },
+					  { key: "calculation", label: __("Calculation") },
+					  { key: "lineage", label: __("Lineage") }];
+		let title, icon, body, footer;
+		if (this.sel.type === "source") {
+			const s = this.sources.find((x) => x.question === this.sel.id);
+			if (!s) { this.sel = { type: "metric" }; return this._renderInspector(); }
+			title = __("Source question"); icon = window.UCCMOIcons.forQuestionType(s.question_type);
+			body = this.itab === "details"
+				? U.field({ label: __("Question"), name: "sq", type: "textarea", value: s.text, locked: true,
+							lockReason: __("Wording is managed in the Survey workspace.") })
+					+ U.field({ label: __("Survey version"), name: "sv", value: s.survey_version || "", locked: true })
+					+ U.field({ label: __("Type"), name: "st", value: s.question_type || "", locked: true })
+					+ U.field({ label: __("Answers"), name: "sa", value: String(s.answers), locked: true })
+					+ U.button({ label: __("Open in Survey workspace"), small: true, icon: "i-survey", act: "goto-survey" })
+				: this.itab === "calculation"
+				? `<div class="field"><label>${__("Normalisation for this source")}</label>
+						<select data-f="src_norm">${NORMALISATIONS.map((n) =>
+							`<option ${n === (s.normalisation || this.m.default_normalisation) ? "selected" : ""}>${
+								U.esc(n)}</option>`).join("")}</select></div>
+					<div class="help">${__("This is the only per-source setting that reaches a score. The engine averages every eligible answer equally; there is no source weight, so none is shown.")}</div>`
+				: `<div class="mx-info"><div><span>${__("Source survey")}</span><b>${U.esc(s.survey_version || "")}</b></div>
+					<div><span>${__("Feeds metric")}</span><b>${U.esc(this.m.metric_name || this.m.name)}</b></div>
+					<div><span>${__("Then feeds")}</span><b>${this.indices.length
+						? U.esc(this.indices.map((i) => i.parent).join(", ")) : __("no index yet")}</b></div></div>`;
+			footer = U.footerActions([{ label: __("Remove from metric"), tone: "danger", icon: "i-trash", act: "rm-source" }]);
+		} else if (this.sel.type === "index") {
+			const i = this.indices.find((x) => x.parent === this.sel.id);
+			title = __("Index relationship"); icon = "i-index";
+			body = `<div class="mx-info">
+					<div><span>${__("Index version")}</span><b>${U.esc(i.parent)}</b></div>
+					<div><span>${__("Node")}</span><b>${U.esc(i.label || "")}</b></div>
+					<div><span>${__("Metric weight")}</span><b>${U.esc(i.weight || 0)}%</b></div></div>
+				<div class="help">${__("The weight belongs to the Index formula. Edit it in the Indices workspace, not here.")}</div>`;
+			footer = U.footerActions([{ label: __("Open in Indices workspace"), icon: "i-index", act: "goto-index" }]);
+		} else {
+			title = __("Metric settings"); icon = "i-metric";
+			body = this.itab === "details"
+				? U.field({ label: __("Metric name"), name: "metric_name", value: this.m.metric_name || "" })
+					+ U.field({ label: __("Metric code"), name: "metric_code", value: this.m.name, locked: true,
+								lockReason: __("The code is the record's identity and cannot change.") })
+					+ U.field({ label: __("Description"), name: "description", type: "textarea",
+								value: this.m.description || "" })
+					+ `<div class="mx-info">
+						<div><span>${__("Source questions")}</span><b>${this.sources.length}</b></div>
+						<div><span>${__("Survey versions")}</span><b>${this.m.survey_count}</b></div>
+						<div><span>${__("Consumed by")}</span><b>${this.indices.length}</b></div></div>`
+				: this.itab === "calculation"
+				? U.field({ label: __("Default normalisation"), name: "default_normalisation", type: "select",
+							value: this.m.default_normalisation, options: NORMALISATIONS })
+					+ `<div class="field"><label>${__("Source contribution")}</label>
+						<select disabled><option>${__("Average eligible answers equally")}</option></select></div>
+					<div class="help">${__("Normalisation runs once, here at the metric layer. The Index applies the metric weight and never re-normalises.")}</div>
+					<div class="published-lock-row">${U.icon("i-check", "xs")}<div>
+						<b>${__("This is the real engine, not a placeholder")}</b><br>${
+						__("aggregate_metric normalises each answer to 0-100 and takes a plain mean. There is no source weighting and no minimum sample rule, so neither is offered here.")}
+					</div></div>`
+				: `<div class="mx-info">
+						<div><span>${__("Metric")}</span><b>${U.esc(this.m.name)}</b></div>
+						<div><span>${__("Question sources")}</span><b>${this.sources.length}</b></div>
+						<div><span>${__("Survey versions")}</span><b>${U.esc((this.m.survey_versions || []).join(", ") || "—")}</b></div>
+						<div><span>${__("Index consumers")}</span><b>${this.indices.length}</b></div></div>
+					<div class="help">${__("Objectives are governance and evidence lineage. They are never part of this scoring chain, so they are not drawn on this canvas.")}</div>`;
+			footer = U.footerActions([{ label: __("Save metric"), tone: "primary", icon: "i-save", act: "save-metric" }]);
+		}
+		$slot.html(U.inspector({ title, icon, tabs, tab: this.itab, body, footer }));
+	}
+
+	// ----------------------------------------------------------- library ---
+	_library() {
+		const U = window.UCCMO;
+		return `<div class="mx-library">
+			${U.pane({ title: __("Filter sources"), icon: "i-filter", body:
+				`<div class="field"><label>${__("Search wording")}</label>
+					<input type="text" data-lib-search placeholder="${__("Search every survey…")}"></div>
+				<div class="published-lock-row">${U.icon("i-warning", "xs")}<div>
+					<b>${__("This is a selection tool")}</b><br>${
+					__("You are still editing {0}. Adding from here returns you to the model.", [this.m.metric_name || this.m.name])}
+				</div></div>` })}
+			<section class="pane">
+				<header class="pane-head">
+					<div class="pane-title-with-icon">${U.icon("i-search", "sm")}<strong>${
+						__("Question library")}</strong><span class="count">${__("cross-survey")}</span></div>
+					${U.button({ label: __("Add selected"), tone: "primary", small: true, icon: "i-plus", act: "add-picked" })}
+				</header>
+				<div class="pane-body" data-lib></div>
+			</section>
+			${U.pane({ title: __("Selected"), icon: "i-check", count: this.picked.size,
+				body: `<div data-picked>${U.empty(__("Tick questions to preview them here."))}</div>` })}
+		</div>`;
+	}
+
+	_searchLibrary(q) {
+		const U = window.UCCMO;
+		this.app.call(XAPI + "search_questions", { query: q, limit: 60, exclude_metric: this.s.metric })
+			.then((rows) => {
+				this.libRows = rows || [];
+				this.$el.find("[data-lib]").html(this.libRows.map((r) => `
+					<label class="mx-lib-row">
+						<input type="checkbox" data-pick="${U.esc(r.name)}" ${this.picked.has(r.name) ? "checked" : ""}>
+						<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(r.question_type), "sm")}</span>
+						<span class="question-copy"><b>${U.esc((r.question_text || "").slice(0, 70))}</b>
+							<span class="eyebrow">${U.esc(r.survey || "")} ${
+								U.esc(r.version_number ? "v" + r.version_number : "")} · ${U.esc(r.question_type || "")}</span></span>
+						${U.chip(__("Compatible"), "ok")}
+					</label>`).join("") || U.empty(__("No questions match that search.")));
+				this._renderPicked();
+			});
+	}
+
+	_renderPicked() {
+		const U = window.UCCMO;
+		const $p = this.$el.find("[data-picked]");
+		if (!$p.length) return;
+		const rows = (this.libRows || []).filter((r) => this.picked.has(r.name));
+		$p.html(rows.length ? rows.map((r) => `<div class="mx-info"><div><span>${
+			U.esc(r.survey || "")}</span><b>${U.esc((r.question_text || "").slice(0, 44))}</b></div></div>`).join("")
+			: U.empty(__("Tick questions to preview them here.")));
+		this.$el.find('[data-act="add-picked"]').prop("disabled", !this.picked.size);
+	}
+
+	_addPicked() {
+		const names = [...this.picked];
+		if (!names.length) return;
+		// Sequential, so a duplicate or permission error surfaces against the
+		// question that caused it rather than vanishing into a batch.
+		const next = (i) => {
+			if (i >= names.length) {
+				this.picked.clear();
+				this.app.state.metricsTab = "build";
+				this.sel = { type: "metric" };
+				this.app.toast(__("{0} source(s) added", [names.length]));
+				return this._load();
+			}
+			this.app.call(XAPI + "add_metric_source", { metric_code: this.s.metric, question: names[i] })
+				.then(() => next(i + 1));
+		};
+		next(0);
+	}
+
+	// -------------------------------------------------------- validation ---
+	// Actionable, per the brief: every row says what to DO, and the checks are
+	// computed from the same data the canvas draws, so the two can never disagree.
+	_checks() {
+		const m = this.m, src = this.sources, idx = this.indices;
+		const noAnswers = src.filter((s) => !s.answers);
+		const dupes = src.length - new Set(src.map((s) => s.question)).size;
+		const missingNorm = src.filter((s) => !(s.normalisation || m.default_normalisation));
+		const noVersion = src.filter((s) => !s.survey_version);
+		return [
+			{ ok: !!src.length, title: __("Metric has at least one source question"),
+			  detail: src.length ? __("{0} source question(s) connected.", [src.length])
+								 : __("Nothing feeds this metric, so it scores nothing."),
+			  act: src.length ? null : { label: __("Add source"), act: "add-source" } },
+			{ ok: !!m.default_normalisation, title: __("Metric normalisation is defined"),
+			  detail: m.default_normalisation
+				? __("Default: {0}.", [m.default_normalisation])
+				: __("Without a default, a source with no override cannot be scored.") },
+			{ ok: !missingNorm.length, title: __("Every source resolves to a normalisation"),
+			  detail: missingNorm.length
+				? __("{0} source(s) have neither an override nor a metric default.", [missingNorm.length])
+				: __("All sources normalise to 0-100.") },
+			{ ok: !noAnswers.length, title: __("Source questions have response data"),
+			  detail: noAnswers.length
+				? __("{0} has no submitted answers, so it contributes nothing.", [noAnswers[0].survey_version || noAnswers[0].question])
+				: __("Every source has at least one answer.") },
+			{ ok: !dupes, title: __("No duplicate source question"),
+			  detail: dupes ? __("{0} duplicate row(s) found.", [dupes]) : __("Each question appears once.") },
+			{ ok: !noVersion.length, title: __("All referenced survey versions resolve"),
+			  detail: noVersion.length
+				? __("{0} source(s) point at a question whose version is missing.", [noVersion.length])
+				: __("Every source resolves to a real survey version.") },
+			{ ok: !!idx.length, title: __("Metric is consumed by an index"),
+			  detail: idx.length ? __("Used by {0}.", [idx.map((i) => i.parent).join(", ")])
+								 : __("Nothing consumes this metric, so it reaches no Criterion 7 result."),
+			  act: idx.length ? null : { label: __("Open Indices"), act: "goto-index-ws" } },
+			{ ok: true, title: __("Calculation method is explicit"),
+			  detail: __("Eligible answers are averaged equally. No unsupported source weighting is shown.") },
+		];
+	}
+
+	_validation() {
+		const U = window.UCCMO;
+		const checks = this._checks();
+		const passed = checks.filter((c) => c.ok).length;
+		const first = checks.find((c) => !c.ok);
+		return `<div class="mx-validation">
+			${U.pane({ title: __("Validation summary"), icon: "i-check", body: `
+				<div class="big-score">${passed}/${checks.length}</div>
+				<div class="help">${__("Checks passed for this metric.")}</div>
+				${first ? `<div class="published-lock-row" style="margin-top:12px">${U.icon("i-warning", "xs")}<div>
+					<b>${U.esc(first.title)}</b><br>${U.esc(first.detail)}</div></div>`
+					: `<div class="published-lock-row" style="margin-top:12px">${U.icon("i-check", "xs")}<div>
+					<b>${__("Nothing to review")}</b><br>${__("This metric is ready to feed an index.")}</div></div>`}
+				${U.button({ label: __("Run validation again"), tone: "primary", icon: "i-check", act: "revalidate" })}` })}
+			${U.pane({ title: __("Validation checks"), icon: "i-filter", count: checks.length, body:
+				checks.map((c) => `<div class="mx-check">
+					<span class="type-icon ${c.ok ? "" : "warn"}">${U.icon(c.ok ? "i-check" : "i-warning", "sm")}</span>
+					<div><b>${U.esc(c.title)}</b><div class="eyebrow">${U.esc(c.detail)}</div></div>
+					${c.act ? U.button({ label: c.act.label, small: true, act: c.act.act })
+							: U.chip(c.ok ? __("Passed") : __("Review"), c.ok ? "ok" : "warn")}
+				</div>`).join("") })}
+		</div>`;
+	}
+
+	// ----------------------------------------------------------- actions ---
+	_preview() {
+		this.app.call(XAPI + "preview_metric", { metric_code: this.s.metric }).then((r) => {
+			if (!r) return;
+			const U = window.UCCMO;
+			const d = new frappe.ui.Dialog({
+				title: __("Calculation preview"),
+				fields: [{ fieldtype: "HTML", fieldname: "out" }],
+			});
+			d.fields_dict.out.$wrapper.html(`<div class="ucc-mo"><div class="ucc-mo-metrics">
+				<div class="published-lock-row">${U.icon("i-lock", "xs")}<div>
+					<b>${__("Preview only")}</b><br>${
+					__("This does not publish and creates no evidence snapshot. It runs the same aggregate_metric the real calculation uses.")}</div></div>
+				<div class="mx-preview">
+					<div><span>${__("Eligible answers")}</span><b>${r.scored_count}</b></div>
+					<div><span>${__("Metric score")}</span><b>${r.value === null ? "—" : Number(r.value).toFixed(1)}</b></div>
+					<div><span>${__("Unscoreable")}</span><b>${r.unscoreable}</b></div>
+				</div>
+				<div class="mx-info" style="margin-top:10px">
+					<div><span>${__("Calculation")}</span><b>${__("Average eligible answers equally")}</b></div>
+					<div><span>${__("Normalisation")}</span><b>${U.esc(this.m.default_normalisation || "—")}</b></div>
+					<div><span>${__("Contributing versions")}</span><b>${U.esc((r.source_versions || []).join(", ") || "—")}</b></div>
+					<div><span>${__("Consumed by")}</span><b>${U.esc(this.indices.map((i) => i.parent).join(", ") || __("no index"))}</b></div>
+				</div></div></div>`);
+			d.show();
 		});
-		if (this.app.tab("build") === "library") this._searchLibrary("");
 	}
 
 	_newMetric() {
 		frappe.prompt([
 			{ fieldname: "metric_code", fieldtype: "Data", label: __("Metric code"), reqd: 1 },
 			{ fieldname: "metric_name", fieldtype: "Data", label: __("Metric name") },
+			{ fieldname: "default_normalisation", fieldtype: "Select", label: __("Default normalisation"),
+			  options: NORMALISATIONS.join("\n"), default: NORMALISATIONS[0] },
 		], (v) => this.app.call(XAPI + "new_metric", v).then((name) => {
 			if (!name) return;
 			this.s.metric = name;
+			this.sel = { type: "metric" };
+			this.app.toast(__("Metric created. Add the questions that feed it."));
 			this.render();
 		}), __("New metric"), __("Create"));
 	}
 
-	_addSource() {
-		const d = new frappe.ui.Dialog({
-			title: __("Add a source question"),
-			fields: [
-				{ fieldname: "q", fieldtype: "Data", label: __("Search across all surveys") },
-				{ fieldname: "out", fieldtype: "HTML" },
-			],
-		});
-		const search = () => this.app.call(XAPI + "search_questions", {
-			query: d.get_value("q"), exclude_metric: this.s.metric, limit: 30,
-		}).then((rows) => {
-			const U = window.UCCMO;
-			d.fields_dict.out.$wrapper.html(`<div style="max-height:320px;overflow:auto">${
-				(rows || []).map((r) => `<div class="source-row" style="margin-bottom:6px;cursor:pointer"
-					data-add="${U.esc(r.name)}">
-					<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(r.question_type), "sm")}</span>
-					<div><b>${U.esc((r.question_text || "").slice(0, 64))}</b>
-						<div class="eyebrow">${U.esc(r.survey || "")} ${
-							U.esc(r.version_number ? "v" + r.version_number : "")} · ${U.esc(r.version_status || "")}</div></div>
-					<span></span><span>+</span></div>`).join("") || __("No questions found.")}</div>`);
-			d.fields_dict.out.$wrapper.find("[data-add]").on("click", (e) => {
-				this.app.call(XAPI + "add_metric_source", {
-					metric_code: this.s.metric, question: $(e.currentTarget).data("add"),
-				}).then(() => { d.hide(); this.app.toast(__("Source added")); this.render(); });
-			});
-		});
-		d.fields_dict.q.$input && d.fields_dict.q.$input.on("input", frappe.utils.debounce(search, 250));
-		d.show();
-		search();
+	// The drawer keeps the metric visible behind it, which is the whole point:
+	// adding a source must not feel like leaving what you were editing.
+	_openDrawer() {
+		const U = window.UCCMO;
+		this.picked.clear();
+		this.$el.find(".mx-build").append(`
+			<div class="mx-drawer-back" data-drawer>
+				<aside class="mx-drawer">
+					<header class="pane-head">
+						<div class="pane-title-with-icon">${U.icon("i-plus", "sm")}<strong>${
+							__("Add source questions")}</strong></div>
+						${U.button({ label: __("Close"), small: true, act: "close-drawer" })}
+					</header>
+					<div class="mx-drawer-search">
+						<input type="text" data-drawer-search placeholder="${__("Search question wording…")}">
+					</div>
+					<div class="mx-drawer-list" data-lib></div>
+					<footer class="mx-drawer-foot">
+						<span class="help" data-drawer-count>${__("0 selected")}</span>
+						${U.button({ label: __("Add selected sources"), tone: "primary", icon: "i-plus", act: "add-picked" })}
+					</footer>
+				</aside>
+			</div>`);
+		this._searchLibrary("");
 	}
 
-	_searchLibrary(q) {
-		this.app.call(XAPI + "search_questions", { query: q, limit: 40 }).then((rows) => {
-			const U = window.UCCMO;
-			this.$el.find("[data-lib]").html((rows || []).map((r) => `
-				<div class="source-row" style="margin-bottom:6px">
-					<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(r.question_type), "sm")}</span>
-					<div><b>${U.esc((r.question_text || "").slice(0, 70))}</b>
-						<div class="eyebrow">${U.esc(r.survey || "")} ${
-							U.esc(r.version_number ? "v" + r.version_number : "")}</div></div>
-					<span></span><span></span>
-				</div>`).join("") || U.empty(__("No questions found.")));
-		});
-	}
+	_closeDrawer() { this.$el.find("[data-drawer]").remove(); this.picked.clear(); }
 
-	_preview() {
-		this.app.call(XAPI + "preview_metric", { metric_code: this.s.metric }).then((p) => {
-			if (!p) return;
-			frappe.msgprint({
-				title: __("Preview — nothing was saved"),
-				message: `<div style="font-size:13px">
-					<b style="font-size:22px">${p.value === null ? "—" : Number(p.value).toFixed(1)}</b><br>
-					${__("{0} answers read, {1} scoreable, {2} unscoreable", [
-						p.response_count, p.scored_count, p.unscoreable])}<br>
-					${p.source_versions ? __("From: {0}", [frappe.utils.escape_html(p.source_versions)]) : ""}
-					${p.unscoreable ? `<div style="color:#9d5c00;margin-top:8px">${
-						__("Unscoreable answers are dropped, not counted as zero. A high number usually means the normalisation rule does not match the question type.")}</div>` : ""}
-				</div>`,
-			});
+	_wire() {
+		const $el = this.$el;
+		$el.off("click.mo input.mo change.mo");
+		$el.on("click.mo", "[data-metric]", (e) => {
+			this.s.metric = $(e.currentTarget).data("metric");
+			this.sel = { type: "metric" };
+			this._load();
+		});
+		$el.on("click.mo", "[data-node]", (e) => {
+			this.sel = { type: $(e.currentTarget).data("node"), id: $(e.currentTarget).data("id") };
+			this.itab = "details";
+			this.$el.find(".mx-node").removeClass("selected");
+			$(e.currentTarget).addClass("selected");
+			this._renderInspector();
+		});
+		$el.on("click.mo", "[data-itab]", (e) => {
+			this.itab = $(e.currentTarget).data("itab");
+			this._renderInspector();
+		});
+		$el.on("click.mo", '[data-act="new-metric"]', () => this._newMetric());
+		$el.on("click.mo", '[data-act="preview"]', () => this._preview());
+		$el.on("click.mo", '[data-act="fit"]', () => {
+			this.$el.find("[data-stage]").get(0).scrollTo({ left: 0, top: 0, behavior: "smooth" });
+			requestAnimationFrame(() => this._drawEdges());
+		});
+		$el.on("click.mo", '[data-act="add-source"]', () => this._openDrawer());
+		$el.on("click.mo", '[data-act="close-drawer"]', () => this._closeDrawer());
+		$el.on("click.mo", "[data-drawer]", (e) => {
+			if (e.target === e.currentTarget) this._closeDrawer();
+		});
+		$el.on("click.mo", '[data-act="add-picked"]', () => this._addPicked());
+		$el.on("click.mo", '[data-act="revalidate"]', () => { this._load(); this.app.toast(__("Validation re-run")); });
+		$el.on("click.mo", '[data-act="rm-source"]', () => {
+			const q = this.sel.id;
+			frappe.confirm(__("Remove this question from the metric? Existing published results are not affected."), () =>
+				this.app.call(XAPI + "remove_metric_source", { metric_code: this.s.metric, question: q })
+					.then(() => { this.sel = { type: "metric" }; this.app.toast(__("Source removed")); this._load(); }));
+		});
+		$el.on("click.mo", '[data-act="save-metric"]', () => {
+			this.app.call(XAPI + "save_metric", {
+				metric_code: this.s.metric,
+				metric_name: $el.find('[data-f="metric_name"]').val(),
+				default_normalisation: this.m.default_normalisation,
+				description: $el.find('[data-f="description"]').val(),
+			}).then(() => { this.app.toast(__("Metric saved")); this._load(); });
+		});
+		$el.on("change.mo", '[data-f="default_normalisation"]', (e) => {
+			this.app.call(XAPI + "save_metric", {
+				metric_code: this.s.metric, default_normalisation: $(e.target).val(),
+			}).then(() => { this.app.toast(__("Normalisation updated")); this._load(); });
+		});
+		$el.on("change.mo", '[data-f="src_norm"]', (e) => {
+			this.app.call(XAPI + "set_source_normalisation", {
+				metric_code: this.s.metric, question: this.sel.id, normalisation: $(e.target).val(),
+			}).then(() => { this.app.toast(__("Normalisation updated")); this._load(); });
+		});
+		$el.on("click.mo", '[data-act="goto-survey"]', () => {
+			const s = this.sources.find((x) => x.question === this.sel.id);
+			if (!s) return;
+			this.app.ws = "surveys";
+			this.app.state.surveyVersion = s.survey_version;
+			this.app.state.question = s.question;
+			this.app.render();
+		});
+		$el.on("click.mo", '[data-act="goto-index"]', () => {
+			this.app.ws = "indices";
+			this.app.state.indexVersion = this.sel.id;
+			this.app.render();
+		});
+		$el.on("click.mo", '[data-act="goto-index-ws"]', () => { this.app.ws = "indices"; this.app.render(); });
+		$el.on("input.mo", "[data-lib-search], [data-drawer-search]", (e) => this._searchLibrary(e.target.value));
+		$el.on("change.mo", "[data-pick]", (e) => {
+			const n = $(e.currentTarget).data("pick");
+			if (e.currentTarget.checked) this.picked.add(n); else this.picked.delete(n);
+			this.$el.find("[data-drawer-count]").text(__("{0} selected", [this.picked.size]));
+			this._renderPicked();
+		});
+		$(window).off("resize.mx").on("resize.mx", () => {
+			clearTimeout(this._rt);
+			this._rt = setTimeout(() => this._drawEdges(), 120);
 		});
 	}
 }
