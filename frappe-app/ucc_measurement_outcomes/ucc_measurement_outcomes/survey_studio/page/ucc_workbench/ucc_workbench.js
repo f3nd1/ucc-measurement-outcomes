@@ -21,6 +21,15 @@
 
 frappe.pages["ucc-workbench"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "", single_column: true });
+	// Round-4 Item 2: a tall empty band sat between Frappe's navbar and the
+	// workspace nav. It was Frappe's own .page-head - make_app_page always
+	// renders one, and this page passes title:"" because the workspace nav and
+	// context bar already say where you are, so it reserved its full height for
+	// a heading, breadcrumb and button area that are all empty. Hidden rather
+	// than margined away, and scoped to this wrapper so no other Desk page is
+	// touched. UCCMO.refit() measures the mount's real top afterwards, so the
+	// shell simply grows into the reclaimed space.
+	$(wrapper).find(".page-head").hide();
 	try {
 		wrapper.ucc = new MeasurementOutcomes(page);
 	} catch (e) {
@@ -385,6 +394,11 @@ class SurveyWorkspace {
 				</header>
 				<div class="pane-body canvas-body">
 					<div class="page-canvas">
+						${/* The note goes FIRST and in flow. It used to be an absolute
+							overlay pinned to the top of the canvas, which put it on top
+							of question 1 (round-4 Item 5a). A caption above the list says
+							the same thing and covers nothing. */""}
+						<div class="canvas-help">${__("Only this page is shown. Use the outline to move between pages.")}</div>
 						<div class="question-list">${rows}</div>
 						${/* Round-3 audit Finding 2: on a short survey the canvas measured
 							~66-70% empty below the last question. The pane deliberately
@@ -395,7 +409,6 @@ class SurveyWorkspace {
 							new handler. */""}
 						${this.editable ? `<button class="add-page" data-act="add-question">${
 							U.icon("i-plus", "sm")}${__("Add another question")}</button>` : ""}
-						<div class="canvas-help">${__("Only this page is shown. Use the outline to move between pages.")}</div>
 					</div>
 					${this.editable ? U.popover({
 						key: "types", placeholder: __("Search field types…"),
@@ -445,9 +458,13 @@ class SurveyWorkspace {
 		} else if (itab === "options") {
 			body = U.field({ label: __("Required response"), name: "is_required", type: "switch",
 							 value: q.is_required, switchLabel: __("Must be answered"), locked, lockReason })
+				// "Full Width", not "Full": these are the UCC Survey Question
+				// layout_width Select's literal options, and Frappe's
+				// _validate_selects throws on anything not in that list. Same
+				// class of bug as the round-2 "Long Text" vs "Paragraph" one.
 				+ U.field({ label: __("Column width"), name: "layout_width", type: "select",
-							value: q.layout_width || "Full",
-							options: ["Full", "Two Thirds", "Half", "One Third"] })
+							value: q.layout_width || "Full Width",
+							options: ["Full Width", "Two Thirds", "Half", "One Third"] })
 				+ `<div class="help">${__("Width is presentation only, so it can be changed even on a published version.")}</div>`
 				+ (q.choices && q.choices.length ? U.field({
 					label: __("Choices"), name: "choices", type: "textarea", rows: 5, locked, lockReason,
@@ -490,12 +507,41 @@ class SurveyWorkspace {
 	}
 
 	// ------------------------------------------------------------- non-build tabs
+	// Embedded, not just a link out (round-4 Item 3). The iframe loads the REAL
+	// respondent page (/survey?preview=…), same-origin, so it is the same
+	// renderer and stylesheet a respondent gets rather than a mock that can
+	// drift. It stays login-gated and read-only server-side: preview_payload
+	// re-checks read permission on every load, and the preview route collects
+	// nothing. Same-origin also means Frappe's default X-Frame-Options
+	// SAMEORIGIN permits it. The open-in-new-tab button is kept - a full-window
+	// view is still the honest way to check a long survey at real width.
 	_previewTab() {
-		return `<div class="pane" style="height:100%"><div class="pane-body">
-			<div class="canvas-help">${__("Preview opens the real respondent page in a new tab. It collects nothing and needs a login, so it is safe on a draft.")}</div>
-			<div style="padding:12px">${window.UCCMO.button({
-				label: __("Open preview"), tone: "primary", icon: "i-eye", act: "preview" })}</div>
-		</div></div>`;
+		const U = window.UCCMO;
+		return `<section class="pane" style="height:100%">
+			<header class="pane-head">
+				<div class="pane-title-with-icon">${U.icon("i-eye", "sm")}<strong>${__("Preview")}</strong></div>
+				${U.button({ label: __("Open in new tab"), small: true, icon: "i-eye", act: "preview" })}
+			</header>
+			<div class="pane-body" data-preview style="padding:0">
+				<div style="padding:12px"><div class="canvas-help">${
+					__("Loading the real respondent page…")}</div></div>
+			</div>
+		</section>`;
+	}
+
+	_fillPreview() {
+		const U = window.UCCMO;
+		this.app.call(BAPI + "preview_link", { survey_version: this.s.surveyVersion }).then((r) => {
+			const $b = this.$el.find("[data-preview]");
+			if (!$b.length) return;
+			if (!r || !r.url) {
+				return $b.html(`<div style="padding:12px">${U.empty(
+					__("Could not build a preview link for this version."))}</div>`);
+			}
+			// srcdoc/sandbox would strip the session cookie the preview needs.
+			$b.html(`<iframe src="${U.esc(r.url)}" title="${__("Survey preview")}"
+				style="width:100%;height:100%;border:0;display:block;background:white"></iframe>`);
+		});
 	}
 
 	_shareTab() {
@@ -581,8 +627,11 @@ class SurveyWorkspace {
 		$el.on("click.mo", '[data-act="export-csv"]', () => this._export());
 		$el.on("click.mo", ".switch:not([disabled])", (e) =>
 			$(e.currentTarget).toggleClass("on"));
-		if (this.app.tab("build") === "share") this._fillShare();
-		if (this.app.tab("build") === "responses") this._fillResponses();
+		const tab = this.app.tab("build");
+		if (tab === "build") this._wireWidthGrips();
+		if (tab === "share") this._fillShare();
+		if (tab === "responses") this._fillResponses();
+		if (tab === "preview") this._fillPreview();
 	}
 
 	_val(f) {
@@ -621,6 +670,53 @@ class SurveyWorkspace {
 
 	// The narrow path a frozen version accepts. Sends wording + reason ALONE, so
 	// nothing else from the inspector can ride along - versioning.py decides.
+	// Drag-to-resize, ported back from the old Survey Builder (round-4 Item 7),
+	// which is where this logic was built and verified. Same four spans, same
+	// snapping rule, same one-save-on-release: free pixel widths would break
+	// both the mobile collapse and the "presentation only" property that lets
+	// width be edited on a published version (layout_width is the whole of
+	// versioning.PRESENTATION_FIELDS).
+	_wireWidthGrips() {
+		const SPANS = [[12, "Full Width"], [8, "Two Thirds"], [6, "Half"], [4, "One Third"]];
+		const SPAN_OF = { "Full Width": 12, "Two Thirds": 8, "Half": 6, "One Third": 4 };
+		const CLS = window.UCCMO.WIDTH_CLASS;
+		this.$el.find(".width-grip").off("mousedown.mo").on("mousedown.mo", (e) => {
+			if (e.button !== 0) return;
+			e.preventDefault();
+			e.stopPropagation();          // never let this start a row selection
+			const name = $(e.currentTarget).data("grip");
+			const q = this.questions.find((x) => x.name === name);
+			if (!q) return;
+			const $grip = $(e.currentTarget).addClass("dragging");
+			const $card = $grip.closest(".question-row");
+			const $list = this.$el.find(".question-list");
+			const startX = e.clientX;
+			const colWidth = ($list.width() || 1) / 12;
+			const startSpan = SPAN_OF[q.layout_width] || 12;
+			let width = q.layout_width || "Full Width";
+			const move = (ev) => {
+				const wanted = startSpan + (ev.clientX - startX) / colWidth;
+				const [, label] = SPANS.reduce((best, s) =>
+					Math.abs(s[0] - wanted) < Math.abs(best[0] - wanted) ? s : best);
+				if (label === width) return;
+				width = label;
+				$card.removeClass("qw-8 qw-6 qw-4").addClass(CLS[label] || "");
+			};
+			const up = () => {
+				document.removeEventListener("mousemove", move);
+				document.removeEventListener("mouseup", up);
+				$grip.removeClass("dragging");
+				if (width === (q.layout_width || "Full Width")) return;
+				q.layout_width = width;   // keep local state honest before the reload
+				this.app.call(BAPI + "update_question", {
+					question: name, payload: JSON.stringify({ layout_width: width }),
+				}).then((ok) => { if (ok) this.app.toast(__("Width: {0}", [__(width)])); });
+			};
+			document.addEventListener("mousemove", move);
+			document.addEventListener("mouseup", up);
+		});
+	}
+
 	_applyCorrection() {
 		const text = (this._val("corrected_text") || "").trim();
 		const reason = (this._val("correction_reason") || "").trim();
@@ -880,7 +976,7 @@ class ObjectiveWorkspace {
 					})}
 					<section class="pane mapping-pane">
 						<header class="pane-head">
-							<div class="pane-title-with-icon">${U.icon("i-target", "sm")}<span>${__("Mapping")}</span></div>
+							<div class="pane-title-with-icon">${U.icon("i-target", "sm")}<strong>${__("Mapping")}</strong></div>
 							${U.button({ label: __("Browse all {0}", [(this.coverage.counts || {}).objectives || 0]),
 										 small: true, act: "browse-all" })}
 						</header>
@@ -1165,7 +1261,14 @@ class MetricWorkspace {
 							<span class="question-copy"><b>${U.esc(x.metric_name || x.name)}</b>
 								<span class="eyebrow">${U.esc(x.name)}</span></span>
 							${x.sourceless ? U.chip(__("No sources"), "warn") : U.chip(x.sources + " ▸", "ok")}
-						</button>`).join("") || U.empty(__("No metrics defined yet.")),
+						</button>`).join("") || U.empty(__("No metrics defined yet."))
+						// Round-4 Item 1: this list had no in-body affordance to grow
+						// into its empty space (New metric lives in the context bar).
+						// Same dashed pattern and same data-act as that button, so no
+						// new handler - it just gives the pane something deliberate to
+						// fill with, exactly like the outline's "Add page".
+						+ `<button class="add-page" data-act="new-metric">${
+							U.icon("i-plus", "sm")}${__("New metric")}</button>`,
 				})}
 				${tab === "build" ? this._centre(m) : this._otherTab(tab, m)}
 				${tab === "build" ? this._scoring(m) : ""}
@@ -1202,7 +1305,7 @@ class MetricWorkspace {
 		const total = m.sources.reduce((a, s) => a + (s.weight || 0), 0);
 		return `<section class="pane">
 			<header class="pane-head">
-				<div class="pane-title-with-icon">${U.icon("i-metric", "sm")}<span>${__("Source questions")}</span>
+				<div class="pane-title-with-icon">${U.icon("i-metric", "sm")}<strong>${__("Source questions")}</strong>
 					<span class="count">${m.sources.length}</span></div>
 				${U.button({ label: __("Add source"), tone: "primary", small: true, icon: "i-plus", act: "add-source" })}
 			</header>
@@ -1438,8 +1541,8 @@ class IndexWorkspace {
 			})}
 			<div class="workarea"><div class="index-layout" style="${tab === "formula" ? "" : "grid-template-columns:1fr"}">
 				<section class="pane"><header class="pane-head">
-					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<span>${
-						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</span></div>
+					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<strong>${
+						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</strong></div>
 				</header><div class="pane-body">${
 					tab === "formula" ? this._formula() :
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
@@ -1474,12 +1577,29 @@ class IndexWorkspace {
 		})), this.s.indexVersion);
 	}
 
+	// Renders EVERY node, not just the ones reachable from a root.
+	//
+	// Round-4 Item 9, reproduced: this used to walk down from nodes with a falsy
+	// parent_key and render nothing else. A version whose nodes all carry a
+	// parent_key - no root - produced a completely empty canvas with four real
+	// nodes in the data, no error and nothing to click, which is exactly the
+	// reported "formula canvas is stuck, cannot be clicked". Nothing was
+	// capturing input; there was nothing there. A dangling or cyclic parent did
+	// the quieter version of the same thing: 7 nodes in, 4 drawn, no warning.
+	//
+	// index_engine.validate_structure catches all three (no root, multiple
+	// roots, dangling parents, cycles) - but only when you press Validate or
+	// Publish, so a Draft reaches this renderer unchecked. The UI therefore has
+	// to be total: draw the tree where there is one, and put whatever is left
+	// over in a clearly-labelled group rather than dropping it on the floor.
 	_formula() {
 		const U = window.UCCMO;
 		const byParent = {};
 		this.nodes.forEach((n) => (byParent[n.parent_key || ""] ||= []).push(n));
-		const draw = (key, depth) => (byParent[key] || []).map((n) => `
-			<div class="tree-row" style="padding-left:${depth * 18}px">
+		const seen = new Set();
+		const row = (n, depth) => {
+			seen.add(n.node_key);
+			return `<div class="tree-row" style="padding-left:${depth * 18}px">
 				${U.node({
 					key: n.node_key, title: n.label || n.node_key,
 					kicker: n.node_type, meta: n.source_metric || "",
@@ -1488,8 +1608,27 @@ class IndexWorkspace {
 					style: "width:auto",
 				})}
 				<span class="eyebrow">${n.weight ? n.weight + "%" : ""}</span>
-			</div>${draw(n.node_key, depth + 1)}`).join("");
-		return `<div class="tree formula-surface">${draw("", 0) || U.empty(__("This version has no nodes yet."))}</div>`;
+			</div>`;
+		};
+		// `seen` also makes the walk cycle-proof. A cycle cannot be reached from
+		// a root today (every node in one has a parent, so none is a root), but
+		// that is a property of the data shape, not something this should rely
+		// on to avoid hanging the tab.
+		const draw = (key, depth) => (byParent[key] || [])
+			.filter((n) => !seen.has(n.node_key))
+			.map((n) => row(n, depth) + draw(n.node_key, depth + 1)).join("");
+
+		const tree = draw("", 0);
+		const orphans = this.nodes.filter((n) => !seen.has(n.node_key));
+		if (!tree && !orphans.length) {
+			return `<div class="tree formula-surface">${U.empty(__("This version has no nodes yet."))}</div>`;
+		}
+		return `<div class="tree formula-surface">${tree}${orphans.length ? `
+			<div class="published-lock-row" style="max-width:520px">${U.icon("i-warning", "xs")}<div>
+				<b>${__("{0} node(s) are not connected to a root", [orphans.length])}</b><br>${
+				__("Their parent is missing, is another unconnected node, or every node has a parent so there is no root. They are shown below and can still be edited; Validate explains what to fix.")}
+			</div></div>
+			${orphans.map((n) => row(n, 0)).join("")}` : ""}</div>`;
 	}
 
 	_calculate() {

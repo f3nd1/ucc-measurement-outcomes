@@ -1311,3 +1311,150 @@ CSS/JS (computed colour, computed weight, real rect geometry), which is real
 DOM/CSSOM behaviour, but still not a live bench. The 420 conclusion in
 particular is a claim about what Frappe contributes, verified from Frappe's
 source rather than from a running Desk - confirm the census on the bench.
+
+## Round-4 QA on ucc-workbench (verify live, v0.15.0)
+
+Nine items from live screenshots. Minor version bump: Item 7 restores a
+dropped feature and Item 3 changes what the Preview tab is.
+
+**ITEM 1 - empty-panel fill extended to the three round-3 exceptions.** Felix
+approved treating the survey outline, metrics list and formula tree like the
+canvas. Each pane body is a flex column whose trailing dashed affordance grows
+into the space; the metrics list had no in-body affordance so it gained a
+"New metric" one (same dashed pattern, same `data-act` the context-bar button
+already uses, no new handler); the formula surface has no affordance to grow -
+it is a read-only tree - so it simply fills. Measured survey outline **81% ->
+2% empty**, canvas 2%.
+
+**ITEM 2 - the gap above the workspace nav was Frappe's own `.page-head`.**
+`make_app_page` always renders one, and this page passes `title: ""` because
+the workspace nav and context bar already say where you are - so it reserved
+its full height for an empty heading/breadcrumb/button area. Hidden in
+`on_page_load`, scoped to this wrapper so no other Desk page is affected;
+`UCCMO.refit()` then measures the smaller top and the shell grows into the
+reclaimed space. Not margined away, per the "find where it comes from" ask.
+
+**ITEM 3 - Preview now embeds inline.** It previously only rendered help text
+plus an "Open preview" button that did `window.open`. It can be embedded
+safely: the preview route is same-origin, so Frappe's default
+`X-Frame-Options: SAMEORIGIN` permits the frame, and `preview_link`'s own
+docstring records that the URL is not a credential - `preview_payload`
+re-checks read permission server-side on every load, and preview collects
+nothing. The tab now renders an iframe of the real respondent page (same
+renderer and stylesheet a respondent gets, so it cannot drift from a mock),
+with "Open in new tab" kept in the pane header for checking a long survey at
+full width. No sandbox attribute: it would strip the session cookie the
+login-gated preview needs.
+
+**ITEM 4 - the Share tab was NOT a stub; it was rendering off-screen.**
+`_fillShare()` has been fully implemented all along - public link, Copy, QR -
+and is correctly dispatched per tab. What made it look blank: on a Draft,
+`public_link` returns no URL and the tab's entire content is the reason line,
+which is a `.canvas-help` - and `.canvas-help` was `position: absolute` with
+no positioned ancestor, so it escaped the pane and rendered at the document
+origin. Fixed by the root cause below. Verified: the Draft reason now renders
+inside the pane (help top 431 vs pane top 409).
+
+**ITEM 5a + the Share/Preview blanks - one root cause in `.canvas-help`.**
+Of this app's SEVEN `.canvas-help` usages only ONE is a canvas overlay; the
+other six are ordinary inline help paragraphs (Preview, Share, Responses,
+Exports, the share reason, the responses message). As an absolute element they
+all escaped their pane. The single overlay usage was no better: once round 3
+gave it a proper containing block it stopped covering the tab bar and started
+covering question 1 - the reported Item 5a. A note that must not cover
+anything has no reason to be positioned, so `.canvas-help` is now an ordinary
+in-flow block, and the canvas usage moved above the question list where it
+reads as a caption. Measured: `position: static`, above question 1, zero
+overlap. `.page-canvas`'s round-3 `position: relative` was removed with it -
+nothing there is positioned any more.
+
+**ITEM 5b - `.published-lock-row` was locked to `height: 36px`.** Felix's
+instinct was right: same shape as round-3 Bug A, a rule written for one
+structural context reused in another. The prototype's version is a
+single-line bar in the `.add-question` flex row (hence its leftover `flex: 1`),
+but all THREE of this app's usages are multi-line notices - "Review mode"
+plus a sentence - so the text overflowed the dashed box onto the field below.
+Now `min-height` with real padding and left-aligned text. Measured: note is
+114px tall, unclipped, and the "Corrected wording" field starts 11px below it
+instead of underneath it.
+
+**ITEM 6 - the type picker had `position: absolute` and no offsets.** So it
+kept its static position - after every question in the canvas - and rendered
+as a large panel far below the trigger. Now anchored to `.canvas-pane` (which
+gained `position: relative`) at `top: 46px; right: 12px`, directly under the
+"Add question" button that opens it, with `max-height`/`overflow` so a short
+viewport scrolls the popover instead of overflowing the pane. Measured:
+popover top 413 vs trigger bottom 402 - 11px below it.
+
+**ITEM 7 - drag-to-resize was dropped in the redesign; ported back.** It was
+worse than missing: `layout_width` had NO visual representation in the new
+canvas at all - the question list was a single-column stack, so a question set
+to Half still drew full width and a grip would have had nothing to resize.
+Ported the old Survey Builder's own approach rather than rebuilding: the same
+12-column grid, the same four spans, the same snapping reduce() and the same
+one-save-on-release (free pixel widths would break both the mobile collapse
+and the "presentation only" property that lets width be edited after publish -
+`layout_width` is the whole of `versioning.PRESENTATION_FIELDS`). Markers
+(Section Heading, Page Break) always span the row and get no grip. Measured:
+12 columns; a "Half" question renders 408px against a full-width 822px; grips
+present on real questions, absent on the Section Heading.
+**Found doing this:** the inspector offered `"Full"` for Column width, but the
+DocType Select's literal options are `"Full Width"/"Two Thirds"/"Half"/"One
+Third"` - Frappe's `_validate_selects` would have thrown on save. Same class
+as the round-2 "Long Text" vs "Paragraph" bug. Fixed.
+**Not ported, flagged:** drag-to-REORDER is also absent. `questionRow` renders
+a "⋮⋮" handle with a "Drag to reorder" tooltip and there is no handler behind
+it. Reordering still works through the API, but the affordance currently lies.
+Say the word and it is the next port.
+
+**ITEM 8 - contrast is fine; two different real problems.**
+- *Green text:* measured every green element in Metrics Build at 1440/1280/
+  1180/1100. They all use one token pair, `#087a52` on `#eaf8f2` = **4.9:1,
+  which passes WCAG AA**. So the "unreadable" complaint is type SIZE, not
+  colour: `.chip` was 9px, the outlier in a system where every other secondary
+  label (`.help`, `.eyebrow`, `.pane-head span`) is 10px. Chips are now 10px.
+  If the green still reads poorly at 10px the next lever is darkening
+  `--success`, which is a token change affecting all five workspaces - say so
+  and it is one line.
+- *The Likert collision:* not an overlap - a truncation. `.source-row`'s third
+  grid track is 64px, which is the prototype's width for a numeric weight
+  `<input>`; this app puts the normalisation `<select>` there, whose longest
+  option "Likert 1-5 to 0-100" needs 93px of text plus ~28px of select chrome
+  = 121px. At 64px it was cut mid-string hard against the delete button, which
+  is what read as the control colliding with its neighbour. Track widened to
+  150px and the select fills it. Measured: 150px, no truncation, no overlap.
+
+**ITEM 9 - the formula canvas was empty, not blocked. Reproduced exactly.**
+Nothing was capturing input. `_formula()` walked down only from nodes with a
+falsy `parent_key` and rendered nothing else, so a version whose nodes ALL
+carry a parent_key - no root - produced a completely empty canvas with four
+real nodes in the data, no error and nothing to click. Dangling or cyclic
+parents did the quieter version: **7 nodes in, 4 drawn, no warning.**
+`index_engine.validate_structure` catches all of these (no root, multiple
+roots, dangling parents, cycles) but only when you press Validate or Publish,
+so a Draft reaches this renderer unchecked - the UI has to be total.
+It now draws the tree where there is one and puts everything unreachable in a
+labelled group explaining what is wrong, and the walk carries a `seen` set so
+it can never recurse forever on a cycle.
+Measured after the fix: no-root data **0 -> 4 nodes rendered**, all
+hit-testable, and a real mouse click selects the node and updates the
+inspector; cyclic + dangling data **4 -> 7 nodes**.
+Ruled out by measurement rather than assumed: no overlay captures clicks (the
+real `IndexWorkspace` was instantiated with real jQuery and mocked endpoints -
+every node hit-tests to itself, a real click works, no JS errors), and
+`.formula-surface`'s centred grid does not cut content off above the scroll
+box. It was never node_canvas.js either - the workbench does not use it.
+
+**Also fixed in passing:** three hand-rolled pane headers (Objectives
+"Mapping", Metrics "Source questions", Indices "Formula"/"Calculate"/
+"Results") still used a bare `<span>`, so they rendered 10px muted from
+`.pane-head span` instead of the 12px `var(--text)` that `pane()`/`inspector()`
+have emitted since round 2's Item E. Now `<strong>`, consistent everywhere.
+
+**Verification:** all 21 pure suites and all 20 check_repo.sh guard groups
+green; every prior round's regression check re-run and still passing. Items
+3-9 were verified by instantiating the REAL `SurveyWorkspace` and
+`IndexWorkspace` classes from `ucc_workbench.js` with real jQuery, real
+bundled CSS and mocked endpoints, then measuring geometry and clicking with a
+real mouse - much closer to the bench than component snippets, but still not
+the bench. Confirm on ucc-sms-v2.orb.local.

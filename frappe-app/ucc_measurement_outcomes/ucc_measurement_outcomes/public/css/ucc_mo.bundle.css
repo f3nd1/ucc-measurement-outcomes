@@ -169,15 +169,10 @@
 .ucc-mo .segmented button { height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; }
 .ucc-mo .segmented button.active { background: white; color: var(--text); box-shadow: 0 1px 2px rgba(16,24,40,.06); }
 .ucc-mo .canvas-body { min-height: 0; overflow: auto; padding: 12px; background: var(--surface-2); }
-/* position:relative so .canvas-help (position:absolute, top:12px, centered)
- * anchors HERE. Without it (2026-08-01 QA Bug B), .canvas-help had no
- * positioned ancestor anywhere in this app's markup and fell through to the
- * document root - offsetParent measured as <body>, landing the pill 12px
- * from the top of the WHOLE PAGE instead of the top of the canvas, where it
- * sat over the workspace's tabs-bar and silently absorbed clicks meant for
- * the tab buttons underneath (it has no pointer-events:none - it's meant to
- * be read, not clicked through). */
-.ucc-mo .page-canvas { max-width: 860px; margin: 0 auto; position: relative; }
+/* Round 3 gave this position:relative to anchor .canvas-help; round 4 made
+ * .canvas-help an in-flow note (see its rule), so nothing here is positioned
+ * any more and the containing block is no longer needed. */
+.ucc-mo .page-canvas { max-width: 860px; margin: 0 auto; }
 /* Round-3 audit Finding 2, the sparse-content half. A short survey left the
  * canvas ~65% empty below the last question. Panes fill their column by design
  * (fixed-height, internally-scrolling shell), so option (b) from the audit: keep
@@ -189,18 +184,50 @@
  * so it is not styled as a drop zone. */
 .ucc-mo .canvas-body > .page-canvas { min-height: 100%; display: flex; flex-direction: column; }
 .ucc-mo .page-canvas > .add-page { flex: 1 1 auto; min-height: 44px; }
+/* Round-4 Item 1: the same treatment extended to the three panes round 3 left
+ * as deliberate exceptions (survey outline 81% empty, metrics list 84%, formula
+ * tree 67%). Felix approved treating them like the canvas. Each pane body
+ * becomes a flex column so its trailing dashed affordance can grow into the
+ * space, and the formula surface - which has no affordance, it is a read-only
+ * tree - simply fills instead of floating in a short box. */
+.ucc-mo .left-pane .pane-body, .ucc-mo .metric-list .pane-body { display: flex; flex-direction: column; }
+.ucc-mo .left-pane .pane-body > .add-page, .ucc-mo .metric-list .pane-body > .add-page { flex: 1 1 auto; min-height: 44px; }
+.ucc-mo .pane-body > .formula-surface { min-height: 100%; }
 .ucc-mo .page-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .ucc-mo .page-title strong { font-size: 12px; }
 .ucc-mo .page-title span { color: var(--muted); font-size: 10px; }
-.ucc-mo .question-list { display: grid; gap: 7px; }
-.ucc-mo .question-row { border: 1px solid var(--border); border-radius: 9px; background: white; display: grid; grid-template-columns: 18px 32px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 9px; min-height: 56px; transition: .12s ease; }
+/* 12-column grid, ported back from the old Survey Builder (round-4 Item 7).
+ * layout_width had no visual representation at all in the redesigned canvas -
+ * it was a select in the inspector and nothing more - so a question set to Half
+ * still drew full width and the drag grip had nothing to resize. Same 12-column
+ * shape, same four spans and same class-per-span approach as .ucc-sb-list, so
+ * the canvas and the respondent page agree about what a width means. */
+.ucc-mo .question-list { display: grid; grid-template-columns: repeat(12, 1fr); gap: 7px; align-items: start; }
+.ucc-mo .question-row { grid-column: span 12; position: relative; border: 1px solid var(--border); border-radius: 9px; background: white; display: grid; grid-template-columns: 18px 32px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 9px; min-height: 56px; transition: .12s ease; }
+.ucc-mo .question-row.qw-8 { grid-column: span 8; }
+.ucc-mo .question-row.qw-6 { grid-column: span 6; }
+.ucc-mo .question-row.qw-4 { grid-column: span 4; }
+/* Narrow cards cannot hold the drag column and the meta row side by side, the
+ * same concession .ucc-sb-q.ucc-sb-w4 makes in the old builder. */
+.ucc-mo .question-row.qw-4 { grid-template-columns: 18px 24px minmax(0, 1fr); row-gap: 4px; }
+.ucc-mo .question-row.qw-4 .row-actions { grid-column: 1 / -1; justify-content: flex-end; }
+/* The width grip: sits on the card's right edge with a col-resize cursor, so
+ * the affordance is where the edge you are dragging actually is. */
+.ucc-mo .width-grip { position: absolute; right: -4px; top: 50%; transform: translateY(-50%); width: 8px; height: 30px; border-radius: 3px; background: var(--primary); opacity: 0; cursor: col-resize; z-index: 2; border: 0; padding: 0; }
+.ucc-mo .question-row:hover .width-grip { opacity: .3; }
+.ucc-mo .width-grip:hover, .ucc-mo .width-grip.dragging { opacity: .75; }
 .ucc-mo .question-row:hover { border-color: var(--border-strong); }
 .ucc-mo .question-row.selected { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
 .ucc-mo .drag { color: var(--subtle); text-align: center; user-select: none; }
 .ucc-mo .question-copy { min-width: 0; }
 .ucc-mo .question-copy strong { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ucc-mo .question-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
-.ucc-mo .chip { height: 20px; padding: 0 6px; border-radius: 99px; display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 700; background: var(--surface-3); color: var(--muted); }
+/* 10px, not 9px (round-4 Item 8). Measured, the green chip's contrast is fine -
+ * #087a52 on #eaf8f2 is 4.9:1, passing WCAG AA - so the "unreadable green text"
+ * is a type-size problem, not a colour one. 9px also made .chip the outlier:
+ * every other secondary label in this system (.help, .eyebrow, .pane-head span,
+ * .canvas-help) is 10px. */
+.ucc-mo .chip { height: 20px; padding: 0 6px; border-radius: 99px; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700; background: var(--surface-3); color: var(--muted); }
 .ucc-mo .chip.warn { background: var(--warning-soft); color: var(--warning); }
 .ucc-mo .chip.ok { background: var(--success-soft); color: var(--success); }
 .ucc-mo .chip.primary { background: var(--primary-soft); color: var(--primary); }
@@ -209,7 +236,15 @@
 .ucc-mo .mini:hover { background: var(--surface-3); color: var(--text); }
 .ucc-mo .add-question { margin-top: 7px; display: flex; gap: 6px; align-items: center; }
 .ucc-mo .add-question .btn { flex: 1; }
-.ucc-mo .published-lock-row { flex: 1; height: 36px; border: 1px dashed var(--border-strong); border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--muted); background: rgba(255,255,255,.7); }
+/* min-height, not height. The prototype's version is a single-line bar sitting
+ * in the .add-question flex row (hence the leftover flex:1), but all three of
+ * this app's usages are multi-line notices: "<b>Review mode</b><br>" plus a
+ * sentence. Locked to 36px, that text overflowed the dashed box and collided
+ * with the field under it - round-4 Item 5b, in the inspector's Content tab,
+ * the same shape as round-3 Bug A: a rule written for one structural context
+ * reused in another. Left-aligned with real padding, because centred multi-line
+ * body text is a headline style, not a notice style. */
+.ucc-mo .published-lock-row { min-height: 36px; border: 1px dashed var(--border-strong); border-radius: 8px; display: flex; align-items: flex-start; gap: 7px; padding: 9px 10px; margin-bottom: 11px; color: var(--muted); background: rgba(255,255,255,.7); line-height: 1.45; }
 .ucc-mo .inspector-tabs { height: 34px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 8px; gap: 2px; }
 /* .inspector-tabs is a sibling of .pane-head/.pane-body (see inspector() in mo_ui.js), so the
    prototype's own .hide-collapsed rule never reaches it - it isn't inside .pane-head. Without
@@ -280,7 +315,15 @@
 .ucc-mo .mapping-empty span { color: var(--warning); font-size: 10px; }
 .ucc-mo .inspector-footer { position: sticky; bottom: -10px; margin: 14px -10px -10px; padding: 9px 10px; border-top: 1px solid var(--border); background: rgba(255,255,255,.96); display: flex; gap: 6px; }
 .ucc-mo .inspector-footer .btn { flex: 1; }
-.ucc-mo .add-popover { position: absolute; z-index: 40; width: 430px; background: white; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 10px; display: none; }
+/* Anchored to the canvas pane, under the "Add question" button that opens it.
+ * The prototype's rule sets position:absolute but NO offsets, so the box kept
+ * its static position - i.e. after every question in the canvas - and rendered
+ * as a large panel far below the trigger, needing a scroll to reach (round-4
+ * Item 6). Offsets plus a positioned ancestor (.canvas-pane, below) make it
+ * behave like the dropdown it is. max-height + overflow so a short viewport
+ * scrolls the popover instead of overflowing the pane. */
+.ucc-mo .canvas-pane { position: relative; }
+.ucc-mo .add-popover { position: absolute; z-index: 40; top: 46px; right: 12px; width: 430px; max-width: calc(100% - 24px); max-height: calc(100% - 58px); overflow: auto; background: white; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 10px; display: none; }
 .ucc-mo .add-popover.open { display: block; }
 .ucc-mo .add-search { position: relative; margin-bottom: 8px; }
 .ucc-mo .add-search input { width: 100%; height: 32px; border: 1px solid var(--border); border-radius: 8px; padding: 0 9px 0 31px; outline: none; }
@@ -318,11 +361,20 @@
 .ucc-mo .node-meta { display: flex; align-items: center; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
 .ucc-mo .node-handle { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--primary); background: white; position: absolute; right: -8px; top: 50%; transform: translateY(-50%); }
 .ucc-mo .objective-node .node-handle { left: -8px; right: auto; border-color: var(--success); }
-/* pointer-events:none as belt-and-suspenders: this is read-only annotation
- * text (no button/link ever lives inside it, in either of its two usages),
- * so it should never be able to absorb a click even if a future change
- * reintroduces a positioning mistake like the one .page-canvas just fixed. */
-.ucc-mo .canvas-help { position: absolute; z-index: 3; left: 50%; top: 12px; transform: translateX(-50%); border: 1px solid var(--border); background: rgba(255,255,255,.94); color: var(--muted); border-radius: 99px; padding: 6px 10px; font-size: 9px; white-space: nowrap; pointer-events: none; }
+/* IN FLOW, not an absolute overlay. The prototype defines .canvas-help as a
+ * floating pill centred over the canvas, but of this app's SEVEN usages only
+ * one is a canvas overlay - the other six are ordinary inline help paragraphs
+ * (Preview, Share, Responses, Exports, the share "no link yet" reason, the
+ * responses message). As an absolute element with no positioned ancestor those
+ * six escaped their pane entirely and rendered at the document origin, which is
+ * why the Share tab looked BLANK (round-4 Item 4: its only content on a Draft
+ * is the reason line) and why Preview's explanation was missing. The one real
+ * overlay usage was no better: once round 3 gave it a proper containing block
+ * it stopped covering the tab bar and started covering question 1 instead
+ * (round-4 Item 5a). A note that must not cover anything has no reason to be
+ * positioned at all - so it is a normal block, and white-space:nowrap goes with
+ * it since these sentences are long enough to need wrapping. */
+.ucc-mo .canvas-help { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 8px; padding: 7px 10px; font-size: 10px; line-height: 1.45; margin-bottom: 8px; }
 .ucc-mo .map-line { fill: none; stroke: var(--border-strong); stroke-width: 2; stroke-dasharray: 5 5; }
 .ucc-mo .map-line.linked { stroke: var(--success); stroke-width: 2.5; stroke-dasharray: none; }
 .ucc-mo .node-editor-card { border: 1px solid var(--border); border-radius: 8px; padding: 9px; background: var(--surface-2); margin-bottom: 10px; }
@@ -338,7 +390,14 @@
 .ucc-mo .metric-item strong { display: block; font-size: 11px; }
 .ucc-mo .metric-item small { display: block; color: var(--muted); font-size: 9px; margin-top: 3px; }
 .ucc-mo .source-table { display: grid; gap: 6px; }
-.ucc-mo .source-row { border: 1px solid var(--border); border-radius: 8px; padding: 9px; display: grid; grid-template-columns: 28px minmax(0, 1fr) 64px 28px; gap: 8px; align-items: center; }
+/* Third track is 150px, not 64px (round-4 Item 8). 64px is the prototype's
+ * width for a numeric weight <input> (see .source-row input below), but this
+ * app puts the normalisation <select> in that slot, whose longest option
+ * "Likert 1-5 to 0-100" measures 93px of text plus ~28px of select chrome =
+ * 121px. At 64px it was truncated mid-string hard against the delete button,
+ * which is what read as the Likert control colliding with its neighbour. */
+.ucc-mo .source-row { border: 1px solid var(--border); border-radius: 8px; padding: 9px; display: grid; grid-template-columns: 28px minmax(0, 1fr) 150px 28px; gap: 8px; align-items: center; }
+.ucc-mo .source-row .mini-select { width: 100%; max-width: none; }
 .ucc-mo .source-row strong { display: block; font-size: 11px; }
 .ucc-mo .source-row small { display: block; color: var(--muted); font-size: 9px; margin-top: 3px; }
 .ucc-mo .source-row input { width: 64px; border: 1px solid var(--border); border-radius: 7px; padding: 6px; }
@@ -385,6 +444,10 @@
 	.ucc-mo .workspace-nav { height: var(--nav-h); position: sticky; top: 0; z-index: 55; }
 	.ucc-mo .workspace { display: none; min-height: calc(100vh - var(--nav-h)); grid-template-rows: auto auto auto auto; }
 	.ucc-mo .workspace.active { display: block; }
+	/* Every card full width on a phone - the four spans are a desktop
+	 * affordance, and the respondent page collapses the same way. */
+	.ucc-mo .question-row, .ucc-mo .question-row.qw-8, .ucc-mo .question-row.qw-6, .ucc-mo .question-row.qw-4 { grid-column: span 12; }
+	.ucc-mo .width-grip { display: none; }
 	.ucc-mo .context-bar { padding: 10px 12px; align-items: flex-start; }
 	.ucc-mo .context-actions .btn:not(.primary), .ucc-mo .version { display: none; }
 	.ucc-mo .tabs-bar { min-height: var(--tabs-h); padding: 0 10px; }

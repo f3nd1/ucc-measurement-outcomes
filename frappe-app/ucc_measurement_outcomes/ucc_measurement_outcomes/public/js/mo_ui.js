@@ -292,11 +292,23 @@ window.UCCMO = {
 	// One row shape for a question wherever it appears. `state` is the objective
 	// mapping status, and it is amber-not-red on purpose: an unmapped question is
 	// incomplete, not broken, and red is reserved for real errors.
+	// Span classes the 12-column canvas offers, widest first. These are the
+	// UCC Survey Question layout_width Select's literal options - the old
+	// Survey Builder's SPANS table, kept identical so both canvases and the
+	// respondent page agree on what a width means.
+	WIDTH_CLASS: { "Two Thirds": "qw-8", "Half": "qw-6", "One Third": "qw-4" },
+	// Layout markers are not answerable questions and always span the row.
+	MARKER_TYPES: ["Section Heading", "Page Break"],
+
 	questionRow(q, o) {
 		o = o || {};
 		const mapped = (q.objectives || []).length > 0;
-		return `<div class="question-row ${o.selected ? "selected" : ""}" data-q="${this.esc(q.name)}">
+		const marker = this.MARKER_TYPES.indexOf(q.question_type) >= 0;
+		const wcls = marker ? "" : (this.WIDTH_CLASS[q.layout_width] || "");
+		return `<div class="question-row ${wcls} ${o.selected ? "selected" : ""}" data-q="${this.esc(q.name)}">
 			<span class="drag" title="${__("Drag to reorder")}">${o.editable ? "⋮⋮" : ""}</span>
+			${o.editable && !marker ? `<button class="width-grip" data-grip="${this.esc(q.name)}"
+				title="${__("Drag to change width")}" aria-label="${__("Drag to change width")}"></button>` : ""}
 			<span class="type-icon">${this.icon(window.UCCMOIcons.forQuestionType(q.question_type))}</span>
 			<div class="question-copy">
 				<div class="question">${o.index === undefined ? "" : o.index + ". "}${
