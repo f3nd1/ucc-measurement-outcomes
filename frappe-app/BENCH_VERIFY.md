@@ -1707,3 +1707,66 @@ Verify on the bench:
 4. Objectives and Metrics: connectors stay attached to the nodes at every zoom
    level and after panning - this is the check that matters most.
 5. Collapse chevrons on the three panes behave like the Survey inspector's.
+
+## Wheel, fit-to-view, node collapse, creation affordances (verify live, v0.18.1)
+
+**ITEM 1 - the wheel handler was correct; the symptom was real anyway.**
+Measured before changing anything: the modifier check already short-circuited
+BEFORE `preventDefault()`, so neither hypothesis (a) nor (b) held. Plain wheel
+scrolled fine whenever there was anything to scroll - 73px when zoomed to 1.3x,
+200px with a tall column - and Ctrl+wheel zoomed without scrolling.
+The real cause: when the stage FITS its viewport there is no scrollable
+overflow, and the workbench shell is `overflow:hidden` by design (round-1
+Bug 1), so the wheel moved nothing anywhere. Dead wheel, correct handler.
+Fixed by making the wheel pan an axis that has nothing left to scroll, so it
+always moves the canvas but never steals a real scroll. Measured:
+- content fits  -> wheel pans (panY 0 -> -120), zoom untouched, no scroll
+- real overflow -> wheel scrolls natively (scrollTop 0 -> 120), pan untouched
+- Ctrl/Cmd+wheel -> zooms, and does not scroll the pane underneath
+
+**ITEM 2 - Fit, on the existing zoom/pan state.** `controller.fit()` lives in
+mo_zoom.js beside `zoomIn/zoomOut/reset`, writes the SAME `scale`/`x`/`y` and
+goes through the SAME `_apply()`, so the connector redraw and its
+divide-by-scale correction happen identically - no second code path. It
+measures every node in the stage's own unscaled space, picks the scale that
+fits the bounding box with 24px padding (clamped to the usual 0.5-2), and
+centres it. A Fit button is in the shared `controls()`, so all three canvases
+get it from one place, and each canvas auto-fits ONCE per record (per metric /
+per question / per index version) so arriving at a wide model shows all of it
+without overriding a zoom the user has since chosen.
+Measured on Metrics: scale 1 -> 0.5 with x/y centred, and **connector drift 0
+on all 14 connectors after fitting** - the check that matters.
+
+**ITEM 3 - collapse chevrons on individual formula nodes.** Reuses
+`UCCMO._collapseButton`, the same round-2 component `pane()`/`inspector()`
+call. On a tree, collapsing means hiding descendants, so the chevron appears
+only on nodes that have children; childless nodes get a spacer so they stay
+aligned. Measured: chevron on the 1 parent, 3 spacers on the leaves, collapse
+4 rows -> 1, expand restores 4.
+One trap worth recording: the tree walk is what populates `seen`, which is how
+`_formula()` decides a node is "not connected to a root". Skipping the walk for
+a collapsed branch would have reported every hidden child as an orphan. The
+walk always runs; only the markup is dropped. Verified: no orphan warning
+appears while a branch is collapsed.
+
+**ITEM 4 - one discoverability miss and one genuine missing feature.**
+- *Metrics*: "New metric" DID exist, as a plain secondary button sitting next
+  to the primary "Preview calculation" - so the eye went to Preview. Swapped
+  the emphasis: New metric is now the primary action, Preview secondary.
+- *Indices*: **"New index" genuinely did not exist anywhere in the workbench.**
+  Not a UX miss - the creation flow was never ported from the old Index Studio.
+  The backend has had `list_index_templates` and `create_index_from_template`
+  all along, both already whitelisted and unused by any UI. Built the
+  affordance on them: a template picker that creates a Draft version populated
+  with the template's starter node graph. Added to the context bar AND to the
+  empty state, since a bench with no indices was otherwise a dead end.
+
+Verify on the bench:
+1. Wheel over each canvas: with a short model it pans, with a tall one it
+   scrolls, Ctrl/Cmd+wheel always zooms and never scrolls the pane.
+2. Fit button on all three; arriving at a metric/question/index auto-fits once.
+   Connectors must stay glued to the nodes after fitting.
+3. Indices formula: chevrons only on nodes with children; collapsing hides the
+   subtree and does NOT produce a "not connected to a root" warning.
+4. New index from a template creates a Draft with its starter nodes; New metric
+   now reads as the primary action in Metrics.

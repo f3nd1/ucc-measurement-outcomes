@@ -1077,6 +1077,10 @@ class ObjectiveWorkspace {
 					this.$el.find(".mapping-stage-inner").get(0),
 					() => this._drawLines());
 				this._drawLines();
+				if (this._fitted !== this.s.question) {
+					this._fitted = this.s.question;
+					this._zoom.fit();
+				}
 			});
 		}
 		if (tab === "governance") this._fillHistory();
@@ -1298,6 +1302,7 @@ class ObjectiveWorkspace {
 			this.sel = "question";
 			this._draw();
 		});
+		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._zoom && this._zoom.fit());
 		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
 		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
 		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
@@ -1465,8 +1470,12 @@ class MetricWorkspace {
 				status: __("{0} sources", [this.sources.length]),
 				statusTone: this.sources.length ? "ok" : "warn",
 				actions: [
-					{ label: __("New metric"), icon: "i-plus", act: "new-metric" },
-					{ label: __("Preview calculation"), tone: "primary", icon: "i-chart", act: "preview" },
+					// Round-9 Item 4: this was a plain secondary button sitting next
+					// to a primary one, so the eye went to Preview and nobody found
+					// how to create a metric. Creating is the rarer but far more
+					// important action when you cannot proceed without it.
+					{ label: __("New metric"), tone: "primary", icon: "i-plus", act: "new-metric" },
+					{ label: __("Preview calculation"), icon: "i-chart", act: "preview" },
 				],
 			})}
 			${U.tabs([{ key: "build", label: __("Build") },
@@ -1493,6 +1502,12 @@ class MetricWorkspace {
 					this.$el.find(".mx-stage-inner").get(0),
 					() => this._drawEdges());
 				this._drawEdges();
+				// Auto-fit ONCE per metric, so arriving at a wide model shows all
+				// of it, without stealing a zoom the user has since chosen.
+				if (this._fitted !== this.s.metric) {
+					this._fitted = this.s.metric;
+					this._zoom.fit();
+				}
 			});
 		}
 		if (tab === "library") this._searchLibrary("");
@@ -1963,6 +1978,7 @@ class MetricWorkspace {
 		});
 		$el.on("click.mo", '[data-act="new-metric"]', () => this._newMetric());
 		$el.on("click.mo", '[data-act="preview"]', () => this._preview());
+		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._zoom && this._zoom.fit());
 		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
 		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
 		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
@@ -2048,7 +2064,15 @@ class IndexWorkspace {
 			callback: (r) => {
 				this.versions = r.message || [];
 				if (!this.s.indexVersion && this.versions.length) this.s.indexVersion = this.versions[0].name;
-				if (!this.s.indexVersion) return this.$el.html(window.UCCMO.empty(__("No index versions yet.")));
+						if (!this.s.indexVersion) {
+						this.$el.html(`${window.UCCMO.contextBar({
+							eyebrow: __("Indices workspace"), title: __("No indices yet"),
+							actions: [{ label: __("New index"), tone: "primary", icon: "i-plus", act: "new-index" }],
+						})}<div class="workarea">${window.UCCMO.empty(
+							__("Start from a standard index template, then adjust its weights."),
+							{ label: __("New index"), tone: "primary", act: "new-index" })}</div>`);
+						return this.$el.off("click.mo").on("click.mo", '[data-act="new-index"]', () => this._newIndex());
+					}
 				this._load();
 			},
 		});
@@ -2083,6 +2107,11 @@ class IndexWorkspace {
 				statusTone: published ? "ok" : "warn",
 				statusIcon: published ? "i-lock" : null,
 				actions: [
+					// Round-9 Item 4: this workspace had NO way to create an index.
+					// The endpoints existed (list_index_templates,
+					// create_index_from_template) - only the affordance was never
+					// ported from the old Index Studio.
+					{ label: __("New index"), tone: "primary", icon: "i-plus", act: "new-index" },
 					{ label: __("Validate"), icon: "i-check", act: "validate" },
 					published
 						? { label: __("Calculate"), tone: "primary", icon: "i-chart", act: "calculate" }
@@ -2125,6 +2154,10 @@ class IndexWorkspace {
 			requestAnimationFrame(() => {
 				const $surface = this.$el.find(".formula-surface");
 				this._zoom = window.UCCZoom.attach($surface.parent().get(0), $surface.get(0), null);
+				if (this._zoom && this._fitted !== this.s.indexVersion) {
+					this._fitted = this.s.indexVersion;
+					this._zoom.fit();
+				}
 			});
 		}
 	}
@@ -2161,14 +2194,56 @@ class IndexWorkspace {
 	// Publish, so a Draft reaches this renderer unchecked. The UI therefore has
 	// to be total: draw the tree where there is one, and put whatever is left
 	// over in a clearly-labelled group rather than dropping it on the floor.
+	// Creates a Draft version from one of the standard templates, via the
+	// existing create_index_from_template - the same starter graph the old Index
+	// Studio used, so a new index arrives with real nodes rather than empty.
+	_newIndex() {
+		this.app.call(IAPI + "list_index_templates", {}).then((templates) => {
+			if (!templates || !templates.length) {
+				return frappe.msgprint({ title: __("No templates"), indicator: "orange",
+					message: __("No index templates are defined on this site.") });
+			}
+			frappe.prompt([{
+				fieldname: "template_code", fieldtype: "Select", reqd: 1,
+				label: __("Start from template"),
+				options: templates.map((t) => t.code + " — " + t.name).join("\n"),
+			}], (v) => {
+				const code = String(v.template_code).split(" — ")[0];
+				this.app.call(IAPI + "create_index_from_template", { template_code: code })
+					.then((name) => {
+						if (!name) return;
+						this.s.indexVersion = name;
+						this.sel = null;
+						this._fitted = null;
+						this.app.toast(__("Draft index created from {0}", [code]));
+						this.render();
+					});
+			}, __("New index"), __("Create draft"));
+		});
+	}
+
 	_formula() {
 		const U = window.UCCMO;
 		const byParent = {};
 		this.nodes.forEach((n) => (byParent[n.parent_key || ""] ||= []).push(n));
 		const seen = new Set();
+		// Round-9 Item 3: the same chevron the panes use, on individual nodes.
+		// U._collapseButton is the round-2 component pane()/inspector() already
+		// call - reused here rather than a second chevron implementation. On a
+		// TREE, collapsing a node means hiding its descendants, so the button
+		// only appears on nodes that actually have children.
+		this._collapsed = this._collapsed || new Set();
 		const row = (n, depth) => {
 			seen.add(n.node_key);
+			const kids = (byParent[n.node_key] || []).length;
+			const shut = this._collapsed.has(n.node_key);
 			return `<div class="tree-row" style="padding-left:${depth * 18}px">
+				${kids ? U._collapseButton({ act: "toggle-node", side: shut ? "left" : "right",
+					collapsed: shut, label: shut ? __("Expand {0}", [n.label || n.node_key])
+											   : __("Collapse {0}", [n.label || n.node_key]),
+					shortLabel: "" }).replace('data-act="toggle-node"',
+						`data-act="toggle-node" data-key="${U.esc(n.node_key)}"`)
+					: `<span class="tree-spacer"></span>`}
 				${U.node({
 					key: n.node_key, title: n.label || n.node_key,
 					kicker: n.node_type, meta: n.source_metric || "",
@@ -2185,7 +2260,17 @@ class IndexWorkspace {
 		// on to avoid hanging the tab.
 		const draw = (key, depth) => (byParent[key] || [])
 			.filter((n) => !seen.has(n.node_key))
-			.map((n) => row(n, depth) + draw(n.node_key, depth + 1)).join("");
+			// A collapsed node keeps its own row and drops its subtree. seen still
+			// records the whole branch, so collapsing never pushes children into
+			// the "not connected to a root" group.
+			.map((n) => {
+				const r = row(n, depth);
+				// Always walk the subtree, even when collapsed: the walk is what
+				// records `seen`, and a hidden branch must not then be reported
+				// as "not connected to a root". Collapsing only drops the MARKUP.
+				const sub = draw(n.node_key, depth + 1);
+				return r + (this._collapsed.has(n.node_key) ? "" : sub);
+			}).join("");
 
 		const tree = draw("", 0);
 		const orphans = this.nodes.filter((n) => !seen.has(n.node_key));
@@ -2278,9 +2363,18 @@ class IndexWorkspace {
 			this.sel = $(e.currentTarget).data("node");
 			this._draw();
 		});
+		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._zoom && this._zoom.fit());
 		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
 		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
 		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
+		$el.on("click.mo", '[data-act="toggle-node"]', (e) => {
+			e.stopPropagation();          // never let the chevron select the node
+			const k = $(e.currentTarget).data("key");
+			this._collapsed = this._collapsed || new Set();
+			if (this._collapsed.has(k)) this._collapsed.delete(k); else this._collapsed.add(k);
+			this._draw();
+		});
+		$el.on("click.mo", '[data-act="new-index"]', () => this._newIndex());
 		$el.on("click.mo", '[data-act="validate"]', () =>
 			this.app.call(IAPI + "validate_index", { index_version: this.s.indexVersion }).then((r) => {
 				if (!r) return;

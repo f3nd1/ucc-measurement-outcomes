@@ -697,3 +697,9 @@
  * the builder-shell has. */
 .ucc-mo .objective-shell.right-collapsed { grid-template-columns: 230px minmax(0, 1fr) 44px; }
 .ucc-mo-metrics .mx-build.right-collapsed { grid-template-columns: 228px minmax(0, 1fr) 44px; }
+/* Round-9 Item 3: per-node collapse in the formula tree. The spacer keeps
+ * childless nodes aligned with nodes that carry a chevron. */
+.ucc-mo .tree-row { align-items: center; }
+.ucc-mo .tree-spacer { width: 26px; flex: 0 0 auto; }
+.ucc-mo .tree-row .mini { flex: 0 0 auto; }
+.ucc-mo .tree-row .collapse-label { display: none; }

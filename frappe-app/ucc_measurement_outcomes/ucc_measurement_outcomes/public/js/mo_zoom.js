@@ -24,6 +24,9 @@
 // translate, zoom is scale, transform-origin is 0 0 so the maths stays trivial.
 
 window.UCCZoom = {
+	// Every node kind across the three canvases, so fit() works without each
+	// caller re-stating its own markup.
+	NODES: "[data-node], [data-map-node], .map-node, .mx-node, .node",
 	MIN: 0.5,
 	MAX: 2,
 	STEP: 0.15,
@@ -34,6 +37,8 @@ window.UCCZoom = {
 	controls() {
 		const I = window.UCCMOIcons;
 		return `<span class="mx-zoom">
+			<button class="mini" data-act="zoom-fit" title="${__("Fit all nodes in view")}" aria-label="${
+				__("Fit all nodes in view")}">${I.icon("i-target", "sm")}</button>
 			<button class="mini" data-act="zoom-out" title="${__("Zoom out")}" aria-label="${__("Zoom out")}">${
 				I.icon("i-minus", "sm")}</button>
 			<button class="mini" data-act="zoom-reset" title="${__("Reset zoom")}" aria-label="${
@@ -73,6 +78,39 @@ window.UCCZoom = {
 			zoomIn() { this.zoomTo(this.scale + window.UCCZoom.STEP); },
 			zoomOut() { this.zoomTo(this.scale - window.UCCZoom.STEP); },
 			reset() { this.scale = 1; this.x = 0; this.y = 0; this._apply(); },
+			// Fit every node into the viewport. Deliberately built on the SAME
+			// scale/x/y state and the SAME _apply() path the buttons use, so the
+			// connector redraw (and its divide-by-scale correction) happens here
+			// too rather than needing a second code path that could drift.
+			fit(selector) {
+				const nodes = stage.querySelectorAll(selector || window.UCCZoom.NODES);
+				if (!nodes.length) return;
+				// Measure in the stage's own unscaled space, so fitting is not
+				// affected by whatever zoom happens to be applied right now.
+				const k = this.scale;
+				const sb = stage.getBoundingClientRect();
+				let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+                nodes.forEach((n) => {
+					const q = n.getBoundingClientRect();
+					l = Math.min(l, (q.left - sb.left) / k);
+					t = Math.min(t, (q.top - sb.top) / k);
+					r = Math.max(r, (q.right - sb.left) / k);
+					b = Math.max(b, (q.bottom - sb.top) / k);
+				});
+				const w = r - l, h = b - t;
+				if (w <= 0 || h <= 0) return;
+				const vp = viewport.getBoundingClientRect();
+				const pad = 24;
+				const next = Math.min(window.UCCZoom.MAX, Math.max(window.UCCZoom.MIN,
+					Math.min((vp.width - pad * 2) / w, (vp.height - pad * 2) / h)));
+				this.scale = next;
+				// Centre the node bounding box in the viewport.
+				this.x = (vp.width - w * next) / 2 - l * next;
+				this.y = (vp.height - h * next) / 2 - t * next;
+				viewport.scrollTop = 0;
+				viewport.scrollLeft = 0;
+				this._apply();
+			},
 			destroy() {
 				viewport.removeEventListener("mousedown", down);
 				viewport.removeEventListener("wheel", wheel);
@@ -107,13 +145,31 @@ window.UCCZoom = {
 			panning = false;
 			viewport.classList.remove("mx-panning");
 		};
-		// Ctrl/Cmd + wheel, not bare wheel: these canvases live inside panes that
-		// still scroll, and hijacking the scroll wheel would break reaching nodes
-		// below the fold. Same modifier every map and design tool uses.
+		// Ctrl/Cmd + wheel zooms. Bare wheel is left to the browser so the pane
+		// scrolls exactly as it always did - measured: with anything to scroll it
+		// scrolls (73px when zoomed to 1.3x, 200px with a tall column).
+		//
+		// The round-9 report was still right, though, and the measurement is why:
+		// when the stage FITS its viewport there is no scrollable overflow, and
+		// the workbench shell is overflow:hidden by design, so the wheel moved
+		// nothing anywhere - it felt broken even though the handler was correct.
+		// So when an axis has nothing to scroll, the wheel pans that axis instead.
+		// The wheel always moves the canvas; it just never steals a real scroll.
+		const canScroll = (el, dy) => {
+			const room = el.scrollHeight - el.clientHeight;
+			if (room <= 1) return false;
+			return dy > 0 ? el.scrollTop < room - 1 : el.scrollTop > 1;
+		};
 		const wheel = (e) => {
-			if (!(e.ctrlKey || e.metaKey)) return;
+			if (e.ctrlKey || e.metaKey) {
+				e.preventDefault();
+				c.zoomTo(c.scale + (e.deltaY < 0 ? window.UCCZoom.STEP : -window.UCCZoom.STEP));
+				return;
+			}
+			if (canScroll(viewport, e.deltaY)) return;   // real scroll wins, untouched
 			e.preventDefault();
-			c.zoomTo(c.scale + (e.deltaY < 0 ? window.UCCZoom.STEP : -window.UCCZoom.STEP));
+			if (e.shiftKey) c.x -= e.deltaY; else c.y -= e.deltaY;
+			c._apply();
 		};
 
 		viewport.addEventListener("mousedown", down);
