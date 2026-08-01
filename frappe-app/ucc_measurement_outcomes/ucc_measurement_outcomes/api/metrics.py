@@ -22,6 +22,11 @@ from frappe import _
 
 from ucc_measurement_outcomes.metric_engine import aggregate_metric, contributing_versions
 
+try:
+	from ucc_measurement_outcomes import source_eligibility
+except ImportError:
+	import source_eligibility
+
 METRIC = "UCC Metric Definition"
 SOURCE = "UCC Metric Source"
 QUESTION = "UCC Survey Question"
@@ -119,37 +124,6 @@ def get_metric(metric_code):
 		"used_by": frappe.get_all(NODE, filters={"source_metric": metric_code},
 								  fields=["parent", "label", "weight"]),
 	}
-
-
-@frappe.whitelist()
-def search_questions(query=None, limit=40, exclude_metric=None):
-	"""Questions across EVERY survey, for building a cross-survey metric.
-
-	Deliberately not scoped to one survey version: that scoping is exactly what
-	the Metrics workspace exists to escape. Read permission on the question's
-	version is enforced by frappe.get_all's own permission layer.
-	"""
-	_require("read")
-	filters = {}
-	if query:
-		filters["question_text"] = ["like", "%" + query + "%"]
-	rows = frappe.get_all(
-		QUESTION, filters=filters,
-		fields=["name", "question_text", "question_type", "survey_version"],
-		order_by="modified desc", limit=int(limit))
-	if exclude_metric:
-		taken = set(frappe.get_all(SOURCE, filters={"parent": exclude_metric},
-								   pluck="source_question"))
-		rows = [r for r in rows if r["name"] not in taken]
-	versions = {r["name"]: r for r in frappe.get_all(
-		VERSION, filters={"name": ["in", [r["survey_version"] for r in rows] or [""]]},
-		fields=["name", "survey", "version_number", "status"])}
-	for r in rows:
-		v = versions.get(r["survey_version"], {})
-		r["survey"] = v.get("survey")
-		r["version_number"] = v.get("version_number")
-		r["version_status"] = v.get("status")
-	return rows
 
 
 @frappe.whitelist()
@@ -272,3 +246,174 @@ def preview_metric(metric_code):
 		"unscoreable": result["response_count"] - result["scored_count"],
 		"source_versions": contributing_versions(rows),
 	}
+
+
+# ===================================================== source drill-down ===
+# Round-10 Item 3. The old drawer loaded every question in every survey into one
+# flat list and labelled all of them "Compatible" - a client-side literal with
+# nothing behind it. These three endpoints replace it with
+# department -> survey version -> questions, loading each level only when asked,
+# and with a real eligibility verdict from the pure source_eligibility module.
+#
+# GROUPING FIELD, stated plainly: UCC Survey.category exists but is Data (free
+# text), so it would fragment on typos and casing. owner_department is a Link to
+# Department - genuinely controlled - so it is what the first column groups by
+# for now. It is organisational rather than thematic; a real category Select is
+# a pending decision (see the 2026-08-01 entry in docs/09-decision-log.md).
+
+SURVEY = "UCC Survey"
+CHOICE = "UCC Survey Question Choice"
+
+
+@frappe.whitelist()
+def source_categories():
+	"""First column: departments that own at least one survey, with counts."""
+	_require("read")
+	surveys = frappe.get_all(SURVEY, fields=["name", "owner_department"])
+	by_dept = {}
+	for s in surveys:
+		by_dept.setdefault(s.get("owner_department") or "", []).append(s["name"])
+	versions = frappe.get_all(VERSION, fields=["name", "survey"])
+	vcount = {}
+	for v in versions:
+		vcount[v["survey"]] = vcount.get(v["survey"], 0) + 1
+	out = []
+	for dept, names in by_dept.items():
+		out.append({
+			"key": dept,
+			"label": dept or _("No department"),
+			"surveys": len(names),
+			"versions": sum(vcount.get(n, 0) for n in names),
+		})
+	# Unassigned last: it is a fallback bucket, not a real department.
+	return sorted(out, key=lambda r: (r["key"] == "", r["label"]))
+
+
+@frappe.whitelist()
+def source_versions(category=None):
+	"""Second column: the survey VERSIONS in one department.
+
+	Versions, never surveys - a source attaches to the frozen version, and
+	"Student Experience V01" and "V02" are different evidence.
+	"""
+	_require("read")
+	filters = {}
+	if category:
+		filters["owner_department"] = category
+	else:
+		filters["owner_department"] = ["in", ["", None]]
+	surveys = {s["name"]: s for s in frappe.get_all(
+		SURVEY, filters=filters, fields=["name", "title", "owner_department"])}
+	if not surveys:
+		return []
+	rows = frappe.get_all(
+		VERSION, filters={"survey": ["in", list(surveys)]},
+		fields=["name", "survey", "version_number", "status"],
+		order_by="survey asc, version_number desc")
+	qcount, rcount = {}, {}
+	for q in frappe.get_all(QUESTION, filters={"survey_version": ["in", [r["name"] for r in rows] or [""]]},
+							fields=["survey_version", "question_type"]):
+		# Layout markers are not questions; the count must not promise answers
+		# that structural fields can never provide.
+		if source_eligibility.is_structural(q.get("question_type")):
+			continue
+		qcount[q["survey_version"]] = qcount.get(q["survey_version"], 0) + 1
+	for a in frappe.get_all(ANSWER, filters={"survey_version": ["in", [r["name"] for r in rows] or [""]]},
+							fields=["survey_version"]):
+		rcount[a["survey_version"]] = rcount.get(a["survey_version"], 0) + 1
+	for r in rows:
+		r["survey_title"] = surveys.get(r["survey"], {}).get("title") or r["survey"]
+		r["question_count"] = qcount.get(r["name"], 0)
+		r["answer_count"] = rcount.get(r["name"], 0)
+	return rows
+
+
+@frappe.whitelist()
+def eligible_questions(metric_code, survey_version, search=None,
+                       response_filter=None, show_incompatible=0):
+	"""Third column: questions of ONE survey version, each with a real verdict.
+
+	Never scoped to "all surveys" - that is the flat list this replaces. The
+	verdict comes from source_eligibility, which derives its rule from
+	index_engine.normalise(), so the label cannot drift from what actually
+	scores.
+	"""
+	_require("read")
+	metric = frappe.get_doc(METRIC, metric_code)
+	rule = metric.default_normalisation
+	# Duplicate detection by stable ID, never by wording: two surveys can hold
+	# identical text and still be different evidence.
+	taken = set(frappe.get_all(SOURCE, filters={"parent": metric_code}, pluck="source_question"))
+
+	filters = {"survey_version": survey_version}
+	if search:
+		filters["question_text"] = ["like", "%" + search + "%"]
+	rows = frappe.get_all(
+		QUESTION, filters=filters,
+		fields=["name", "question_text", "question_type", "sequence"],
+		order_by="sequence asc, creation asc")
+	if not rows:
+		return []
+
+	names = [r["name"] for r in rows]
+	answers = {}
+	for a in frappe.get_all(ANSWER, filters={"question": ["in", names]}, fields=["question"]):
+		answers[a["question"]] = answers.get(a["question"], 0) + 1
+	# A choice question is only scoreable when its choices carry numeric values.
+	numeric_choice = set()
+	for c in frappe.get_all(CHOICE, filters={"parent": ["in", names]},
+							fields=["parent", "choice_value"]):
+		v = c.get("choice_value")
+		if v in (None, ""):
+			continue
+		try:
+			float(v)
+		except (TypeError, ValueError):
+			continue
+		numeric_choice.add(c["parent"])
+
+	out = []
+	for r in rows:
+		n = answers.get(r["name"], 0)
+		v = source_eligibility.verdict(
+			r["question_type"], rule, answers=n,
+			already=r["name"] in taken,
+			numeric_choices=r["name"] in numeric_choice)
+		r["answer_count"] = n
+		r.update(v)
+		out.append(r)
+
+	if not int(show_incompatible or 0):
+		# Structural fields stay hidden even when "show incompatible" is on for
+		# the rest: they are not questions at all.
+		out = [r for r in out if r["state"] not in ("incompatible", "structural")]
+	else:
+		out = [r for r in out if r["state"] != "structural"]
+
+	if response_filter == "has":
+		out = [r for r in out if r["answer_count"]]
+	elif response_filter == "none":
+		out = [r for r in out if not r["answer_count"]]
+	elif response_filter == "added":
+		out = [r for r in out if r["state"] == "already_connected"]
+	return out
+
+
+@frappe.whitelist()
+def add_metric_sources(metric_code, questions):
+	"""Add several sources in one call, reporting per-question failures.
+
+	Wraps the existing add_metric_source rather than introducing a second
+	linking model, so permissions and the duplicate guard stay in one place.
+	"""
+	names = frappe.parse_json(questions) or []
+	added, failed = [], []
+	for q in names:
+		try:
+			add_metric_source(metric_code, q)
+			added.append(q)
+		except Exception as e:
+			# Keep going: one bad question must not lose the rest of a
+			# cross-survey selection the user spent time building.
+			failed.append({"question": q, "error": str(e)})
+	return {"added": added, "failed": failed}

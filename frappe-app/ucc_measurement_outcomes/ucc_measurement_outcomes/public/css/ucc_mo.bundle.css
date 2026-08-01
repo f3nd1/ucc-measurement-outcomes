@@ -703,3 +703,31 @@
 .ucc-mo .tree-spacer { width: 26px; flex: 0 0 auto; }
 .ucc-mo .tree-row .mini { flex: 0 0 auto; }
 .ucc-mo .tree-row .collapse-label { display: none; }
+
+/* ================================ SOURCE DRILL-DOWN BROWSER (round 10) ===
+ * Survey type -> survey version -> questions. The SAME markup serves the
+ * Add-source drawer and the Source library tab, so there is one set of rules.
+ * Each column scrolls on its own; the drawer footer never scrolls away. */
+.ucc-mo-metrics .source-browser { display: grid; grid-template-columns: 190px 250px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.ucc-mo-metrics .sb-col { min-width: 0; min-height: 0; display: grid; grid-template-rows: 34px auto minmax(0, 1fr); border-right: 1px solid var(--border); }
+.ucc-mo-metrics .sb-col:last-child { border-right: 0; }
+.ucc-mo-metrics .sb-types, .ucc-mo-metrics .sb-versions { grid-template-rows: 34px minmax(0, 1fr); }
+.ucc-mo-metrics .sb-head { display: flex; align-items: center; padding: 0 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.ucc-mo-metrics .sb-list { overflow: auto; padding: 8px; }
+.ucc-mo-metrics .sb-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); align-items: center; }
+.ucc-mo-metrics .sb-filters input, .ucc-mo-metrics .sb-filters select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; outline: none; min-width: 0; }
+.ucc-mo-metrics .sb-toggle { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
+.ucc-mo-metrics .sb-item { width: 100%; text-align: left; border: 1px solid transparent; border-radius: 9px; background: transparent; padding: 8px; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: start; color: inherit; margin-bottom: 4px; }
+.ucc-mo-metrics .sb-item:hover { background: var(--surface-2); border-color: var(--border); }
+.ucc-mo-metrics .sb-item.selected { background: var(--primary-soft); border-color: #abc1f8; }
+.ucc-mo-metrics .sb-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+.ucc-mo-metrics .sb-question { border: 1px solid var(--border); border-radius: 9px; padding: 9px; display: grid; grid-template-columns: auto 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 5px; cursor: pointer; }
+.ucc-mo-metrics .sb-question:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.ucc-mo-metrics .sb-question.picked { border-color: var(--primary); background: var(--primary-soft); }
+/* Incompatible and already-added stay VISIBLE and explained, just not
+ * selectable - the reason line is the point of showing them at all. */
+.ucc-mo-metrics .sb-question.disabled { opacity: .6; cursor: not-allowed; background: var(--surface-2); }
+.ucc-mo-metrics .sb-intro { padding: 9px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 11px; }
+.ucc-mo-metrics .source-selection-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+.ucc-mo-metrics .mx-drawer.wide { width: min(920px, 94%); grid-template-rows: 42px auto minmax(0, 1fr) auto; }
+.ucc-mo-metrics .mx-library-wrap { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }

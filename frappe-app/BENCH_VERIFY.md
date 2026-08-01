@@ -1770,3 +1770,65 @@ Verify on the bench:
    subtree and does NOT produce a "not connected to a root" warning.
 4. New index from a template creates a Draft with its starter nodes; New metric
    now reads as the primary action in Metrics.
+
+## Template gaps + source drill-down (verify live, v0.19.0)
+
+**ITEM 1 - index templates, option (b) as decided.** 6 of the 7 templates were
+unusable: `build_nodes()` hardcodes metric codes (TEI_REACTION,
+SAPI_GRADUATION, …) into `UCC Index Node.source_metric`, which is a **Link** to
+UCC Metric Definition, so Frappe refused the whole insert when those records did
+not exist. SEQI was the only one that worked, and only because it names no
+metrics at all. `create_index_from_template` now checks each code, leaves the
+link EMPTY where the metric is missing, creates the draft, and msgprints exactly
+which links were dropped. Validation already reports a Metric node with no
+metric, so the gap is visible and actionable rather than blocking.
+Nothing is auto-created: inventing ~27 Metric Definitions would fabricate
+content, each needing a normalisation the template cannot know and each arriving
+sourceless while looking legitimate.
+Verify: create TEI/SAPI/ESI/FSI/QIPI/API - each succeeds with an orange notice
+naming the missing metrics; Validation lists those nodes; SEQI is unchanged.
+
+**ITEM 2 - Index connector lines: deprioritised, not built.** Ruled out as the
+recurring grid bug by measurement first: `_formula()` contains ZERO svg/path/
+edge references. It is an indented tree, never a node graph - the lines were
+never a feature there, so their absence is not a regression.
+
+**ITEM 3 - source selection is now a drill-down, and "Compatible" is real.**
+Department → survey version → questions, loading each level only when asked.
+- **Grouping field: `UCC Survey.owner_department`** (Link to Department).
+  `category` exists but is free-text Data, which would fragment on typos.
+  Interim by decision - see docs/09-decision-log.md.
+- **Compatibility is server-side and derived from the engine.** New pure module
+  `source_eligibility.py` (+ `test_source_eligibility.py`, 22nd suite) reads its
+  rule from what `index_engine.normalise()` actually does: the first thing it
+  does with a value is `float()` it, so anything non-numeric is unscoreable no
+  matter what the UI says. Email/Short Text/Paragraph/Date/File Upload/Ranking
+  are incompatible with a Likert metric; Page Break and Section Heading are
+  structural and never offered; **Yes/No is incompatible with Likert** (it would
+  map yes → (1-1)/4×100 = 0, scoring every yes as zero) and suggests
+  "Yes/No to 100/0" instead. Choice types are eligible only when their choices
+  carry numeric `choice_value`s.
+- **Compatibility and response data are separate verdicts.** A compatible
+  question with no answers is green-eligible with an amber "No answers yet",
+  never "incompatible".
+- **Duplicates by stable ID**, never wording: the check is against
+  `UCC Metric Source.source_question`, so two surveys with identical text remain
+  distinct evidence. Already-added questions stay visible, labelled and disabled.
+- **Selection survives navigation** - changing department, version, search or
+  filter keeps it; only Clear or a successful add empties it. The footer counts
+  survey versions, not just questions.
+- Drawer and Source library are the SAME component with per-mount navigation
+  state and one shared selection set.
+- `search_questions` was deleted: `eligible_questions` supersedes it and the
+  reverse-reachability guard caught it as orphaned.
+
+Measured against the real MetricWorkspace: 3 columns; both empty states correct
+before drilling; after drilling 2 versions → 4 questions with labels
+Compatible / Incompatible / No answers yet / Already added, 2 rows disabled with
+disabled inputs; selecting a question then switching survey version keeps the
+selection ("1 questions selected across 1 survey version(s)").
+
+Verify on the bench: confirm Email and Page Break no longer appear as
+compatible; confirm a Likert metric refuses Yes/No and suggests the right rule;
+confirm adding from two survey versions in one go updates the canvas, connectors
+and validation.

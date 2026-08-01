@@ -1510,7 +1510,7 @@ class MetricWorkspace {
 				}
 			});
 		}
-		if (tab === "library") this._searchLibrary("");
+		if (tab === "library") { this._loadCategories("library"); this._renderPicked(); }
 	}
 
 	// ------------------------------------------------------------- build ---
@@ -1749,77 +1749,223 @@ class MetricWorkspace {
 						label: __("Collapse settings"), shortLabel: __("Settings") } }));
 	}
 
-	// ----------------------------------------------------------- library ---
-	_library() {
+	// ------------------------------------------- source drill-down (round 10) ---
+	// ONE browser, two mounts: the Add-source drawer and the Source library tab
+	// render the same three columns from the same methods and share one
+	// selection set. Two implementations of this would drift on the first
+	// eligibility change, and eligibility is the part that must not drift.
+	//
+	// Navigation state is per-mount (browsing in the drawer must not move the
+	// library), but `picked` is shared, which is what makes a cross-survey
+	// metric buildable: selections survive changing department, version, search
+	// and filter.
+	_nav(where) {
+		this.navState = this.navState || {
+			drawer: { category: null, version: null, search: "", filter: "all", showIncompatible: false },
+			library: { category: null, version: null, search: "", filter: "all", showIncompatible: false },
+		};
+		return this.navState[where];
+	}
+
+	_browser(where) {
 		const U = window.UCCMO;
-		return `<div class="mx-library">
-			${U.pane({ title: __("Filter sources"), icon: "i-filter", body:
-				`<div class="field"><label>${__("Search wording")}</label>
-					<input type="text" data-lib-search placeholder="${__("Search every survey…")}"></div>
-				<div class="published-lock-row">${U.icon("i-warning", "xs")}<div>
-					<b>${__("This is a selection tool")}</b><br>${
-					__("You are still editing {0}. Adding from here returns you to the model.", [this.m.metric_name || this.m.name])}
-				</div></div>` })}
-			<section class="pane">
-				<header class="pane-head">
-					<div class="pane-title-with-icon">${U.icon("i-search", "sm")}<strong>${
-						__("Question library")}</strong><span class="count">${__("cross-survey")}</span></div>
-					${U.button({ label: __("Add selected"), tone: "primary", small: true, icon: "i-plus", act: "add-picked" })}
-				</header>
-				<div class="pane-body" data-lib></div>
-			</section>
-			${U.pane({ title: __("Selected"), icon: "i-check", count: this.picked.size,
-				body: `<div data-picked>${U.empty(__("Tick questions to preview them here."))}</div>` })}
+		const n = this._nav(where);
+		return `<div class="source-browser" data-where="${where}">
+			<div class="sb-col sb-types">
+				<div class="sb-head">${__("1 · Survey type")}</div>
+				<div class="sb-list" data-sb-categories>${U.empty(__("Loading…"))}</div>
+			</div>
+			<div class="sb-col sb-versions">
+				<div class="sb-head">${__("2 · Survey and version")}</div>
+				<div class="sb-list" data-sb-versions>${
+					U.empty(__("Select a survey type to continue."))}</div>
+			</div>
+			<div class="sb-col sb-questions">
+				<div class="sb-head" data-sb-qhead>${__("3 · Questions")}</div>
+				<div class="sb-filters">
+					<input type="text" data-sb-search value="${U.esc(n.search)}"
+						placeholder="${__("Search within this survey…")}">
+					<select data-sb-filter>
+						<option value="all" ${n.filter === "all" ? "selected" : ""}>${__("All eligible")}</option>
+						<option value="has" ${n.filter === "has" ? "selected" : ""}>${__("Has answers")}</option>
+						<option value="none" ${n.filter === "none" ? "selected" : ""}>${__("No answers")}</option>
+						<option value="added" ${n.filter === "added" ? "selected" : ""}>${__("Already added")}</option>
+					</select>
+					<label class="sb-toggle"><input type="checkbox" data-sb-incompatible ${
+						n.showIncompatible ? "checked" : ""}>${__("Show incompatible")}</label>
+				</div>
+				<div class="sb-list" data-sb-questions>${
+					U.empty(__("Select a survey version to view its questions."))}</div>
+			</div>
 		</div>`;
 	}
 
-	_searchLibrary(q) {
+	_loadCategories(where) {
 		const U = window.UCCMO;
-		this.app.call(XAPI + "search_questions", { query: q, limit: 60, exclude_metric: this.s.metric })
-			.then((rows) => {
-				this.libRows = rows || [];
-				this.$el.find("[data-lib]").html(this.libRows.map((r) => `
-					<label class="mx-lib-row">
-						<input type="checkbox" data-pick="${U.esc(r.name)}" ${this.picked.has(r.name) ? "checked" : ""}>
-						<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(r.question_type), "sm")}</span>
-						<span class="question-copy"><b>${U.esc((r.question_text || "").slice(0, 70))}</b>
-							<span class="eyebrow">${U.esc(r.survey || "")} ${
-								U.esc(r.version_number ? "v" + r.version_number : "")} · ${U.esc(r.question_type || "")}</span></span>
-						${U.chip(__("Compatible"), "ok")}
-					</label>`).join("") || U.empty(__("No questions match that search.")));
-				this._renderPicked();
-			});
+		const $c = this.$el.find(`[data-where="${where}"] [data-sb-categories]`);
+		this.app.call(XAPI + "source_categories", {}).then((rows) => {
+			if (!$c.length) return;
+			if (!rows || !rows.length) return $c.html(U.empty(__("No surveys exist yet.")));
+			const n = this._nav(where);
+			$c.html(rows.map((r) => `
+				<button class="sb-item ${r.key === n.category ? "selected" : ""}" data-sb-cat="${U.esc(r.key)}">
+					<span class="type-icon">${U.icon("i-survey", "sm")}</span>
+					<span class="question-copy"><b>${U.esc(r.label)}</b>
+						<span class="eyebrow">${__("{0} surveys · {1} versions", [r.surveys, r.versions])}</span></span>
+				</button>`).join(""));
+		});
+	}
+
+	_loadVersions(where) {
+		const U = window.UCCMO;
+		const n = this._nav(where);
+		const $v = this.$el.find(`[data-where="${where}"] [data-sb-versions]`);
+		$v.html(U.empty(__("Loading…")));
+		this.app.call(XAPI + "source_versions", { category: n.category }).then((rows) => {
+			if (!$v.length) return;
+			if (!rows || !rows.length) return $v.html(U.empty(__("No survey versions in this group.")));
+			$v.html(rows.map((r) => `
+				<button class="sb-item ${r.name === n.version ? "selected" : ""}" data-sb-ver="${U.esc(r.name)}">
+					<span class="type-icon">${U.icon("i-page", "sm")}</span>
+					<span class="question-copy"><b>${U.esc(r.survey_title)}</b>
+						<span class="eyebrow">${U.esc(r.name)} · v${U.esc(r.version_number)}</span>
+						<span class="sb-meta">${U.chip(U.esc(r.status), r.status === "Published" ? "ok" : "")}
+							${U.chip(__("{0} questions", [r.question_count]), "")}
+							${U.chip(__("{0} answers", [r.answer_count]), r.answer_count ? "ok" : "warn")}</span></span>
+				</button>`).join(""));
+		});
+	}
+
+	_loadQuestions(where) {
+		const U = window.UCCMO;
+		const n = this._nav(where);
+		const $q = this.$el.find(`[data-where="${where}"] [data-sb-questions]`);
+		if (!n.version) return $q.html(U.empty(__("Select a survey version to view its questions.")));
+		$q.html(U.empty(__("Loading…")));
+		this.app.call(XAPI + "eligible_questions", {
+			metric_code: this.s.metric, survey_version: n.version,
+			search: n.search, response_filter: n.filter,
+			show_incompatible: n.showIncompatible ? 1 : 0,
+		}).then((rows) => {
+			if (!$q.length) return;
+			this.$el.find(`[data-where="${where}"] [data-sb-qhead]`)
+				.text(__("3 · {0} — {1} questions", [n.version, (rows || []).length]));
+			if (!rows || !rows.length) {
+				return $q.html(U.empty(n.search
+					? __("No questions match this search.")
+					: n.showIncompatible
+						? __("This survey version has no answer-bearing questions.")
+						: __("No questions in this survey are compatible with the metric's current normalisation.")));
+			}
+			$q.html(rows.map((r) => {
+				const on = this.picked.has(r.name);
+				const dis = !r.eligible;
+				const tone = r.state === "eligible" ? "ok"
+					: r.state === "no_response_data" ? "warn"
+					: r.state === "already_connected" ? "" : "warn";
+				const label = r.state === "eligible" ? __("Compatible")
+					: r.state === "no_response_data" ? __("No answers yet")
+					: r.state === "already_connected" ? __("Already added") : __("Incompatible");
+				return `<label class="sb-question ${dis ? "disabled" : ""} ${on ? "picked" : ""}">
+					<input type="checkbox" data-pick="${U.esc(r.name)}" ${on ? "checked" : ""} ${
+						dis ? "disabled" : ""}>
+					<span class="type-icon">${U.icon(window.UCCMOIcons.forQuestionType(r.question_type), "sm")}</span>
+					<span class="question-copy"><b>${U.esc(r.question_text || r.name)}</b>
+						<span class="eyebrow">${U.esc(r.question_type || "")} · ${
+							__("{0} answers", [r.answer_count])}</span>
+						${r.reason ? `<span class="eyebrow">${U.esc(r.reason)}${r.suggested_normalisation
+							? " " + __("Try: {0}", [r.suggested_normalisation]) : ""}</span>` : ""}</span>
+					${U.chip(label, tone)}
+				</label>`;
+			}).join(""));
+		});
+	}
+
+	// Footer says how many SURVEY VERSIONS are represented, not just how many
+	// questions - the cross-survey count is the thing this workspace exists for.
+	_pickedSummary() {
+		const versions = new Set();
+		this.picked.forEach((q) => versions.add((this._pickedVersion || {})[q] || "?"));
+		return { questions: this.picked.size, versions: versions.size };
 	}
 
 	_renderPicked() {
-		const U = window.UCCMO;
-		const $p = this.$el.find("[data-picked]");
-		if (!$p.length) return;
-		const rows = (this.libRows || []).filter((r) => this.picked.has(r.name));
-		$p.html(rows.length ? rows.map((r) => `<div class="mx-info"><div><span>${
-			U.esc(r.survey || "")}</span><b>${U.esc((r.question_text || "").slice(0, 44))}</b></div></div>`).join("")
-			: U.empty(__("Tick questions to preview them here.")));
-		this.$el.find('[data-act="add-picked"]').prop("disabled", !this.picked.size);
+		const s = this._pickedSummary();
+		this.$el.find("[data-sb-count]").text(s.questions
+			? __("{0} questions selected across {1} survey version(s)", [s.questions, s.versions])
+			: __("Nothing selected yet."));
+		this.$el.find('[data-act="add-picked"]').prop("disabled", !s.questions);
+		this.$el.find('[data-act="clear-picked"]').prop("disabled", !s.questions);
 	}
 
 	_addPicked() {
 		const names = [...this.picked];
 		if (!names.length) return;
-		// Sequential, so a duplicate or permission error surfaces against the
-		// question that caused it rather than vanishing into a batch.
-		const next = (i) => {
-			if (i >= names.length) {
-				this.picked.clear();
-				this.app.state.metricsTab = "build";
-				this.sel = { type: "metric" };
-				this.app.toast(__("{0} source(s) added", [names.length]));
-				return this._load();
+		this.app.call(XAPI + "add_metric_sources", {
+			metric_code: this.s.metric, questions: JSON.stringify(names),
+		}).then((r) => {
+			if (!r) return;
+			// Failed items stay selected so they can be reviewed, per the brief.
+			this.picked = new Set((r.failed || []).map((f) => f.question));
+			if ((r.failed || []).length) {
+				frappe.msgprint({
+					title: __("Some sources were not added"), indicator: "orange",
+					message: (r.failed || []).map((f) => `${f.question}: ${f.error}`).join("<br>"),
+				});
+			} else {
+				this._closeDrawer();
 			}
-			this.app.call(XAPI + "add_metric_source", { metric_code: this.s.metric, question: names[i] })
-				.then(() => next(i + 1));
-		};
-		next(0);
+			this.app.toast(__("{0} source(s) added", [(r.added || []).length]));
+			this.app.state.metricsTab = "build";
+			this.sel = { type: "metric" };
+			this._fitted = null;
+			this._load();
+		});
 	}
+
+	_library() {
+		const U = window.UCCMO;
+		return `<div class="mx-library-wrap">
+			${this._browser("library")}
+			<div class="source-selection-footer">
+				<span class="help" data-sb-count>${__("Nothing selected yet.")}</span>
+				<span>${U.button({ label: __("Clear selection"), small: true, act: "clear-picked" })}
+					${U.button({ label: __("Add selected sources"), tone: "primary", small: true,
+								 icon: "i-plus", act: "add-picked" })}</span>
+			</div>
+		</div>`;
+	}
+
+	_openDrawer() {
+		const U = window.UCCMO;
+		this.$el.find(".mx-build").append(`
+			<div class="mx-drawer-back" data-drawer>
+				<aside class="mx-drawer wide">
+					<header class="pane-head">
+						<div class="pane-title-with-icon">${U.icon("i-plus", "sm")}<strong>${
+							__("Add source questions")}</strong></div>
+						${U.button({ label: __("Close"), small: true, act: "close-drawer" })}
+					</header>
+					<div class="sb-intro">
+						<div>${__("Browse by survey type, choose a survey version, then select its questions.")}</div>
+						<div class="eyebrow">${__("1 Survey type › 2 Survey and version › 3 Questions · selections remain while browsing other surveys.")}</div>
+					</div>
+					${this._browser("drawer")}
+					<footer class="source-selection-footer">
+						<span class="help" data-sb-count>${__("Nothing selected yet.")}</span>
+						<span>${U.button({ label: __("Clear selection"), small: true, act: "clear-picked" })}
+							${U.button({ label: __("Add selected sources"), tone: "primary", small: true,
+										 icon: "i-plus", act: "add-picked" })}</span>
+					</footer>
+				</aside>
+			</div>`);
+		this._loadCategories("drawer");
+		this._renderPicked();
+	}
+
+	// Closing discards a draft selection deliberately - it is scoped to the
+	// drawer session, and keeping it would silently re-apply on the next open.
+	_closeDrawer() { this.$el.find("[data-drawer]").remove(); }
 
 	// -------------------------------------------------------- validation ---
 	// Actionable, per the brief: every row says what to DO, and the checks are
@@ -1928,35 +2074,6 @@ class MetricWorkspace {
 			this.render();
 		}), __("New metric"), __("Create"));
 	}
-
-	// The drawer keeps the metric visible behind it, which is the whole point:
-	// adding a source must not feel like leaving what you were editing.
-	_openDrawer() {
-		const U = window.UCCMO;
-		this.picked.clear();
-		this.$el.find(".mx-build").append(`
-			<div class="mx-drawer-back" data-drawer>
-				<aside class="mx-drawer">
-					<header class="pane-head">
-						<div class="pane-title-with-icon">${U.icon("i-plus", "sm")}<strong>${
-							__("Add source questions")}</strong></div>
-						${U.button({ label: __("Close"), small: true, act: "close-drawer" })}
-					</header>
-					<div class="mx-drawer-search">
-						<input type="text" data-drawer-search placeholder="${__("Search question wording…")}">
-					</div>
-					<div class="mx-drawer-list" data-lib></div>
-					<footer class="mx-drawer-foot">
-						<span class="help" data-drawer-count>${__("0 selected")}</span>
-						${U.button({ label: __("Add selected sources"), tone: "primary", icon: "i-plus", act: "add-picked" })}
-					</footer>
-				</aside>
-			</div>`);
-		this._searchLibrary("");
-	}
-
-	_closeDrawer() { this.$el.find("[data-drawer]").remove(); this.picked.clear(); }
-
 	_wire() {
 		const $el = this.$el;
 		$el.off("click.mo input.mo change.mo");
@@ -2036,11 +2153,63 @@ class MetricWorkspace {
 			this.app.render();
 		});
 		$el.on("click.mo", '[data-act="goto-index-ws"]', () => { this.app.ws = "indices"; this.app.render(); });
-		$el.on("input.mo", "[data-lib-search], [data-drawer-search]", (e) => this._searchLibrary(e.target.value));
+		// --- drill-down browser, shared by the drawer and the library tab ---
+		$el.on("click.mo", "[data-sb-cat]", (e) => {
+			const where = $(e.currentTarget).closest("[data-where]").data("where");
+			const n = this._nav(where);
+			n.category = $(e.currentTarget).data("sb-cat");
+			n.version = null;                       // a new group invalidates the version
+			$(e.currentTarget).closest("[data-sb-categories]").find(".sb-item").removeClass("selected");
+			$(e.currentTarget).addClass("selected");
+			this.$el.find(`[data-where="${where}"] [data-sb-questions]`)
+				.html(window.UCCMO.empty(__("Select a survey version to view its questions.")));
+			this._loadVersions(where);
+		});
+		$el.on("click.mo", "[data-sb-ver]", (e) => {
+			const where = $(e.currentTarget).closest("[data-where]").data("where");
+			this._nav(where).version = $(e.currentTarget).data("sb-ver");
+			$(e.currentTarget).closest("[data-sb-versions]").find(".sb-item").removeClass("selected");
+			$(e.currentTarget).addClass("selected");
+			this._loadQuestions(where);
+		});
+		// Debounced: a keystroke per query would hammer the server on a big site.
+		$el.on("input.mo", "[data-sb-search]", (e) => {
+			const where = $(e.currentTarget).closest("[data-where]").data("where");
+			this._nav(where).search = e.target.value;
+			clearTimeout(this._sbT);
+			this._sbT = setTimeout(() => this._loadQuestions(where), 220);
+		});
+		$el.on("change.mo", "[data-sb-filter]", (e) => {
+			const where = $(e.currentTarget).closest("[data-where]").data("where");
+			this._nav(where).filter = e.target.value;
+			this._loadQuestions(where);
+		});
+		$el.on("change.mo", "[data-sb-incompatible]", (e) => {
+			const where = $(e.currentTarget).closest("[data-where]").data("where");
+			this._nav(where).showIncompatible = e.target.checked;
+			this._loadQuestions(where);
+		});
+		// Selection survives every navigation change - that is what makes a
+		// cross-survey metric possible. Only Clear, or a successful add, empties it.
 		$el.on("change.mo", "[data-pick]", (e) => {
-			const n = $(e.currentTarget).data("pick");
-			if (e.currentTarget.checked) this.picked.add(n); else this.picked.delete(n);
-			this.$el.find("[data-drawer-count]").text(__("{0} selected", [this.picked.size]));
+			const where = $(e.currentTarget).closest("[data-where]").data("where");
+			const q = $(e.currentTarget).data("pick");
+			this._pickedVersion = this._pickedVersion || {};
+			if (e.currentTarget.checked) {
+				this.picked.add(q);
+				this._pickedVersion[q] = this._nav(where).version;
+			} else {
+				this.picked.delete(q);
+				delete this._pickedVersion[q];
+			}
+			$(e.currentTarget).closest(".sb-question").toggleClass("picked", e.currentTarget.checked);
+			this._renderPicked();
+		});
+		$el.on("click.mo", '[data-act="clear-picked"]', () => {
+			this.picked.clear();
+			this._pickedVersion = {};
+			this.$el.find("[data-pick]").prop("checked", false);
+			this.$el.find(".sb-question").removeClass("picked");
 			this._renderPicked();
 		});
 		$(window).off("resize.mx").on("resize.mx", () => {

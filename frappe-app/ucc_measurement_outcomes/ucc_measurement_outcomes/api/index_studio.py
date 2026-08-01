@@ -18,6 +18,9 @@ from ucc_measurement_outcomes.index_calc import _lineage_snapshot, calculate_ind
 
 INDEX_VERSION = "UCC Index Version"
 INDEX_DEF = "UCC Index Definition"
+# Named here because create_index_from_template has to check a template's
+# metric links exist before writing them (round-10 Item 1).
+METRIC_DEF = "UCC Metric Definition"
 
 
 def _require(index_version, ptype):
@@ -57,9 +60,34 @@ def create_index_from_template(template_code):
 		"doctype": INDEX_VERSION, "index": template_code,
 		"version_number": f"{n:02d}", "status": "Draft",
 	})
+	# Round-10 Item 1, option (b): the templates hardcode metric codes
+	# (TEI_REACTION, SAPI_GRADUATION, ...) that are Link values into UCC Metric
+	# Definition. On a site where those metrics do not exist yet - which is
+	# every site until someone creates them - Frappe's link validation refused
+	# the whole insert, so 6 of the 7 templates could not be created at all.
+	# SEQI was the only one that worked, and only because it names no metrics.
+	#
+	# The fix is NOT to invent the metrics: auto-creating ~27 Metric Definitions
+	# would fabricate real content, each needing a normalisation the template
+	# cannot know, each arriving sourceless and scoring nothing while looking
+	# legitimate. Instead the draft is created with those links left EMPTY and
+	# the gap is surfaced by validate_index, which already reports a Metric node
+	# with no metric. A visible, actionable gap beats a blocked feature.
+	missing = []
 	for n in index_templates.build_nodes(template_code):
-		version.append("nodes", n)
+		node = dict(n)
+		code = node.get("source_metric")
+		if code and not frappe.db.exists(METRIC_DEF, code):
+			missing.append(code)
+			node["source_metric"] = None
+		version.append("nodes", node)
 	version.insert()
+	if missing:
+		frappe.msgprint(
+			_("Created without {0} metric link(s): {1}. Those nodes score nothing "
+			  "until you create the metrics in the Metrics workspace and attach them. "
+			  "Validation lists them.").format(len(missing), ", ".join(sorted(set(missing)))),
+			title=_("Index created with gaps"), indicator="orange")
 	return version.name
 
 
