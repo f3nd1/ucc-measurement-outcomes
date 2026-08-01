@@ -1562,3 +1562,36 @@ new theme endpoints); every prior round's regression check re-run and passing.
 Items 1/3/4/5 were measured against the real bundled CSS **with Frappe's own
 `.icon` rule loaded first**, and Item 1's check was confirmed to fail without
 the fix. Still not a live bench - deploy and confirm.
+
+## Round-7 Item 1: Objectives canvas connectors (verify live, v0.16.1)
+
+**Deploy status checked first, and it is NOT the round-5 situation.** HEAD is
+6f0b69f = v0.16.0, and the Indices fix (commit 2b59350, v0.15.0) IS in it. But
+that fix cannot help here: the two canvases are **parallel implementations, not
+shared code**. Objectives uses `_canvas()` + `_drawLines()` rendering `.map-node`
+/ `[data-map-node]` with real SVG connectors; Indices uses `_formula()` rendering
+`.node` / `[data-node]` with no SVG at all. `git show 2b59350` touches only
+`_formula()` (the orphan/tree-walk change) - nothing in `_canvas()` or
+`_drawLines()`. Neither uses `node_canvas.js`; the workbench never has.
+So: a genuine separate bug, correctly reported.
+
+**Root cause: CSS grid auto-placement, the same class as round-3 Bug A.**
+`.mapping-stage-inner` is a THREE-track grid - `230px minmax(80px,1fr) 250px`,
+i.e. questions | gutter | objectives - but it only ever has TWO flow children,
+because `.mapping-svg` is `position:absolute` and takes no cell. With both
+`.node-column`s on `grid-column: auto`, auto-placement filled tracks 1 and 2 in
+document order. Measured: question column left 319 width 230 (ends at 549),
+objective column left **549** - flush against it - and track 3 left empty.
+`_drawLines()` was then arithmetically correct and visually useless: x1 (question
+right edge) and x2 (objective left edge) were the *same pixel*, so every Bézier
+collapsed to a ~17px vertical stub. Measured path before:
+`M 280 78.7 C 396 78.7, 240 96.2, 280 96.2` - start x 280, end x 280.
+Nodes selected fine and the inspector updated correctly throughout (verified by
+clicking with a real mouse on the real `ObjectiveWorkspace`, no JS errors) - what
+was broken was that nothing looked *connected*, which reads as a dead canvas.
+Fixed by placing the two columns explicitly in tracks 1 and 3 so the 1fr middle
+track becomes the connector gutter it was designed to be. Measured path after:
+`M 280 78.7 C 396 78.7, 396 96.2, 512 96.2` - **232px of real horizontal span**.
+Verify: open Objectives → Map, pick a question, and confirm a curved line runs
+from the question node across a visible gap to each objective node, green when
+linked. Resize the window and confirm the lines redraw against the nodes.

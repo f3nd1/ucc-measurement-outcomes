@@ -389,6 +389,22 @@
 .ucc-mo .mapping-stage { min-height: 0; position: relative; overflow: auto; background: radial-gradient(circle, #dce4ee 1px, transparent 1px) 0 0/18px 18px, white; }
 .ucc-mo .mapping-stage-inner { position: relative; min-width: 640px; min-height: 520px; height: 100%; padding: 42px 50px; display: grid; grid-template-columns: 230px minmax(80px,1fr) 250px; align-items: start; }
 .ucc-mo .mapping-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+/* Round-7 Item 1, the Objectives canvas "node doesn't work". .mapping-stage-inner
+ * is a THREE-track grid (questions | gutter | objectives) but only ever has TWO
+ * flow children - .mapping-svg is position:absolute and takes no cell. With both
+ * columns on `auto`, grid auto-placement filled tracks 1 and 2 in document order,
+ * so the objectives sat flush against the questions (measured: question column
+ * ends at x=549, objective column starts at x=549) and track 3 stayed empty on
+ * the right. _drawLines() was then correct and useless: x1 (question right) and
+ * x2 (objective left) were the SAME pixel, so every Bezier collapsed to a ~17px
+ * vertical stub and nothing looked connected.
+ * Same class as round-3 Bug A - auto-placement filling the wrong track when the
+ * markup does not supply an item per track - not the round-4 Indices fix
+ * failing, and not node_canvas.js, which this workbench never uses.
+ * Placed explicitly so the 1fr middle track is the connector gutter it was
+ * designed to be. */
+.ucc-mo .mapping-stage-inner > .node-column:first-of-type { grid-column: 1; }
+.ucc-mo .mapping-stage-inner > .node-column:last-of-type { grid-column: 3; }
 .ucc-mo .node-column { position: relative; z-index: 2; }
 .ucc-mo .node-column.objectives { grid-column: 3; display: grid; gap: 14px; }
 .ucc-mo .node-column.question { grid-column: 1; padding-top: 108px; }
