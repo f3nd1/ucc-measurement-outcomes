@@ -2318,8 +2318,12 @@ class IndexWorkspace {
 		// already gate theirs on their own "primary" local tab the same way).
 		if (tab === "formula") {
 			this._renderEditor();
-			// The formula tree draws no SVG, so zoom here is pure presentation -
-			// there is no coordinate contract to honour and nothing to redraw.
+			// STALE COMMENT REMOVED (it said the formula tree draws no SVG and so
+			// has no coordinate contract). It does, since the elbow connectors
+			// were built: _drawTreeEdges is passed as UCCZoom.attach's onChange,
+			// which _apply() calls after every zoom AND every pan. That is the
+			// single correction path - do not add a second one. Measured 0px
+			// drift at 0.5 / 0.7 / 1.0 / 1.3 / 1.75 and after a pan.
 			requestAnimationFrame(() => {
 				const $surface = this.$el.find(".formula-surface");
 				this._zoom = window.UCCZoom.attach($surface.parent().get(0), $surface.get(0),

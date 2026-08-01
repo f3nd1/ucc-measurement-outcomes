@@ -2054,3 +2054,46 @@ button on a live site. Neither can reach a site that way again.
 Same honest limit as the seed test: no database, so Link *targets* are not
 resolved and controller hooks do not fire. `frappe.db.count` returns 0, so the
 version-number probe is exercised only on its first branch.
+
+## Round-12 tasks (v0.27.0)
+
+**Formula connectors — already shipped in v0.20.0, re-verified here.**
+`_drawTreeEdges` is passed as `UCCZoom.attach`'s `onChange`, so it runs inside
+`_apply()` — the single correction path the buttons, wheel, fit and drag-pan all
+go through. No second path exists. Re-measured on the real `IndexWorkspace` with
+a 1-root/6-child SEQI tree: **8 paths (spine + rail + 6 drops), worst drift 0px
+at scale 0.5 / 0.7 / 1.0 / 1.022 / 1.3 / 1.75 and after a pan.** A stale comment
+claiming the tree "draws no SVG" was removed — that assertion was false since
+v0.20.0 and is exactly the kind of stale note this project keeps getting hurt by.
+
+**NPS question for the validation probe — script, not a live edit.**
+`scripts/add_nps_question.py` adds one NPS question to the version an open
+campaign points at. It **refuses on a Published version** and prints the two
+legitimate routes instead: a new version, or a throwaway test survey. Adding a
+question to a version people are already answering would change the instrument
+mid-collection, and `assert_doc_version_editable` would reject the insert anyway.
+Idempotent; explicit `frappe.db.commit()`.
+
+**Guest CSRF path — `scripts/probe_guest_csrf.py`, three cases.**
+Static reading of `frappe/auth.py` v15.83.0 (fetched from source):
+`validate_csrf_token` returns early on `not frappe.session.data.csrf_token`.
+Every earlier probe posted with **no cookie**, so it never exercised the check at
+all. `www/survey.py` reads `session.data.csrf_token` server-side and renders it
+into the page (`context.no_cache = 1`, so it always matches the session it was
+served under) and `survey.html` sends it as `X-Frappe-CSRF-Token`. Both ordinary
+orders therefore pass on inspection. **One ordering does not:** a guest whose
+survey page was rendered *before* the session acquired a token, and who then
+touches `/app` in another tab (`frappe.sessions.get_csrf_token` mints and
+persists one) before submitting — page carries `""`, session now has a token, POST
+is rejected 400 "Invalid Request". Narrow, but real. Case C in the probe.
+**Not fixed. `api/public.py` untouched, as instructed.**
+
+**Branch cleanup.** All four confirmed fully merged into `origin/main`
+(`git merge-base --is-ancestor` against each remote head SHA, 0 unique commits).
+Local copies deleted. **Remote deletion is blocked in this environment** — the
+git proxy silently drops delete refspecs and the GitHub MCP set has no
+delete-branch tool.
+
+**`UCC Standard` investigation:** `docs/13-ucc-standard-findings.md`. Findings
+only, nothing migrated or modified. `scripts/probe_standards_register.py` is
+read-only and fetches the two counts the finding still needs.
