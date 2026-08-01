@@ -897,3 +897,164 @@ Verify:
 4. `bench build --app ucc_measurement_outcomes && bench --site <site> clear-cache`
    required - the Page's route name changed, and page JS is served from the
    getpage response keyed by page name.
+
+## Seven-bug live QA pass on ucc-workbench (verify live, v0.14.2)
+
+Felix ran real-Chrome QA against `/app/ucc-workbench` on ucc-sms-v2.orb.local
+and filed 7 findings in severity order. Fixed 1-6; 7 investigated and NOT
+fixed (see below). A note from Felix going in: an earlier automated pass's
+"workspace nav is broken" finding was a synthetic `.click()` failure, not a
+real bug - not touched here, and nothing about workspace-nav click handling
+changed in this batch.
+
+**1. CRITICAL - page overflow (root-caused by Felix).** `mount()` measured
+`getBoundingClientRect().top` on the mounted root at `on_page_load` time, but
+`frappe.container.add_page()` creates the page wrapper `.hide()`'d
+(`display:none`) BEFORE `on_page_load` runs - verified directly against
+`frappe/public/js/frappe/views/pageview.js` and `container.js`, v15.83.0.
+A `display:none` ancestor makes `getBoundingClientRect()` return an all-zero
+rect, so the offset committed as `12px` against a real chrome height of
+~150-160px, overflowing the page by the difference (Felix measured 146px).
+Fixed: the real measurement now happens in `UCCMO.refit()`, called only from
+`on_page_show` (guaranteed visible - confirmed in the same source, fires
+after `.show()`) and on window resize, never at mount time. `refit()` also
+refuses to commit a measurement of `top <= 0`, so a caller invoking it too
+early is a no-op instead of a silent bad write.
+Verify: open `/app/ucc-workbench`, confirm no whole-page scrollbar and the
+shell's bottom edge sits flush with the viewport on first load (not just
+after a resize). `scripts/qa_page_overflow.js` (new, see below) is a
+permanent non-bench regression check for this exact failure mode - run it
+after touching `mount()`/`refit()` or the `.ucc-mo` height rule.
+
+**2. CRITICAL - no survey/version picker.** Context bar showed static
+title/version text with no way to switch surveys or versions. Fixed by
+reusing the existing `UCCVersionPicker` (`version_picker.js`, already used by
+the old Survey Builder - not rebuilt) via a new `UCCMO.mountPicker()` helper
+that destroys any previous picker instance before mounting a new one, since
+`_draw()` rebuilds the whole context bar on nearly every interaction and a
+naive remount leaks `document`-level click listeners across renders.
+Verify: Survey and Index workspaces both show a working version picker in
+the context bar; switching versions reloads the workspace; the picker's own
+"+ New" / edit actions still work (Survey only - Index deliberately has none,
+no quick-create flow exists for index versions yet).
+
+**3. HIGH - question-type popover help text renders at 7.875px.** My
+`popover()` markup used `<b>`/`<small>` for the type-picker's label/help
+text; the real prototype uses `<strong>`/bare `<span>`. Two things stacked:
+the markup didn't match the CSS selectors the prototype actually targets
+(`.type-btn strong` / `.type-btn span`), and `<small>`'s UA-default
+`font-size: .875em` compounded on top of the already-9px `.type-btn span`
+parent (9 * 0.875 = 7.875). Fixed by matching the prototype's DOM shape
+exactly, verified against the fetched prototype HTML rather than assumed.
+Verify: open the question-type picker, help text under each type name reads
+at a normal, legible size (9px), not visibly tiny.
+
+**4 + 6. HIGH/LOW - question types regressed vs the old Builder.** Three
+things, entangled, fixed together:
+- The `TYPES` palette array had `"Long Text"` as a stored value, but the real
+  `UCC Survey Question.question_type` Select field only accepts
+  `"Paragraph"` - verified against Frappe's real `_validate_selects()`
+  (`frappe/model/base_document.py`) that this would THROW server-side, not
+  just look wrong. This was a functional bug I'd introduced, not cosmetic.
+- `"Ranking"` and `"Page Break"` were missing from the palette entirely -
+  both are backend-valid Select options with no picker entry.
+- `_paginate()` split pages on `"Section Heading"`, but the real
+  respondent-facing renderer (`public/js/survey_form.js`) splits on
+  `"Page Break"` and treats `"Section Heading"` as an in-page `<h4>` only.
+  This meant the workbench's page preview didn't match what respondents
+  actually see, and Section Heading rows were being swallowed entirely
+  (consumed only as a page title, never rendered as an editable row) -
+  a functional regression vs. the old Builder, not just a naming mismatch.
+Fixed: `TYPES` now has all 19 real Select options (`"Paragraph"` label
+"Multiple lines", `"Ranking"` help "Drag to order", `"Page Break"` help
+"Starts a new page"); `mo_icons.js` `BY_TYPE` maps both new types (`Ranking`
+-> `i-multiple` as a deliberate nearest-fit, no ranking icon exists in the
+prototype's 35-symbol set; `Page Break` -> `i-page`, shared with Section
+Heading since both are layout markers per `display_logic.MARKER_TYPES`);
+`_paginate()` now splits on `Page Break` and keeps Section Heading rows in
+the page body as editable rows; the add-page button now inserts a Page
+Break, not a Section Heading.
+Verify: palette shows all 19 types including Ranking and Page Break; adding
+a Section Heading no longer removes it from the canvas; page count in the
+outline matches the number of Page Break questions, not Section Headings;
+saving a Paragraph-type question round-trips without a server-side Select
+validation error.
+
+**5. MEDIUM - side panes not collapsible.** The brief requires the outline
+and inspector panes to collapse to a narrow vertical strip; the click
+handlers (`collapse-left`/`collapse-right`) and column-width state already
+existed, but nothing ever added a `.collapsed` class to the `.pane` itself,
+and the `.hide-collapsed`/`.collapse-label` markup the prototype's CSS
+depends on didn't exist in this app's `pane()`/`inspector()` builders at all.
+Fixed by fetching the real prototype markup and rebuilding both to match:
+a new `o.collapse: {act, label, shortLabel, collapsed, side}` param replaces
+the old one-off `o.headAction`.
+**Also found and fixed a genuine bug in the reference prototype itself**,
+confirmed via live Playwright rendering of the unmodified prototype file:
+`.pane.collapsed .pane-head span` (specificity 0,3,1) beats
+`.pane.collapsed .collapse-label` (specificity 0,3,0) regardless of source
+order, so the vertical label never renders even in the prototype - measured
+`display: none` both before and after collapsing, in the artifact as shipped.
+Worked around with a targeted, commented override rather than editing the
+read-only reference file:
+`.ucc-mo .pane.collapsed .pane-head span.collapse-label { display: block; }`
+Separately, `.inspector-tabs` sits as a sibling of `.pane-head`/`.pane-body`
+in the inspector markup (see `inspector()` in `mo_ui.js`), so none of the
+prototype's own collapse rules reach it - added
+`.ucc-mo .inspector-panel.collapsed .inspector-tabs { display: none; }` so
+the tab row doesn't stay visible/cramped in a collapsed 44px column.
+Verify: clicking collapse on the outline or inspector shrinks it to a narrow
+strip showing only a vertical label and an icon button; the inspector's tab
+row disappears while collapsed; clicking again restores the full pane.
+
+**7. LOW - raw `<br>` in the browser tab title - investigated, NOT fixed.**
+Reported title text: "United Ceres College <br> School Management System".
+Checked everywhere this app could plausibly set it: `hooks.py` sets
+`app_title = "UCC Measurement Outcomes"` (no `<br>`); the `ucc-workbench`
+Page's own `title` field is `"Measurement Outcomes"`; no `document.title` or
+navbar-title write exists anywhere in `ucc_measurement_outcomes`'s JS - the
+few literal `<br>` strings in the codebase are all inside tooltip/message
+HTML (`ucc_workbench.js`), not title text. This app does not touch the
+browser tab title at all, so the string must come from a site-wide source
+(Website Settings / navbar branding, likely in `educ_sg` or core Frappe
+config) with an unescaped `<br>` typed into a title field. Out of scope to
+fix from this app; flagging for whoever owns Website Settings.
+
+## Permanent regression check: scripts/qa_page_overflow.js
+
+A dev-only (not part of `test_*.py`, not run by `check_repo.sh`) Playwright
+script added per Felix's explicit request after Bug 1. It loads the real
+`mo_ui.js`/`mo_icons.js`/`ucc_mo.bundle.css` files, mocks only the one piece
+of real Frappe behaviour Bug 1 depended on (page wrapper starts
+`display:none`, shown later), and asserts:
+- `mount()` never commits a `--ucc-mo-offset` measurement while the wrapper
+  is still hidden (the actual root cause).
+- `refit()` after showing the wrapper commits a realistic offset.
+- The resulting document does not overflow the viewport.
+- A sanity check: replaying the OLD buggy behavior (forcing a 12px offset
+  while hidden) DOES reproduce an overflow, proving the check would have
+  caught this regression rather than trivially passing.
+
+No jQuery dependency - `mount()`/`refit()` only touch six jQuery methods, so
+the script ships a same-sized inline shim rather than vendoring a real
+jQuery build or depending on network access (this sandbox's proxy 403s
+`code.jquery.com`; a real bench has no guaranteed outbound access either).
+
+Run after touching `mount()`/`refit()` in `mo_ui.js` or the `.ucc-mo` height
+rule in `ucc_mo.bundle.css`:
+
+    NODE_PATH=/opt/node22/lib/node_modules node scripts/qa_page_overflow.js
+
+Requires Playwright, which is not a repo dependency - this environment has
+one at `/opt/node22/lib/node_modules`; elsewhere, `npm install playwright`
+or point `NODE_PATH` at wherever it lives.
+
+**This is not the real bench.** The chrome mock (fixed navbar + page head,
+~158px, the figure Felix measured live) is a plausible stand-in, not a
+guarantee that a different theme/site config produces the same numbers -
+Bugs 1-6 above were re-verified by rendering the actual bundled CSS/JS in
+Playwright (font-size computed styles for Bug 3, collapsed-state computed
+`display` for Bug 5's `.collapse-label`/`.inspector-tabs`), which is real
+DOM/CSSOM behavior against the real files, but still not a live bench click
+-through. Confirm all of Bugs 1-6 by hand on `ucc-sms-v2.orb.local` when next
+available.

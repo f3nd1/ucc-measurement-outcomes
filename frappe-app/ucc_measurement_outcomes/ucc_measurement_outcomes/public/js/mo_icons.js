@@ -37,6 +37,17 @@ window.UCCMOIcons = {
 		"Checkbox Grid": "i-grid",
 		"File Upload": "i-upload",
 		"Section Heading": "i-page",
+		// The prototype's 35-symbol set has nothing drawn for "ordered list" - no
+		// icon named ranking/order/drag exists in it (checked against the
+		// artifact's own <symbol> ids, not assumed). i-multiple is the nearest
+		// real fit: a ranking question IS a list of options, just an ordered one,
+		// where every other list-shaped type (single/multiple/dropdown) already
+		// has its own icon. A deliberate nearest-match, not an omission.
+		"Ranking": "i-multiple",
+		// Page Break and Section Heading are both layout markers, not answerable
+		// questions (display_logic.MARKER_TYPES groups them for exactly this
+		// reason), and share the one icon the set has for "a page".
+		"Page Break": "i-page",
 	},
 
 	forQuestionType(type) {

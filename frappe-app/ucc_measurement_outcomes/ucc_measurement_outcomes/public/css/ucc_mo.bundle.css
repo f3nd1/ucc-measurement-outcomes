@@ -101,6 +101,19 @@
 .ucc-mo .pane.collapsed .pane-head strong, .ucc-mo .pane.collapsed .pane-head span, .ucc-mo .pane.collapsed .pane-body, .ucc-mo .pane.collapsed .hide-collapsed { display: none; }
 .ucc-mo .pane.collapsed .collapse-label { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--muted); font-size: 10px; margin-top: 6px; display: block; }
 .ucc-mo .collapse-label { display: none; }
+/* Genuine specificity bug in the PROTOTYPE ITSELF, confirmed by loading the
+ * artifact directly in a browser and collapsing its own left pane: .collapse-
+ * label is a <span>, so the rule two lines up
+ * (".pane.collapsed .pane-head span", 3 classes + 1 type = higher specificity)
+ * beats ".pane.collapsed .collapse-label" (3 classes, no type) regardless of
+ * source order, and the "narrow vertical control" the brief requires never
+ * actually appears - measured empirically: display resolves to "none" even
+ * after .collapsed is applied. This is not something to silently work around;
+ * it is a real defect in the reference file, so it is named as one rather than
+ * quietly patched into an unrelated-looking rule. One override, matching that
+ * span on both class and element so it wins outright rather than merely edging
+ * ahead. */
+.ucc-mo .pane.collapsed .pane-head span.collapse-label { display: block; }
 .ucc-mo .type-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--surface-3); color: var(--muted); display: grid; place-items: center; flex: 0 0 auto; }
 .ucc-mo .type-icon.selected { color: var(--primary); background: var(--primary-soft); }
 .ucc-mo .type-icon.objective { color: var(--success); background: var(--success-soft); }
@@ -149,6 +162,10 @@
 .ucc-mo .add-question .btn { flex: 1; }
 .ucc-mo .published-lock-row { flex: 1; height: 36px; border: 1px dashed var(--border-strong); border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--muted); background: rgba(255,255,255,.7); }
 .ucc-mo .inspector-tabs { height: 34px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 8px; gap: 2px; }
+/* .inspector-tabs is a sibling of .pane-head/.pane-body (see inspector() in mo_ui.js), so the
+   prototype's own .hide-collapsed rule never reaches it - it isn't inside .pane-head. Without
+   this it stays visible as a cramped, unusable tab row in the collapsed 44px column. */
+.ucc-mo .inspector-panel.collapsed .inspector-tabs { display: none; }
 .ucc-mo .inspector-tab { height: 27px; border: 0; border-radius: 7px; padding: 0 8px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 700; }
 .ucc-mo .inspector-tab.active { background: var(--primary-soft); color: var(--primary); }
 .ucc-mo .inspector-panel { display: none; }
@@ -303,11 +320,21 @@
  * looked right and silently lost to every rule below it.
  * The prototype owns the viewport; here it owns a box inside Frappe's page.
  * .app is height:100vh in the prototype, which would overflow past the navbar
- * and the page head. --ucc-mo-offset is measured in JS (mo_ui.mount) and set on
- * the element, because the real offset depends on Frappe's navbar height and
- * whether a page head is rendered - neither is knowable from CSS.
+ * and the page head. --ucc-mo-offset is measured in JS (UCCMO.refit, called
+ * from on_page_show and on resize - never at mount time, which runs while
+ * Frappe's own page wrapper is still display:none; see the comment beside
+ * refit() in mo_ui.js for why) and set on the element, because the real
+ * offset depends on Frappe's navbar height and whether a dev-mode banner or
+ * page head is rendered - none of that is knowable from CSS.
+ *
+ * The 156px fallback is a real measured value (navbar + dev banner + page
+ * container padding on the reference install), not a guess - but it is still
+ * a fallback: it is what renders for the one frame before refit() commits a
+ * real number, and on a site with a taller navbar it will be wrong in the
+ * same direction the old 140px was. min-height keeps that frame usable rather
+ * than collapsed.
  */
-.ucc-mo { height: calc(100vh - var(--ucc-mo-offset, 140px)); min-height: 420px; }
+.ucc-mo { height: calc(100vh - var(--ucc-mo-offset, 156px)); min-height: 420px; }
 .ucc-mo .app { height: 100%; }
 /* Frappe's page container adds padding that fights a fixed-height shell. */
 .page-body .ucc-mo-host { padding: 0; margin: 0; }
@@ -330,3 +357,20 @@
  * inside it BE the .app grid row, instead of the wrapper taking the row and the
  * nav collapsing to its content height. */
 .ucc-mo [data-nav] { display: contents; }
+
+/* window.UCCVersionPicker (public/js/version_picker.js) mounted into the
+ * context bar's title slot - see UCCMO.mountPicker. It is REUSED, not
+ * reimplemented, and it injects its own stylesheet (#ucc-vp-style) with its
+ * own borders/background sized for a standalone control. This blends it into
+ * the context bar's title-row instead of building a second picker: the
+ * trigger loses its box so it reads as the record title (bold, borderless,
+ * matching what the plain title text looked like before), and only shows a
+ * button-like affordance on hover, so the row still looks like a heading at
+ * rest and like something clickable the moment you reach for it. */
+.ucc-mo .context-picker { min-width: 0; }
+.ucc-mo .context-picker .ucc-vp-trigger { border: 0; background: transparent; padding: 2px 6px 2px 0;
+	max-width: none; font-size: 15px; font-weight: 650; color: var(--text); border-radius: 6px; }
+.ucc-mo .context-picker .ucc-vp-trigger:hover { background: var(--surface-3); }
+.ucc-mo .context-picker .ucc-vp-title { font-weight: inherit; }
+.ucc-mo .context-picker .ucc-vp-pill { display: none; }
+.ucc-mo .context-picker .ucc-vp-panel { font-size: 13px; }

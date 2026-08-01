@@ -34,7 +34,12 @@ frappe.pages["ucc-workbench"].on_page_load = function (wrapper) {
 };
 
 frappe.pages["ucc-workbench"].on_page_show = function (wrapper) {
-	if (wrapper.ucc) wrapper.ucc.applyRouteOptions();
+	if (!wrapper.ucc) return;
+	// The page is guaranteed visible here (see mo_ui.js UCCMO.refit for why
+	// mount()-time measurement is not) - this is the reliable place to size the
+	// shell, not a backup for it.
+	window.UCCMO.refit(wrapper.ucc.$root);
+	wrapper.ucc.applyRouteOptions();
 };
 
 const BAPI = "ucc_measurement_outcomes.api.builder.";
@@ -48,9 +53,18 @@ const LAPI = "ucc_measurement_outcomes.api.lineage.";
 // Mirrors api/builder.CHOICE_DEFAULTS + MATRIX_ROW_DEFAULTS' key space. The
 // picker shows what the backend can actually create; a type offered here that
 // add_question rejects would be a dead control.
+const VERSION_STATUS_COLOR = { Draft: "gray", "In Review": "orange", Published: "green", Closed: "gray" };
+
+// The Select field's real options (UCC Survey Question.question_type), which is
+// the authority this list must match exactly - Frappe's own _validate_selects
+// throws "not a valid option" on doc.insert() for anything else. "Long Text"
+// used to be here as a value: it is only a bulk-paste SHORTHAND alias
+// (bulk_parse.py's "long text" -> "Paragraph"), never a stored value, so
+// picking it would have failed on the very first Apply. Ranking and Page Break
+// were missing entirely - not deliberate, a straight omission caught in QA.
 const TYPES = [
 	{ value: "Short Text", help: "One line" },
-	{ value: "Long Text", help: "Paragraph" },
+	{ value: "Paragraph", help: "Multiple lines" },
 	{ value: "Email", help: "Validated address" },
 	{ value: "Number", help: "Numeric only" },
 	{ value: "Date", help: "Calendar date" },
@@ -60,12 +74,20 @@ const TYPES = [
 	{ value: "Dropdown", help: "Compact list" },
 	{ value: "Yes / No", help: "Binary" },
 	{ value: "NPS", help: "0-10 recommend" },
+	{ value: "Ranking", help: "Drag to order" },
 	{ value: "Slider", help: "0-100 range" },
 	{ value: "Likert Matrix", help: "Agreement grid" },
 	{ value: "Multiple Choice Grid", help: "One per row" },
 	{ value: "Checkbox Grid", help: "Many per row" },
 	{ value: "File Upload", help: "Attachment" },
-	{ value: "Section Heading", help: "Page section" },
+	{ value: "Section Heading", help: "In-page heading" },
+	// Page Break, not Section Heading, is the marker the respondent-facing
+	// renderer actually splits pages on - confirmed against survey_form.js
+	// ("Pages are the runs between 'Page Break' markers"). See _paginate()
+	// below for the fix this drove: this workspace used to split on Section
+	// Heading, which meant its "Page 1 / Page 2" never matched what a
+	// respondent would actually see.
+	{ value: "Page Break", help: "Starts a new page" },
 ];
 
 const NORMALISATIONS = [
@@ -212,18 +234,26 @@ class SurveyWorkspace {
 		});
 	}
 
-	// Pages are "Section Heading" questions (decision V5) - there is no page
-	// doctype. Everything before the first heading is page 1.
+	// Pages split on "Page Break", not "Section Heading" - verified against the
+	// actual respondent-facing renderer (public/js/survey_form.js): "Pages are
+	// the runs between 'Page Break' markers... A survey with no Page Break is
+	// simply one page." Section Heading is an IN-PAGE heading there (a bare
+	// <h4>, never a page boundary), so it stays in `items` like any other row -
+	// excluding it would make this outline lie about what a respondent sees,
+	// which is the same class of bug the wording-correction marker exists to
+	// prevent one layer up.
+	//
+	// This was wrong in the first cut of this workspace (it split on Section
+	// Heading), caught in QA alongside Page Break being missing from TYPES
+	// entirely - the two are the same bug: nothing exercised page-break
+	// behaviour because nothing could create one.
 	_paginate() {
 		this.pages = [];
 		let cur = { title: __("Page 1"), items: [] };
 		this.questions.forEach((q) => {
-			if (q.question_type === "Section Heading" && cur.items.length) {
+			if (q.question_type === "Page Break") {
 				this.pages.push(cur);
-				cur = { title: q.question_text || __("Untitled page"), items: [], heading: q };
-			} else if (q.question_type === "Section Heading") {
-				cur.title = q.question_text || cur.title;
-				cur.heading = q;
+				cur = { title: __("Page {0}", [this.pages.length + 1]), items: [] };
 			} else {
 				cur.items.push(q);
 			}
@@ -247,8 +277,7 @@ class SurveyWorkspace {
 		this.$el.html(`
 			${U.contextBar({
 				eyebrow: __("Survey workspace"),
-				title: v.survey_title || v.survey,
-				version: __("Version {0}", [v.version_number]),
+				picker: true,
 				status: v.status,
 				statusTone: published ? "ok" : "warn",
 				statusIcon: published ? "i-lock" : null,
@@ -283,8 +312,31 @@ class SurveyWorkspace {
 			exports: () => this._exportsTab(),
 		}[tab]();
 		this.$el.find("[data-body]").html(body);
+		this._mountPicker();
 		this._wire();
 		if (tab === "build") this._renderInspector();
+	}
+
+	// Bug 2 fix: the context bar's title used to be plain static text - no way
+	// to switch survey or version without leaving the workspace. list_versions
+	// is already the flat, cross-survey list the old Builder's picker used
+	// (see its own docstring), so ONE picker serves as both a survey picker and
+	// a version picker at once - selecting an entry switches both together,
+	// exactly how the old Builder behaved.
+	_mountPicker() {
+		const U = window.UCCMO;
+		U.mountPicker(this, this.$el, {
+			statusColor: VERSION_STATUS_COLOR,
+			placeholder: __("Pick a survey version…"),
+			newLabel: __("+ New survey"),
+			onSelect: (name) => { this.s.surveyVersion = name; this.s.question = null; this._load(); },
+			onEdit: (name) => frappe.set_route("Form", "UCC Survey Version", name),
+			onCreate: () => this._newSurvey(),
+		}, this.versions.map((v) => ({
+			name: v.name,
+			label: (v.survey_title || v.survey) + " — v" + v.version_number,
+			status: v.status,
+		})), this.s.surveyVersion);
 	}
 
 	_build3() {
@@ -321,7 +373,8 @@ class SurveyWorkspace {
 			this.rightCollapsed ? "right-collapsed" : ""}">
 			${U.pane({
 				cls: "left-pane", title: __("Outline"), icon: "i-survey",
-				actions: [{ act: "collapse-left", icon: "i-chevron-left", iconOnly: true, title: __("Collapse") }],
+				collapse: { act: "collapse-left", side: "left", collapsed: !!this.leftCollapsed,
+							label: __("Collapse outline"), shortLabel: __("Outline") },
 				body: `<div class="page-list">${outline}</div>${
 					this.editable ? `<button class="add-page" data-act="add-page">${
 						U.icon("i-plus", "sm")}${__("Add page")}</button>` : ""}`,
@@ -423,7 +476,8 @@ class SurveyWorkspace {
 			tabs: [{ key: "content", label: __("Content") }, { key: "options", label: __("Options") },
 				   { key: "logic", label: __("Logic") }, { key: "mapping", label: __("Mapping") }],
 			tab: itab,
-			headAction: { act: "collapse-right", icon: "i-chevron-right", iconOnly: true, title: __("Collapse") },
+			collapse: { act: "collapse-right", side: "right", collapsed: !!this.rightCollapsed,
+						label: __("Collapse settings"), shortLabel: __("Settings") },
 			body,
 			footer: itab === "mapping" ? "" : U.footerActions(
 				locked
@@ -513,7 +567,8 @@ class SurveyWorkspace {
 					this._load();
 				}));
 		});
-		$el.on("click.mo", '[data-act="add-page"]', () => this._addQuestion("Section Heading"));
+		// Page Break, not Section Heading - see _paginate()'s comment for why.
+		$el.on("click.mo", '[data-act="add-page"]', () => this._addQuestion("Page Break"));
 		$el.on("click.mo", '[data-act="apply"]', () => this._apply());
 		$el.on("click.mo", '[data-act="apply-correction"]', () => this._applyCorrection());
 		$el.on("click.mo", '[data-act="preview"]', () => this._preview());
@@ -1357,8 +1412,7 @@ class IndexWorkspace {
 		this.$el.html(`
 			${U.contextBar({
 				eyebrow: __("Indices workspace"),
-				title: this.builder.index,
-				version: this.s.indexVersion,
+				picker: true,
 				status: published ? __("Published") : __("Draft"),
 				statusTone: published ? "ok" : "warn",
 				statusIcon: published ? "i-lock" : null,
@@ -1388,8 +1442,26 @@ class IndexWorkspace {
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
 				<div data-node-editor></div>
 			</div></div>`);
+		this._mountPicker();
 		this._wire();
 		this._renderEditor();
+	}
+
+	// Bug 2, the same fix as the Survey workspace: static "index name / version"
+	// text with no way to switch either. UCC Index Version has no raw Desk form
+	// route anywhere in this app - the workspace itself is the editor - and
+	// creating a new index from a template is a separate flow (template picker
+	// dialog) not built here, so onEdit/onCreate are both omitted rather than
+	// wired to something that does not exist yet; version_picker.js documents
+	// omitting either as how you hide that affordance.
+	_mountPicker() {
+		window.UCCMO.mountPicker(this, this.$el, {
+			statusColor: VERSION_STATUS_COLOR,
+			placeholder: __("Pick an index version…"),
+			onSelect: (name) => { this.s.indexVersion = name; this._load(); },
+		}, this.versions.map((v) => ({
+			name: v.name, label: v.index + " — v" + v.version_number, status: v.status,
+		})), this.s.indexVersion);
 	}
 
 	_formula() {
