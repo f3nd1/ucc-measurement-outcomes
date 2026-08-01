@@ -1184,3 +1184,130 @@ Felix asked for.
 Verify: any pane title ("Results", "Sources", etc.) and any `.section-label`
 in the same pane now read at the same visual weight; `.count` badges next to
 pane titles are unaffected (still small/muted - that rule was never touched).
+
+## Round-3 design audit on ucc-workbench (verify live, v0.14.4)
+
+Felix measured computed styles and contrast ratios live on v0.14.3. Three
+findings, all fixed. Contrast and font-family were measured as already
+correct and were not touched.
+
+**FINDING 1 - 21 elements rendered browser-default black.** Root cause is not
+21 missing colour rules, it is one missing line in the reset: `<button>` does
+NOT inherit `color` (the UA stylesheet sets `color: buttontext`, i.e. black),
+and `.ucc-mo button, input, select, textarea { font: inherit }` inherits font
+but never colour. So every unclassed tag inside a button fell back to black -
+the 17 `<strong>` type labels inside `.type-btn`, and `.page-title`/`.count`
+inside `.page-item-btn`. Buttons carrying their own colour class (`.btn`,
+`.tab`, `.workspace-btn`, `.add-page`, `.mini`, `.outline-question`,
+`.inspector-tab`, `.segmented button`) were never affected. Fixed with
+`color: inherit` on the button reset, which also covers any bare tag added
+inside a button in future rather than leaving the next one to reintroduce
+this. `.count` additionally got an explicit `var(--muted)` (a count is
+secondary to the label beside it, which `.pane-head span` already said for
+pane titles); `.workspace-btn .count` is the deliberate exception and now
+says `color: inherit` explicitly so it keeps tinting primary when `.active`.
+Measured before: 5 distinct element types black in a component render (17 in
+the real 19-type palette). After: **0 black elements**, all 17 type labels
+rendered.
+Verify: open the Add-question type picker - every type name reads navy, its
+help line muted grey; the survey outline's page name reads navy and its
+count muted, not black.
+
+**FINDING 2 - panes 60-70% empty on low-content records. Chose direction
+(b), keep the full-height pane and treat the remainder.** Direction (a),
+sizing panes to content, was rejected because it contradicts the shell this
+app is built on: `.ucc-mo` is a fixed-height, `overflow:hidden` workbench
+whose panes scroll internally and whose multi-column shells
+(`.builder-shell`, `.objective-shell`, `.metric-layout`, `.index-layout`,
+`.dashboard-layout` - all `height:100%`) depend on columns being the same
+height. Content-sized panes would make the three columns ragged, remove
+independent scrolling, and reintroduce whole-page scrolling, which is exactly
+what round-1 Bug 1 existed to stop.
+Two treatments, both measured:
+1. *Genuinely empty panes, all five workspaces at once.* `.mapping-empty` is
+   the container every `U.empty()` renders, and its default flex row
+   left-aligned one line of text at the top of a full-height pane - the thing
+   that read as broken. `.pane-body > .mapping-empty:only-child` now fills and
+   centres. `:only-child` keeps it to panes that are entirely an empty state;
+   a pane with real content plus an inline empty section is untouched.
+2. *Sparse-but-not-empty, the survey canvas.* Added an "Add another question"
+   affordance below the question list (same dashed `.add-page` pattern the
+   outline already uses for "Add page", same `data-act="add-question"` the
+   header button carries, so no new handler), and let it grow into whatever
+   space is left with a 44px floor. Dead space becomes one large click target
+   for the pane's primary action. It is a click affordance only - this
+   workbench has no drag-and-drop (that was the old Builder), so it is
+   deliberately not styled as a drop zone.
+**Measured across all five workspaces on low-content records (1440x900):**
+
+    survey build   canvas            65% empty -> 2%
+    survey build   outline (list)    81% empty -> 81%  (unchanged, see below)
+    objectives     mapping stage      0% empty -> 0%
+    objectives     inspector (empty) 29% empty -> 2%
+    indices        formula tree      67% empty -> 67%  (unchanged)
+    indices        inspector (empty) 29% empty -> 2%
+    criterion7     inspector (empty) 29% empty -> 2%
+    metrics        three list panes  84-88% empty      (unchanged)
+
+The unchanged ones are deliberate and reported rather than papered over:
+they are narrow list/nav columns (216-250px) and populated detail panes whose
+primary action already sits in the pane head. Whitespace in a sidebar list
+reads as "the list has not filled yet", not as a broken pane, and giving
+"Add page" a 400px dashed target would over-weight a secondary action against
+the canvas's primary one. If Felix wants those treated too, say so - it is a
+per-workspace affordance decision, not a structural one.
+
+**Found while measuring Finding 2, fixed: the inspector was never a grid.**
+`.inspector-panel.active { display: block }` (0,3,0) outranks
+`.pane { display: grid }` (0,2,0), so every inspector silently cancelled the
+pane grid - its body sat at natural height inside a full-height pane, and the
+empty-state fill above did nothing there (`min-height:100%` needs a definite
+parent height). Now `display: grid` with an explicit
+`grid-template-rows: 42px auto 1fr`, because `.inspector-tabs` is an optional
+middle child: `.pane-body` claims the last row through its own
+`grid-row: -2/-1`, tabs auto-place into row 2, and with no tabs that row is
+`auto` and collapses to 0. The prototype's `.right-pane` rule (42px 34px 1fr)
+was the shape meant to do this and is applied to nothing in this app.
+This is the same class of bug `check_repo.sh`'s "Empty state cannot override
+a container's layout" guard exists for, one layer up.
+
+**Also found and fixed: collapsed panes boxed their vertical label.**
+`.pane.collapsed .pane-head` asks for `height: 100%`, but in a 42px first
+grid row that resolves to 42px, so the vertical `.collapse-label` sat in the
+header strip instead of running down the column. Measured: "Settings" needs
+41px of that 42px head - today's two labels fit by ~1px and any longer
+`shortLabel` would clip. `.pane.collapsed { grid-template-rows: 1fr }` gives
+the head the whole pane (measured 42px -> 478px of a 480px pane, label
+unclipped). Declared after `.inspector-panel.active` because the selectors
+tie on specificity and source order decides.
+Verify: collapse the outline and the inspector - the vertical label runs down
+the full column, not just the top strip.
+
+**FINDING 3 - non-standard font weights.** Two separate answers:
+- **650 and 760 are ours** (650 on `.btn`/`.tab`/`.workspace-btn`/`.add-page`,
+  760 on `.big-score`), inherited mechanically from the prototype. Snapped to
+  standard steps: **650 -> 600, 760 -> 800**. 650 is an exact tie between 600
+  and 700 and resolves DOWN so button/tab labels stay lighter than the 700
+  used for chips, field labels and section headers - snapping up would flatten
+  that hierarchy. Fixed at the boundary the values enter through:
+  `scripts/scope_prototype_css.py` now normalises `font-weight` as it emits,
+  so re-running it against a new prototype produces standard steps too rather
+  than silently reintroducing them. The already-generated CSS was updated to
+  match what the generator now produces.
+- **420 is NOT ours - do not chase it.** It appears nowhere in
+  `ucc_mo.bundle.css` (verified by grep, and by rendering our CSS in isolation:
+  the census comes back 400/600/700 with no 420). It is inherited from
+  Frappe's own `body { font-weight: var(--weight-regular) }` in
+  `frappe/public/scss/desk/global.scss` (verified against real v15.83.0
+  source). That is Frappe's design system applying to all of Desk, so
+  overriding it inside `.ucc-mo` would make this app the only page in the
+  bench with a different body weight - a real documented reason to leave it,
+  which is the exception the audit asked to be reported.
+Measured before (our CSS): 650 x5, 760 x1. After: **600 x6, 700 x7, 800 x1 -
+every declared weight a standard step.** Rendered census: 400/600/700 only.
+
+**Not measured here:** all of the above is Playwright against the real bundled
+CSS/JS (computed colour, computed weight, real rect geometry), which is real
+DOM/CSSOM behaviour, but still not a live bench. The 420 conclusion in
+particular is a claim about what Frappe contributes, verified from Frappe's
+source rather than from a running Desk - confirm the census on the bench.

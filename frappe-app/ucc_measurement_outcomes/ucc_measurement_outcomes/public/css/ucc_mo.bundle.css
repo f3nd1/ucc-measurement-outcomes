@@ -25,7 +25,19 @@
 .ucc-mo { width: 100%; height: 100%; }
 .ucc-mo { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); font-size: 13px; overflow: hidden; }
 .ucc-mo button, .ucc-mo input, .ucc-mo select, .ucc-mo textarea { font: inherit; }
-.ucc-mo button { cursor: pointer; }
+/* color:inherit is the root cause fix for the 2026-08-01 round-3 audit finding
+ * that 21 elements rendered browser-default black instead of a design token.
+ * <button> does NOT inherit colour: the UA stylesheet sets `color: buttontext`
+ * (black). The reset one line up inherits `font` but never `color`, so every
+ * unclassed tag inside a button fell back to black - the 17 <strong> type
+ * labels in .type-btn, and .page-title/.count inside .page-item-btn. Buttons
+ * that set their own colour (.btn, .tab, .workspace-btn, .add-page, .mini,
+ * .outline-question, .inspector-tab, .segmented button) are unaffected; they
+ * already win on specificity. The prototype has this same latent gap - its own
+ * buttons all happen to carry a colour-setting class, so it never surfaced
+ * there. Fixing the reset rather than the 21 elements means the next bare tag
+ * added inside a button inherits correctly instead of reintroducing this. */
+.ucc-mo button { cursor: pointer; color: inherit; }
 .ucc-mo svg.icon { width: 16px; height: 16px; display: block; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ucc-mo svg.icon.sm { width: 14px; height: 14px; }
 .ucc-mo svg.icon.xs { width: 12px; height: 12px; }
@@ -39,10 +51,17 @@
 .ucc-mo .icon-btn:hover { background: var(--surface-3); color: var(--text); }
 .ucc-mo .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary-dark); font-weight: 700; font-size: 11px; }
 .ucc-mo .workspace-nav { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 18px; gap: 3px; overflow-x: auto; }
-.ucc-mo .workspace-btn { height: 32px; border: 0; border-radius: 8px; padding: 0 11px; background: transparent; color: var(--muted); font-weight: 650; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.ucc-mo .workspace-btn { height: 32px; border: 0; border-radius: 8px; padding: 0 11px; background: transparent; color: var(--muted); font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
 .ucc-mo .workspace-btn:hover { color: var(--text); background: var(--surface-2); }
 .ucc-mo .workspace-btn.active { color: var(--primary); background: var(--primary-soft); }
-.ucc-mo .workspace-btn .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; display: grid; place-items: center; background: rgba(40,89,217,.1); font-size: 10px; }
+/* A count is secondary to the label it sits beside, everywhere it appears.
+ * .pane-head span already said so for pane titles; this says it for the rest
+ * (.page-item-btn in the survey outline, .pane-title-with-icon in Metrics)
+ * instead of leaving them to inherit whatever their container happens to be. */
+.ucc-mo .count { color: var(--muted); }
+/* The nav pill is the deliberate exception: it inherits .workspace-btn's colour
+ * so it tints with the button, muted normally and primary when .active. */
+.ucc-mo .workspace-btn .count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; display: grid; place-items: center; background: rgba(40,89,217,.1); font-size: 10px; color: inherit; }
 .ucc-mo .workspace { min-height: 0; display: none; grid-template-rows: var(--context-h) var(--tabs-h) var(--status-h) 1fr; }
 .ucc-mo .workspace.active { display: grid; }
 .ucc-mo .context-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
@@ -57,7 +76,7 @@
 .ucc-mo .status.draft { background: var(--primary-soft); color: var(--primary); }
 .ucc-mo .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .ucc-mo .context-actions { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
-.ucc-mo .btn { height: 32px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); padding: 0 11px; font-weight: 650; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.ucc-mo .btn { height: 32px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); padding: 0 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .ucc-mo .btn:hover { background: var(--surface-2); }
 .ucc-mo .btn.primary { background: var(--primary); border-color: var(--primary); color: white; }
 .ucc-mo .btn.primary:hover { background: var(--primary-dark); }
@@ -68,7 +87,7 @@
 .ucc-mo .btn:disabled { opacity: .48; cursor: not-allowed; }
 .ucc-mo .tabs-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .ucc-mo .tabs { display: flex; align-items: center; gap: 2px; height: 100%; overflow-x: auto; }
-.ucc-mo .tab { height: 100%; border: 0; border-bottom: 2px solid transparent; padding: 0 12px; background: transparent; color: var(--muted); font-weight: 650; white-space: nowrap; }
+.ucc-mo .tab { height: 100%; border: 0; border-bottom: 2px solid transparent; padding: 0 12px; background: transparent; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .ucc-mo .tab:hover { color: var(--text); }
 .ucc-mo .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 .ucc-mo .tabs-tools { display: flex; align-items: center; gap: 5px; }
@@ -104,9 +123,9 @@
  * ancestor .pane defines, regardless of how many siblings precede this one.
  * Line -1 is the grid's final explicit row line, -2 the one before it, so
  * this span is the last row whether .pane has 2 rows (42px 1fr, the default/
- * .canvas-pane/.mapping-pane shape) or 3 (42px 34px 1fr, .right-pane's
- * inspector) - a no-op everywhere a .pane-head sibling already put it there
- * correctly via normal auto-placement. */
+ * .canvas-pane/.mapping-pane shape) or 3 (.inspector-panel.active, whose
+ * optional .inspector-tabs row sits between head and body) - a no-op everywhere
+ * a .pane-head sibling already put it there correctly via auto-placement. */
 .ucc-mo .pane-body { min-height: 0; overflow: auto; padding: 10px; grid-row: -2 / -1; }
 .ucc-mo .pane.collapsed .pane-head { height: 100%; border-bottom: 0; padding: 6px; flex-direction: column; justify-content: flex-start; }
 .ucc-mo .pane.collapsed .pane-head strong, .ucc-mo .pane.collapsed .pane-head span, .ucc-mo .pane.collapsed .pane-body, .ucc-mo .pane.collapsed .hide-collapsed { display: none; }
@@ -143,7 +162,7 @@
 .ucc-mo .outline-question.active .outline-icon { background: rgba(40,89,217,.12); color: var(--primary); }
 .ucc-mo .map-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
 .ucc-mo .map-dot.ok { background: var(--success); }
-.ucc-mo .add-page { width: 100%; border: 1px dashed var(--border-strong); color: var(--primary); background: transparent; height: 32px; border-radius: 8px; font-weight: 650; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ucc-mo .add-page { width: 100%; border: 1px dashed var(--border-strong); color: var(--primary); background: transparent; height: 32px; border-radius: 8px; font-weight: 600; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .ucc-mo .canvas-pane { grid-template-rows: 42px 1fr; }
 .ucc-mo .canvas-head-left, .ucc-mo .canvas-head-right { display: flex; align-items: center; gap: 6px; }
 .ucc-mo .segmented { display: inline-flex; align-items: center; padding: 2px; background: var(--surface-3); border-radius: 7px; }
@@ -159,6 +178,17 @@
  * the tab buttons underneath (it has no pointer-events:none - it's meant to
  * be read, not clicked through). */
 .ucc-mo .page-canvas { max-width: 860px; margin: 0 auto; position: relative; }
+/* Round-3 audit Finding 2, the sparse-content half. A short survey left the
+ * canvas ~65% empty below the last question. Panes fill their column by design
+ * (fixed-height, internally-scrolling shell), so option (b) from the audit: keep
+ * the height, give the remainder a deliberate treatment. The "Add another
+ * question" affordance grows to fill whatever is left, turning dead space into
+ * one large click target for the pane's primary action; min-height keeps it a
+ * normal 44px bar once the questions actually fill the canvas. Purely a click
+ * affordance - this workbench has no drag-and-drop (that was the old Builder),
+ * so it is not styled as a drop zone. */
+.ucc-mo .canvas-body > .page-canvas { min-height: 100%; display: flex; flex-direction: column; }
+.ucc-mo .page-canvas > .add-page { flex: 1 1 auto; min-height: 44px; }
 .ucc-mo .page-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .ucc-mo .page-title strong { font-size: 12px; }
 .ucc-mo .page-title span { color: var(--muted); font-size: 10px; }
@@ -188,7 +218,27 @@
 .ucc-mo .inspector-tab { height: 27px; border: 0; border-radius: 7px; padding: 0 8px; background: transparent; color: var(--muted); font-size: 10px; font-weight: 700; }
 .ucc-mo .inspector-tab.active { background: var(--primary-soft); color: var(--primary); }
 .ucc-mo .inspector-panel { display: none; }
-.ucc-mo .inspector-panel.active { display: block; }
+/* `display: grid`, not the prototype's `block`. .inspector-panel.active (0,3,0)
+ * outranks .pane (0,2,0), so `block` was silently cancelling .pane's own grid -
+ * the inspector's body then sat at its natural height inside a full-height pane,
+ * and the Finding 2 empty-state fill (which needs a definite parent height for
+ * min-height:100% to resolve) did nothing here. Explicit 3-row template because
+ * .inspector-tabs is an optional middle child: pane-body claims the last row via
+ * its own grid-row:-2/-1, tabs auto-place into row 2, and when there are no tabs
+ * that row is `auto` and collapses to 0. The prototype's .right-pane rule
+ * (42px 34px 1fr) is the shape this replaces - that class is never applied to
+ * anything in this app, so it was never actually doing the job. */
+.ucc-mo .inspector-panel.active { display: grid; grid-template-rows: 42px auto 1fr; }
+/* A collapsed pane is ALL head - .pane.collapsed .pane-head already asks for
+ * height:100%, but in a 42px first row that resolved to 42px, leaving the
+ * vertical .collapse-label boxed into the header strip instead of running down
+ * the column. Measured: "Settings" needs 41px of a 42px head, so today's two
+ * labels fit by ~1px and any longer shortLabel would clip. One row, so the head
+ * gets the whole pane. Declared after .inspector-panel.active because the two
+ * selectors tie on specificity (0,3,0) and source order is what decides; the
+ * hidden .pane-body sharing row 1 is harmless, it is display:none when
+ * collapsed. */
+.ucc-mo .pane.collapsed { grid-template-rows: 1fr; }
 .ucc-mo .right-pane { grid-template-rows: 42px 34px 1fr; }
 .ucc-mo .field { margin-bottom: 11px; }
 .ucc-mo .field:last-child { margin-bottom: 0; }
@@ -218,6 +268,15 @@
 .ucc-mo .switch:disabled { opacity: .55; cursor: not-allowed; }
 .ucc-mo .mapping-box { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--surface-2); }
 .ucc-mo .mapping-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Round-3 audit Finding 2, the generic half: when a pane's ENTIRE content is an
+ * empty state, .mapping-empty's default flex row left-aligns one line of text at
+ * the very top of a full-height pane, which is what read as broken rather than
+ * empty. Panes fill their column on purpose here - the workbench is a fixed-
+ * height, internally-scrolling shell - so the remainder gets a treatment instead
+ * of the pane getting shorter. :only-child keeps this to genuinely-empty panes;
+ * a pane with real content plus an inline empty section is untouched. Applies to
+ * every workspace at once, since all five build empty states through U.empty(). */
+.ucc-mo .pane-body > .mapping-empty:only-child { min-height: 100%; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; color: var(--muted); }
 .ucc-mo .mapping-empty span { color: var(--warning); font-size: 10px; }
 .ucc-mo .inspector-footer { position: sticky; bottom: -10px; margin: 14px -10px -10px; padding: 9px 10px; border-top: 1px solid var(--border); background: rgba(255,255,255,.96); display: flex; gap: 6px; }
 .ucc-mo .inspector-footer .btn { flex: 1; }
@@ -300,7 +359,7 @@
 .ucc-mo .dashboard-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr) 270px; gap: 10px; }
 .ucc-mo .score-card { border: 1px solid var(--border); border-radius: var(--radius); background: white; padding: 14px; }
 .ucc-mo .score-card h2 { font-size: 12px; margin: 0; }
-.ucc-mo .big-score { font-size: 38px; font-weight: 760; letter-spacing: -.04em; margin-top: 8px; }
+.ucc-mo .big-score { font-size: 38px; font-weight: 800; letter-spacing: -.04em; margin-top: 8px; }
 .ucc-mo .score-card p { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .ucc-mo .bar-list { display: grid; gap: 10px; }
 .ucc-mo .bar-label { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px; }
@@ -397,7 +456,7 @@
  * rest and like something clickable the moment you reach for it. */
 .ucc-mo .context-picker { min-width: 0; }
 .ucc-mo .context-picker .ucc-vp-trigger { border: 0; background: transparent; padding: 2px 6px 2px 0;
-	max-width: none; font-size: 15px; font-weight: 650; color: var(--text); border-radius: 6px; }
+	max-width: none; font-size: 15px; font-weight: 600; color: var(--text); border-radius: 6px; }
 .ucc-mo .context-picker .ucc-vp-trigger:hover { background: var(--surface-3); }
 .ucc-mo .context-picker .ucc-vp-title { font-weight: inherit; }
 .ucc-mo .context-picker .ucc-vp-pill { display: none; }

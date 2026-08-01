@@ -386,6 +386,15 @@ class SurveyWorkspace {
 				<div class="pane-body canvas-body">
 					<div class="page-canvas">
 						<div class="question-list">${rows}</div>
+						${/* Round-3 audit Finding 2: on a short survey the canvas measured
+							~66-70% empty below the last question. The pane deliberately
+							fills its column (see the .pane-body note in ucc_mo.bundle.css),
+							so the fix is a treatment for the remainder, not a shorter pane.
+							Same dashed affordance the outline already uses for "Add page",
+							and the same data-act the header button carries, so it needs no
+							new handler. */""}
+						${this.editable ? `<button class="add-page" data-act="add-question">${
+							U.icon("i-plus", "sm")}${__("Add another question")}</button>` : ""}
 						<div class="canvas-help">${__("Only this page is shown. Use the outline to move between pages.")}</div>
 					</div>
 					${this.editable ? U.popover({

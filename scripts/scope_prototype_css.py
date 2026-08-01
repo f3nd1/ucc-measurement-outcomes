@@ -8,10 +8,30 @@ Rules:
   :root / html / body / *   -> .ucc-mo (the mount point IS the document root here)
   .foo, .foo .bar           -> .ucc-mo .foo, .ucc-mo .foo .bar
   @media / @keyframes       -> prelude kept, body recursed (keyframes NOT scoped)
+  font-weight: 650          -> font-weight: 600 (snap to standard steps)
 """
 import re, sys
 
 ROOTISH = {":root", "html", "body"}
+
+# The prototype uses off-step font weights (650 on .btn/.tab/.workspace-btn/
+# .add-page, 760 on .big-score) - flagged in the 2026-08-01 round-3 design
+# audit as non-standard. Normalising here rather than by hand-editing the
+# generated CSS is the point: this is the boundary the values enter through,
+# so a re-run against a new prototype produces standard steps too instead of
+# silently reintroducing them. Nearest standard step, except 650, which is an
+# exact tie (600 vs 700) and resolves DOWN so button/tab labels stay lighter
+# than the 700 used for chips, field labels and section headers - snapping up
+# would flatten that hierarchy.
+WEIGHT_SNAP = {"420": "400", "650": "600", "760": "800"}
+
+
+def normalise_weights(decls):
+    return re.sub(
+        r"(font-weight:\s*)(\d+)",
+        lambda m: m.group(1) + WEIGHT_SNAP.get(m.group(2), m.group(2)),
+        decls,
+    )
 
 
 def split_top(block):
@@ -63,7 +83,7 @@ def emit(chunks, indent=""):
             inner = emit(split_top(body), indent + "\t")
             out.append("%s%s {\n%s\n%s}" % (indent, head, inner, indent))
         else:
-            decls = " ".join(body.split())
+            decls = normalise_weights(" ".join(body.split()))
             out.append("%s%s { %s }" % (indent, scope_selector(head), decls))
     return "\n".join(out)
 
