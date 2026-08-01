@@ -1058,3 +1058,129 @@ Playwright (font-size computed styles for Bug 3, collapsed-state computed
 DOM/CSSOM behavior against the real files, but still not a live bench click
 -through. Confirm all of Bugs 1-6 by hand on `ucc-sms-v2.orb.local` when next
 available.
+
+## Round-2 live QA pass on ucc-workbench (verify live, v0.14.3)
+
+Felix ran a second real-Chrome pass on `ucc-sms-v2.orb.local` after v0.14.2,
+confirming page overflow and the version picker fixed. Four new items, one
+root cause explaining most of them.
+
+**BUG A (CRITICAL) - pane-body clipped to ~42px, single root cause across 14
+call sites.** `.pane { display: grid; grid-template-rows: 42px 1fr; }`
+assumes a `.pane-head` sibling claims row 1. Fourteen call sites in
+`ucc_workbench.js` hand-roll a `.pane` with ONLY a `.pane-body` child - no
+header - across Survey Responses/Exports/Share/Preview, Objectives
+Coverage/Governance, Metrics Source library/Validation, and Criterion 7's
+main pane. With nothing to claim row 1, CSS grid auto-placement (fills rows
+in document order) puts the lone `.pane-body` THERE instead of the empty
+1fr row below it - confirmed empirically (`offsetParent`/rect measurement
+against the real bundled CSS), not assumed. The data was never wrong -
+Felix's own read of `innerText` on the live DOM confirmed full, correct
+content in every case - it was just rendered into a 42px scrollable sliver.
+Fixed with one rule, not fourteen: `.pane-body { grid-row: -2 / -1; }` -
+line -1 is the last explicit row line of whatever `grid-template-rows` its
+`.pane` ancestor defines, -2 the line before it, so this always spans the
+LAST row regardless of how many siblings precede this element. A no-op for
+the many `.pane` instances that already have a header (2-row `.pane`/
+`.canvas-pane`/`.mapping-pane`, 3-row `.right-pane` inspector) - verified via
+Playwright against all three shapes, before and after.
+Verify: open Survey Responses/Exports, Objectives Coverage/Governance,
+Metrics Source library/Validation, Criterion 7 Overview - each pane-body now
+fills its pane instead of showing one clipped line.
+
+**BUG B (HIGH) - local tab-bar clicks silently swallowed by a mispositioned
+info pill.** `.canvas-help` (the "Only this page is shown..." pill, Survey
+canvas) is `position: absolute; top: 12px; left: 50%`, but NONE of its
+ancestors (`.page-canvas` up through `.ucc-mo`) set `position: relative` -
+confirmed via `element.offsetParent`, which resolved to `<body>`, not the
+canvas. With no positioned ancestor in this app's own markup, the pill's
+`top: 12px` measured from the document root, landing it near the very top of
+the page - over the workspace's tabs-bar - instead of over the canvas
+content it annotates. It has no `pointer-events: none`, so it silently
+absorbed clicks meant for the tab underneath (this is why a real mouse click
+sometimes failed while a synthetic `dispatchEvent` at the same coordinates
+worked - the synthetic event target bypassed whatever was actually on top).
+Fixed two ways: `.page-canvas` now has `position: relative` (the correct,
+root-cause fix - the pill anchors to the canvas as its `left:50%` centering
+clearly intends), and `.canvas-help` now has `pointer-events: none` as
+belt-and-suspenders (it is read-only annotation text in both its usages -
+Survey canvas and the Preview tab - never a button or link).
+Verify: `.canvas-help`'s `offsetParent` is `.page-canvas`, not `body`; a
+real click on any local tab (Content/Preview/Share/Responses/Exports)
+switches it reliably, including immediately after the pill has been visible.
+
+**BUG C (MEDIUM) - side inspector didn't clear across local-tab switches,
+confirmed scope beyond Indices.** Checked all five workspaces with local
+tabs. Survey/Objectives/Metrics already gate their side panel correctly
+(`if (tab === "build")` / `tab === "map"` - only rendered and only refreshed
+on their one relevant tab). **Indices was the exception**: `data-node-editor`
+rendered unconditionally across Formula/Calculate/Results, and
+`_renderEditor()` ran every time regardless of tab, so switching to
+Calculate/Results kept showing whatever the Formula tab's node editor last
+rendered (a selected node's fields, or "Select a node in the formula to edit
+it") - a concept that doesn't apply to either tab. Fixed by scoping
+`data-node-editor` and `_renderEditor()` to `tab === "formula"` only,
+matching every other workspace's pattern; `.index-layout` collapses to a
+single column (`grid-template-columns: 1fr`) on Calculate/Results instead of
+reserving 300px for an editor that no longer renders.
+**Also found, while confirming scope, a more severe instance in Criterion 7**:
+`_fill(tab)` accepted the active tab as a parameter but never branched on it
+- Narrative and Lineage silently rendered the exact same Overview content
+and the same stale "Priority actions" side panel, meaning those two tabs did
+nothing at all when clicked. Rather than leave that copy in place (which
+would keep failing this exact bug class every time Overview's data changed),
+Narrative/Lineage now show an honest "This tab is not built yet" placeholder
+until they get real content - consistent with the standing rule against
+half-finished features that read as complete.
+Verify: Indices Formula → select a node → switch to Calculate - inspector is
+gone, not stale; switch back to Formula - inspector is empty (no node
+selected, correct - selection does not survive the round trip, by design).
+Criterion 7: Narrative/Lineage show the "not built yet" placeholder, not a
+copy of Overview.
+
+**ITEM D (design change) - top branding block and global search removed.**
+`<header class="topbar">` (brand mark + "Measurement Outcomes / United Ceres
+College" + a global search input) sat above the workspace nav, which Felix
+judged redundant now that the nav and context bar establish location.
+`data-global-search` had no keydown handler or shortcut binding anywhere in
+`ucc_workbench.js` - confirmed via full-file grep before removing - so
+nothing load-bearing depended on it. Removed the whole header (nothing
+useful was left in it once brand+search were gone: `.top-actions` was an
+always-empty slot, never filled by anything). `.app`'s grid dropped from
+three rows (`topbar-h nav-h 1fr`) to two (`nav-h 1fr`) to match the two
+remaining children; the `.topbar`/`.brand`/`.search`/`.top-actions` CSS rules
+were removed with the markup, and the ≤900px mobile media query's
+`.workspace-nav`/`.workspace` rules updated to drop their now-nonexistent
+`--topbar-h` dependency. `.icon-btn` (a generic button style, not topbar-
+specific) was left in place. The root `--topbar-h` custom property itself
+was left defined but unused - that whole `:root`-equivalent block is
+mechanically generated by `scripts/scope_prototype_css.py` from the
+prototype file, and hand-pruning one token would create drift from what a
+re-run would produce; an unused CSS variable costs nothing at runtime.
+Verify: `/app/ucc-workbench` opens directly into the workspace nav with no
+branding header above it; page fit (Bug 1's regression check) still passes
+with one fewer grid row.
+
+**ITEM E (design change) - section-label sizing and colour.** `.section-label`
+(e.g. "Scoring", "Priority actions") was `font-size: 10px; color: var(--muted)`
+- identical to `.help`'s body/annotation-text styling in everything but
+weight and uppercase, so it barely read as a header next to ordinary body
+copy. Investigating "primary pane headers like Results" as the target
+surfaced a second, adjacent bug: `pane()`/`inspector()`'s title markup used a
+bare `<span>`, which `.pane-head span { color: var(--muted); font-size: 10px }`
+governs (that rule's real job is styling the `.count` badge next to the
+title - confirmed via grep, nothing else in `.pane-head` uses a bare span) -
+meanwhile `.pane-head strong { font-size: 12px }` existed in the CSS but
+matched nothing, because no title anywhere used `<strong>`. So "Results" and
+every other pane title were ALSO rendering muted and undersized, not the
+correctly-styled reference Felix's instruction implied. Fixed both:
+`pane()`/`inspector()` titles now render as `<strong>`, finally exercising
+the already-written 12px rule (full `var(--text)` ink, since `strong` has no
+colour override - confirmed via computed-style measurement: 12px/700/
+`rgb(23,32,51)`); `.section-label` now matches that exactly on size and
+colour (12px, `var(--text)`), keeping its existing uppercase/letter-spacing/
+weight-700 as the distinguishing "this is a header, not body text" signal
+Felix asked for.
+Verify: any pane title ("Results", "Sources", etc.) and any `.section-label`
+in the same pane now read at the same visual weight; `.count` badges next to
+pane titles are unaffected (still small/muted - that rule was never touched).

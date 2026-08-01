@@ -29,18 +29,12 @@
 .ucc-mo svg.icon { width: 16px; height: 16px; display: block; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ucc-mo svg.icon.sm { width: 14px; height: 14px; }
 .ucc-mo svg.icon.xs { width: 12px; height: 12px; }
-.ucc-mo .app { height: 100vh; display: grid; grid-template-rows: var(--topbar-h) var(--nav-h) 1fr; }
-.ucc-mo .topbar { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 18px; gap: 16px; }
-.ucc-mo .brand { display: flex; align-items: center; gap: 10px; min-width: 250px; }
-.ucc-mo .brand-mark { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: white; background: var(--primary); font-weight: 800; font-size: 11px; }
-.ucc-mo .brand strong { display: block; font-size: 13px; }
-.ucc-mo .brand span { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; }
-.ucc-mo .search { flex: 1; max-width: 520px; position: relative; }
-.ucc-mo .search input { width: 100%; height: 32px; border: 1px solid var(--border); border-radius: 8px; padding: 0 72px 0 32px; background: var(--surface-2); outline: none; }
-.ucc-mo .search input:focus { background: white; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-.ucc-mo .search .icon-wrap { position: absolute; left: 10px; top: 8px; color: var(--muted); }
-.ucc-mo .search .key { position: absolute; right: 9px; top: 7px; color: var(--subtle); font-size: 11px; }
-.ucc-mo .top-actions { display: flex; align-items: center; gap: 6px; }
+/* 2026-08-01: topbar (brand block + global search) removed - the workspace
+ * nav and context bar already establish where you are, so it was redundant
+ * chrome. .app now has one fewer row: nav, then the workspace fills the
+ * rest. .topbar/.brand/.search/.top-actions rules removed with it; .icon-btn
+ * stays, it is a generic button style, not specific to the topbar. */
+.ucc-mo .app { height: 100vh; display: grid; grid-template-rows: var(--nav-h) 1fr; }
 .ucc-mo .icon-btn { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); display: grid; place-items: center; }
 .ucc-mo .icon-btn:hover { background: var(--surface-3); color: var(--text); }
 .ucc-mo .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary-dark); font-weight: 700; font-size: 11px; }
@@ -96,7 +90,24 @@
 .ucc-mo .pane-head span { color: var(--muted); font-size: 10px; }
 .ucc-mo .pane-title-with-icon { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .ucc-mo .pane-title-with-icon > div { min-width: 0; }
-.ucc-mo .pane-body { min-height: 0; overflow: auto; padding: 10px; }
+/* Root cause of the 2026-08-01 "pane-body sized to ~42px" QA finding: .pane's
+ * grid-template-rows (42px header row, 1fr body row) assumes a .pane-head
+ * sibling occupies row 1. Several views hand-roll a .pane with ONLY a
+ * .pane-body child (no header) - e.g. Survey Responses/Exports,
+ * Objectives Coverage/Governance, Metrics Source library/Validation,
+ * Criterion 7's main pane (14 call sites total in ucc_workbench.js, sharing
+ * one copy-pasted shape). With no item to claim row 1, CSS grid auto-
+ * placement (fills rows in document order, starting at the first) puts the
+ * lone .pane-body THERE instead of the empty 1fr row below it - the content
+ * is fully present and correct, just clipped into a 42px scrollable sliver.
+ * Fix: always claim the LAST explicit row of whatever grid-template-rows the
+ * ancestor .pane defines, regardless of how many siblings precede this one.
+ * Line -1 is the grid's final explicit row line, -2 the one before it, so
+ * this span is the last row whether .pane has 2 rows (42px 1fr, the default/
+ * .canvas-pane/.mapping-pane shape) or 3 (42px 34px 1fr, .right-pane's
+ * inspector) - a no-op everywhere a .pane-head sibling already put it there
+ * correctly via normal auto-placement. */
+.ucc-mo .pane-body { min-height: 0; overflow: auto; padding: 10px; grid-row: -2 / -1; }
 .ucc-mo .pane.collapsed .pane-head { height: 100%; border-bottom: 0; padding: 6px; flex-direction: column; justify-content: flex-start; }
 .ucc-mo .pane.collapsed .pane-head strong, .ucc-mo .pane.collapsed .pane-head span, .ucc-mo .pane.collapsed .pane-body, .ucc-mo .pane.collapsed .hide-collapsed { display: none; }
 .ucc-mo .pane.collapsed .collapse-label { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--muted); font-size: 10px; margin-top: 6px; display: block; }
@@ -139,7 +150,15 @@
 .ucc-mo .segmented button { height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 10px; }
 .ucc-mo .segmented button.active { background: white; color: var(--text); box-shadow: 0 1px 2px rgba(16,24,40,.06); }
 .ucc-mo .canvas-body { min-height: 0; overflow: auto; padding: 12px; background: var(--surface-2); }
-.ucc-mo .page-canvas { max-width: 860px; margin: 0 auto; }
+/* position:relative so .canvas-help (position:absolute, top:12px, centered)
+ * anchors HERE. Without it (2026-08-01 QA Bug B), .canvas-help had no
+ * positioned ancestor anywhere in this app's markup and fell through to the
+ * document root - offsetParent measured as <body>, landing the pill 12px
+ * from the top of the WHOLE PAGE instead of the top of the canvas, where it
+ * sat over the workspace's tabs-bar and silently absorbed clicks meant for
+ * the tab buttons underneath (it has no pointer-events:none - it's meant to
+ * be read, not clicked through). */
+.ucc-mo .page-canvas { max-width: 860px; margin: 0 auto; position: relative; }
 .ucc-mo .page-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .ucc-mo .page-title strong { font-size: 12px; }
 .ucc-mo .page-title span { color: var(--muted); font-size: 10px; }
@@ -180,7 +199,14 @@
 .ucc-mo .field input:disabled, .ucc-mo .field textarea:disabled, .ucc-mo .field select:disabled { color: var(--text); background: var(--surface-2); opacity: 1; cursor: not-allowed; }
 .ucc-mo .field-lock { color: var(--subtle); display: inline-flex; align-items: center; gap: 4px; font-weight: 600; text-transform: none; letter-spacing: 0; }
 .ucc-mo .help { color: var(--muted); font-size: 10px; line-height: 1.45; margin-top: 4px; }
-.ucc-mo .section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin: 12px 0 7px; }
+/* 2026-08-01 QA Item E: was the same 10px/var(--muted) as .help (body/annotation
+ * text), so a section header like "Scoring" or "Priority actions" barely read
+ * as one next to ordinary body copy - only weight/uppercase distinguished it.
+ * Sized to match .pane-head strong (a pane's own primary title, 12px) and
+ * given var(--text) - full ink, not the muted grey body text uses - so it
+ * reads as a header, not another line of body copy. Uppercase/letter-spacing/
+ * weight kept; those already did their job, size and colour didn't. */
+.ucc-mo .section-label { font-size: 12px; color: var(--text); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; margin: 12px 0 7px; }
 .ucc-mo .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .ucc-mo .switch-row:last-child { border-bottom: 0; }
 .ucc-mo .switch-row strong { display: block; font-size: 11px; }
@@ -233,7 +259,11 @@
 .ucc-mo .node-meta { display: flex; align-items: center; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
 .ucc-mo .node-handle { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--primary); background: white; position: absolute; right: -8px; top: 50%; transform: translateY(-50%); }
 .ucc-mo .objective-node .node-handle { left: -8px; right: auto; border-color: var(--success); }
-.ucc-mo .canvas-help { position: absolute; z-index: 3; left: 50%; top: 12px; transform: translateX(-50%); border: 1px solid var(--border); background: rgba(255,255,255,.94); color: var(--muted); border-radius: 99px; padding: 6px 10px; font-size: 9px; white-space: nowrap; }
+/* pointer-events:none as belt-and-suspenders: this is read-only annotation
+ * text (no button/link ever lives inside it, in either of its two usages),
+ * so it should never be able to absorb a click even if a future change
+ * reintroduces a positioning mistake like the one .page-canvas just fixed. */
+.ucc-mo .canvas-help { position: absolute; z-index: 3; left: 50%; top: 12px; transform: translateX(-50%); border: 1px solid var(--border); background: rgba(255,255,255,.94); color: var(--muted); border-radius: 99px; padding: 6px 10px; font-size: 9px; white-space: nowrap; pointer-events: none; }
 .ucc-mo .map-line { fill: none; stroke: var(--border-strong); stroke-width: 2; stroke-dasharray: 5 5; }
 .ucc-mo .map-line.linked { stroke: var(--success); stroke-width: 2.5; stroke-dasharray: none; }
 .ucc-mo .node-editor-card { border: 1px solid var(--border); border-radius: 8px; padding: 9px; background: var(--surface-2); margin-bottom: 10px; }
@@ -293,10 +323,8 @@
 @media (max-width: 900px) {
 	.ucc-mo { overflow: auto; }
 	.ucc-mo .app { height: auto; min-height: 100vh; display: block; }
-	.ucc-mo .topbar { height: var(--topbar-h); position: sticky; top: 0; z-index: 60; }
-	.ucc-mo .search { display: none; }
-	.ucc-mo .workspace-nav { height: var(--nav-h); position: sticky; top: var(--topbar-h); z-index: 55; }
-	.ucc-mo .workspace { display: none; min-height: calc(100vh - var(--topbar-h) - var(--nav-h)); grid-template-rows: auto auto auto auto; }
+	.ucc-mo .workspace-nav { height: var(--nav-h); position: sticky; top: 0; z-index: 55; }
+	.ucc-mo .workspace { display: none; min-height: calc(100vh - var(--nav-h)); grid-template-rows: auto auto auto auto; }
 	.ucc-mo .workspace.active { display: block; }
 	.ucc-mo .context-bar { padding: 10px 12px; align-items: flex-start; }
 	.ucc-mo .context-actions .btn:not(.primary), .ucc-mo .version { display: none; }

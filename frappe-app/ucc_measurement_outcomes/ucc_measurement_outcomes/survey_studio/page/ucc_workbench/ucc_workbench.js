@@ -123,20 +123,14 @@ class MeasurementOutcomes {
 		this.render();
 	}
 
+	// The topbar (brand block + global search) was removed 2026-08-01 per
+	// Felix: the workspace nav and context bar already establish where you
+	// are, so it was redundant chrome. data-global-search was never wired to
+	// anything - no keydown handler, no shortcut binding anywhere in this
+	// file - so nothing load-bearing depended on it.
 	_build() {
 		this.$root = window.UCCMO.mount(this.page, `
 			<div class="app">
-				<header class="topbar">
-					<div class="brand">
-						<span class="brand-mark">${window.UCCMO.icon("i-chart")}</span>
-						<div><b>${__("Measurement Outcomes")}</b>
-						<div class="eyebrow">${__("United Ceres College")}</div></div>
-					</div>
-					<div class="search">${window.UCCMO.icon("i-search", "sm")}
-						<input type="text" data-global-search placeholder="${
-							__("Search surveys, objectives, metrics…")}"></div>
-					<div class="top-actions"></div>
-				</header>
 				<div data-nav></div>
 				<main class="workspace active" data-workspace></main>
 			</div>`);
@@ -1433,18 +1427,25 @@ class IndexWorkspace {
 				text: __("Draft. Publish this version before results can be calculated — a result must tie to a frozen formula."),
 				tone: "warn", icon: "i-warning",
 			})}
-			<div class="workarea"><div class="index-layout">
+			<div class="workarea"><div class="index-layout" style="${tab === "formula" ? "" : "grid-template-columns:1fr"}">
 				<section class="pane"><header class="pane-head">
 					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<span>${
 						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</span></div>
 				</header><div class="pane-body">${
 					tab === "formula" ? this._formula() :
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
-				<div data-node-editor></div>
+				${tab === "formula" ? `<div data-node-editor></div>` : ""}
 			</div></div>`);
 		this._mountPicker();
 		this._wire();
-		this._renderEditor();
+		// The node editor is a Formula-tab concept - node selection (this.sel)
+		// only means anything against the formula tree. Calculate/Results have
+		// no node to select, so on 2026-08-01 QA they kept showing whatever the
+		// editor last rendered on Formula (stale, or the "select a node"
+		// placeholder) - confusing chrome unrelated to either tab. Scoped to
+		// match every other workspace's inspector (Survey/Objectives/Metrics all
+		// already gate theirs on their own "primary" local tab the same way).
+		if (tab === "formula") this._renderEditor();
 	}
 
 	// Bug 2, the same fix as the Survey workspace: static "index name / version"
@@ -1655,7 +1656,7 @@ class Criterion7Workspace {
 				{ value: this.results.length, label: __("published results") },
 			], { text: __("Every figure here is the snapshot taken at calculation. Editing a mapping today does not change it."),
 				 tone: "", icon: "i-lock" })}
-			<div class="workarea"><div class="dashboard-layout">
+			<div class="workarea">${tab === "overview" ? `<div class="dashboard-layout">
 				${U.pane({
 					cls: "", title: __("Results"), icon: "i-chart", count: this.results.length,
 					body: this.results.map((r) => `
@@ -1667,9 +1668,17 @@ class Criterion7Workspace {
 				<section class="pane"><div class="pane-body" data-main style="padding:12px">
 					${__("Loading…")}</div></section>
 				<div data-side></div>
-			</div></div>`);
+			</div>` : `<div class="pane" style="height:100%"><div class="pane-body">${
+				U.empty(__("This tab is not built yet. See Overview for the current evidence view."))}</div></div>`}</div>`);
 		this._wire();
-		this._fill(tab);
+		// Overview's Results/main/side dashboard is the only content that
+		// exists for this workspace right now (2026-08-01 QA Bug C: Narrative
+		// and Lineage previously reused Overview's markup and never repainted
+		// for their own tab, since _fill() ignored the tab argument entirely -
+		// switching tabs silently changed nothing). Rather than leave that
+		// stale copy in place, an honest placeholder replaces it until
+		// Narrative/Lineage get real content of their own.
+		if (tab === "overview") this._fill(tab);
 	}
 
 	_fill(tab) {

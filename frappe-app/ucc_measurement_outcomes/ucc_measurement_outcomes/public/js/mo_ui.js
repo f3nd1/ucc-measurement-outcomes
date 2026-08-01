@@ -204,8 +204,8 @@ window.UCCMO = {
 		const collapsed = !!(o.collapse && o.collapse.collapsed);
 		return `<section class="pane ${o.cls || ""} ${collapsed ? "collapsed" : ""}">
 			<header class="pane-head">
-				<div class="hide-collapsed pane-title-with-icon">${o.icon ? this.icon(o.icon, "sm") : ""}<span>${
-					__(o.title)}</span>${o.count === undefined ? "" : `<span class="count">${this.esc(o.count)}</span>`}</div>
+				<div class="hide-collapsed pane-title-with-icon">${o.icon ? this.icon(o.icon, "sm") : ""}<strong>${
+					__(o.title)}</strong>${o.count === undefined ? "" : `<span class="count">${this.esc(o.count)}</span>`}</div>
 				<div class="hide-collapsed">${(o.actions || []).map((a) => this.button(Object.assign({ small: true }, a))).join("")}</div>
 				${o.collapse ? this._collapseButton(o.collapse) : ""}
 			</header>
@@ -236,8 +236,8 @@ window.UCCMO = {
 		const collapsed = !!(o.collapse && o.collapse.collapsed);
 		return `<section class="pane inspector-panel active ${collapsed ? "collapsed" : ""}">
 			<header class="pane-head">
-				<div class="hide-collapsed pane-title-with-icon">${o.icon ? this.icon(o.icon, "sm") : ""}<span>${
-					__(o.title)}</span></div>
+				<div class="hide-collapsed pane-title-with-icon">${o.icon ? this.icon(o.icon, "sm") : ""}<strong>${
+					__(o.title)}</strong></div>
 				${o.collapse ? this._collapseButton(o.collapse) : ""}
 			</header>
 			${tabs ? `<div class="inspector-tabs">${tabs}</div>` : ""}
