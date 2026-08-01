@@ -33,3 +33,4 @@ import "./survey_form.js";
 // component library is the worst version of this bug.
 import "./mo_icons.js";
 import "./mo_ui.js";
+import "./mo_zoom.js";

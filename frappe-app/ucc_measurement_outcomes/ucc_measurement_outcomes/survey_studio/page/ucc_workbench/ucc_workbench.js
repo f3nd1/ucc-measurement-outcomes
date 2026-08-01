@@ -1057,8 +1057,9 @@ class ObjectiveWorkspace {
 					<section class="pane mapping-pane">
 						<header class="pane-head">
 							<div class="pane-title-with-icon">${U.icon("i-target", "sm")}<strong>${__("Mapping")}</strong></div>
-							${U.button({ label: __("Browse all {0}", [(this.coverage.counts || {}).objectives || 0]),
-										 small: true, act: "browse-all" })}
+							<div class="mx-tools">${window.UCCZoom.controls()}
+								${U.button({ label: __("Browse all {0}", [(this.coverage.counts || {}).objectives || 0]),
+											 small: true, act: "browse-all" })}</div>
 						</header>
 						<div class="pane-body mapping-stage"><div class="mapping-stage-inner">
 							${this._canvas()}
@@ -1070,7 +1071,13 @@ class ObjectiveWorkspace {
 		this._wire();
 		if (tab === "map") {
 			this._renderNodeEditor();
-			requestAnimationFrame(() => this._drawLines());
+			requestAnimationFrame(() => {
+				this._zoom = window.UCCZoom.attach(
+					this.$el.find(".mapping-stage").get(0),
+					this.$el.find(".mapping-stage-inner").get(0),
+					() => this._drawLines());
+				this._drawLines();
+			});
 		}
 		if (tab === "governance") this._fillHistory();
 	}
@@ -1109,78 +1116,25 @@ class ObjectiveWorkspace {
 		const $stage = this.$el.find(".mapping-stage-inner");
 		const svg = this.$el.find(".mapping-svg").get(0);
 		if (!svg || !$stage.length) return;
+		// POST-transform pixels in, unscaled stage coordinates out - see the
+		// contract in mo_zoom.js. The SVG lives inside the same transformed
+		// stage, so it draws in unscaled space and the lines stay on the nodes.
+		const k = (this._zoom && this._zoom.scale) || 1;
 		const box = $stage.get(0).getBoundingClientRect();
 		const $q = this.$el.find('[data-map-node="question"]');
 		if (!$q.length) return;
 		const qr = $q.get(0).getBoundingClientRect();
-		const x1 = qr.right - box.left, y1 = qr.top + qr.height / 2 - box.top;
+		const x1 = (qr.right - box.left) / k, y1 = (qr.top + qr.height / 2 - box.top) / k;
 		let paths = "";
 		this.$el.find('.map-node.objective').each((_, el) => {
 			const r = el.getBoundingClientRect();
-			const x2 = r.left - box.left, y2 = r.top + r.height / 2 - box.top;
+			const x2 = (r.left - box.left) / k, y2 = (r.top + r.height / 2 - box.top) / k;
 			const c = Math.max(40, (x2 - x1) / 2);
 			const linked = el.classList.contains("linked");
 			paths += `<path class="map-line ${linked ? "linked" : ""}" d="M ${x1} ${y1} C ${
 				x1 + c} ${y1}, ${x2 - c} ${y2}, ${x2} ${y2}"></path>`;
 		});
 		svg.innerHTML = paths;
-	}
-
-	_renderNodeEditor() {
-		const U = window.UCCMO;
-		const $slot = this.$el.find("[data-node-editor]");
-		const q = this.question;
-		if (!this.sel || this.sel === "question") {
-			$slot.html(U.inspector({
-				title: __("Question"), icon: q ? window.UCCMOIcons.forQuestionType(q.question_type) : "i-survey",
-				body: q ? U.field({ label: __("Question"), name: "qt", type: "textarea",
-									value: q.question_text, locked: true,
-									lockReason: __("Wording is managed in the Survey workspace.") })
-					+ U.field({ label: __("Survey version"), name: "sv", value: this.s.surveyVersion, locked: true })
-					+ U.field({ label: __("Type"), name: "qty", value: q.question_type, locked: true })
-					+ U.button({ label: __("Open in Survey workspace"), small: true, icon: "i-survey", act: "goto-survey" })
-					: U.empty(__("Select a node.")),
-			}));
-			return;
-		}
-		const linked = q && (q.objectives || []).indexOf(this.sel) !== -1;
-		const otab = this.otab || "details";
-		const detail = (this.masters.objectives || []).find((o) => o.name === this.sel) || {};
-		let body;
-		if (otab === "details") {
-			body = U.field({ label: __("Objective code"), name: "oc", value: this.sel, locked: true })
-				+ (detail.objective_name ? U.field({ label: __("Name"), name: "on", value: detail.objective_name, locked: true }) : "")
-				+ (detail.clause_or_criterion ? U.field({ label: __("Clause / criterion"), name: "occ", value: detail.clause_or_criterion, locked: true }) : "")
-				+ (detail.status ? U.field({ label: __("Status"), name: "os", value: detail.status, locked: true }) : "")
-				+ `<div class="help">${__("The objective itself belongs to the institutional register and is not edited here.")}</div>`
-				+ U.button({ label: __("Open in register"), small: true, icon: "i-link", act: "open-register" });
-		} else if (otab === "mapping") {
-			body = `<div class="switch-row"><button class="switch ${linked ? "on" : ""}" data-act="toggle-link"></button>
-					<span>${linked ? __("Linked to this question") : __("Not linked")}</span></div>
-				<div class="help">${__("Linking records evidence lineage. It does not change the index score.")}</div>`
-				+ U.field({ label: __("Primary clause"), name: "primary_clause",
-							value: (q && q.primary_clause) || "", placeholder: __("e.g. 7.1.1") })
-				+ U.field({ label: __("Rationale"), name: "related_clauses", type: "textarea", rows: 3,
-							value: (q && q.related_clauses) || "",
-							placeholder: __("Why this question evidences this objective") });
-		} else {
-			body = `<div class="help">${__("Who linked this and when comes from Frappe's own document history on UCC Question Mapping - there is no second log to disagree with it.")}</div>`
-				+ U.field({ label: __("Source survey version"), name: "asv", value: this.s.surveyVersion, locked: true })
-				+ U.field({ label: __("Question"), name: "aq", value: this.s.question, locked: true })
-				+ U.button({ label: __("Open mapping records"), small: true, icon: "i-history", act: "open-mappings" });
-		}
-		$slot.html(U.inspector({
-			title: this.sel, icon: "i-target",
-			tabs: [{ key: "details", label: __("Details") }, { key: "mapping", label: __("Mapping") },
-				   { key: "audit", label: __("Audit") }],
-			tab: otab, body,
-			footer: otab === "mapping" ? U.footerActions([
-				linked
-					? { label: __("Unlink"), tone: "ghost", icon: "i-unlink", act: "unlink" }
-					: { label: __("Link objective"), tone: "primary", icon: "i-link", act: "link" },
-				{ label: __("Save rationale"), icon: "i-save", act: "save-mapping", disabled: !linked },
-			]) : "",
-		}));
 	}
 
 	// Round-7 Item 2: both tabs used to be passive read-outs with nothing to
@@ -1254,6 +1208,10 @@ class ObjectiveWorkspace {
 		const q = this.question;
 		if (!this.sel || this.sel === "question") {
 			$slot.html(U.inspector({
+				// Round-8 Item 1: the same chevron affordance the Survey inspector
+				// uses, from the same pane()/inspector() collapse component.
+				collapse: { act: "collapse-right", side: "right", collapsed: !!this.rightCollapsed,
+							label: __("Collapse details"), shortLabel: __("Details") },
 				title: __("Question"), icon: q ? window.UCCMOIcons.forQuestionType(q.question_type) : "i-survey",
 				body: q ? U.field({ label: __("Question"), name: "qt", type: "textarea",
 									value: q.question_text, locked: true,
@@ -1292,6 +1250,8 @@ class ObjectiveWorkspace {
 				+ U.button({ label: __("Open mapping records"), small: true, icon: "i-history", act: "open-mappings" });
 		}
 		$slot.html(U.inspector({
+			collapse: { act: "collapse-right", side: "right", collapsed: !!this.rightCollapsed,
+						label: __("Collapse details"), shortLabel: __("Details") },
 			title: this.sel, icon: "i-target",
 			tabs: [{ key: "details", label: __("Details") }, { key: "mapping", label: __("Mapping") },
 				   { key: "audit", label: __("Audit") }],
@@ -1337,6 +1297,14 @@ class ObjectiveWorkspace {
 			this.s.question = $(e.currentTarget).data("q");
 			this.sel = "question";
 			this._draw();
+		});
+		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
+		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
+		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
+		$el.on("click.mo", '[data-act="collapse-right"]', () => {
+			this.rightCollapsed = !this.rightCollapsed;
+			this.$el.find(".objective-shell").toggleClass("right-collapsed", !!this.rightCollapsed);
+			this._renderNodeEditor();
 		});
 		// Coverage/Governance chips are the way back into the Map tab.
 		$el.on("click.mo", '[data-act="go-unmapped"]', () => {
@@ -1519,7 +1487,13 @@ class MetricWorkspace {
 		this._wire();
 		if (tab === "build") {
 			this._renderInspector();
-			requestAnimationFrame(() => this._drawEdges());
+			requestAnimationFrame(() => {
+				this._zoom = window.UCCZoom.attach(
+					this.$el.find("[data-stage]").get(0),
+					this.$el.find(".mx-stage-inner").get(0),
+					() => this._drawEdges());
+				this._drawEdges();
+			});
 		}
 		if (tab === "library") this._searchLibrary("");
 	}
@@ -1537,6 +1511,7 @@ class MetricWorkspace {
 						<span class="mx-legend"><i class="q"></i>${__("Question")}</span>
 						<span class="mx-legend"><i class="m"></i>${__("Metric")}</span>
 						<span class="mx-legend"><i class="x"></i>${__("Index")}</span>
+						${window.UCCZoom.controls()}
 						${U.button({ label: __("Fit"), small: true, act: "fit" })}
 						${U.button({ label: __("Add source"), small: true, tone: "primary", icon: "i-plus", act: "add-source" })}
 					</div>
@@ -1643,11 +1618,17 @@ class MetricWorkspace {
 		const $labels = this.$el.find("[data-edge-labels]");
 		const $metric = this.$el.find('.mx-node.metric');
 		if (!svg || !$inner.length || !$metric.length) return;
+		// getBoundingClientRect reports POST-transform pixels, so every delta is
+		// divided by the zoom scale to get back into the stage's own unscaled
+		// coordinate space - which is the space the SVG (inside the same
+		// transformed stage) actually draws in. Without this the connectors
+		// drift off the nodes the moment anyone zooms.
+		const k = (this._zoom && this._zoom.scale) || 1;
 		const box = $inner.get(0).getBoundingClientRect();
-		svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+		svg.setAttribute("viewBox", `0 0 ${box.width / k} ${box.height / k}`);
 		const mr = $metric.get(0).getBoundingClientRect();
-		const mLeft = { x: mr.left - box.left, y: mr.top + mr.height / 2 - box.top };
-		const mRight = { x: mr.right - box.left, y: mr.top + mr.height / 2 - box.top };
+		const mLeft = { x: (mr.left - box.left) / k, y: (mr.top + mr.height / 2 - box.top) / k };
+		const mRight = { x: (mr.right - box.left) / k, y: (mr.top + mr.height / 2 - box.top) / k };
 		let paths = "", labels = "";
 		const curve = (a, b, cls) => {
 			const c = Math.max(40, (b.x - a.x) / 2);
@@ -1660,14 +1641,14 @@ class MetricWorkspace {
 		};
 		this.$el.find(".mx-node.source").each((i, el) => {
 			const r = el.getBoundingClientRect();
-			const a = { x: r.right - box.left, y: r.top + r.height / 2 - box.top };
+			const a = { x: (r.right - box.left) / k, y: (r.top + r.height / 2 - box.top) / k };
 			curve(a, mLeft, "src");
 			const s = this.sources[i];
 			if (s) label(a, mLeft, s.answers ? __("{0} eligible", [s.answers]) : __("No answers"));
 		});
 		this.$el.find(".mx-node.index").each((i, el) => {
 			const r = el.getBoundingClientRect();
-			const b = { x: r.left - box.left, y: r.top + r.height / 2 - box.top };
+			const b = { x: (r.left - box.left) / k, y: (r.top + r.height / 2 - box.top) / k };
 			curve(mRight, b, "idx");
 			const n = this.indices[i];
 			if (n) label(mRight, b, __("{0}% in index", [n.weight || 0]));
@@ -1746,7 +1727,11 @@ class MetricWorkspace {
 					<div class="help">${__("Objectives are governance and evidence lineage. They are never part of this scoring chain, so they are not drawn on this canvas.")}</div>`;
 			footer = U.footerActions([{ label: __("Save metric"), tone: "primary", icon: "i-save", act: "save-metric" }]);
 		}
-		$slot.html(U.inspector({ title, icon, tabs, tab: this.itab, body, footer }));
+		// Same collapse affordance the Survey inspector uses - one component, not
+		// a second implementation of the same chevron (round-8 Item 1).
+		$slot.html(U.inspector({ title, icon, tabs, tab: this.itab, body, footer,
+			collapse: { act: "collapse-right", side: "right", collapsed: !!this.rightCollapsed,
+						label: __("Collapse settings"), shortLabel: __("Settings") } }));
 	}
 
 	// ----------------------------------------------------------- library ---
@@ -1978,6 +1963,14 @@ class MetricWorkspace {
 		});
 		$el.on("click.mo", '[data-act="new-metric"]', () => this._newMetric());
 		$el.on("click.mo", '[data-act="preview"]', () => this._preview());
+		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
+		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
+		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
+		$el.on("click.mo", '[data-act="collapse-right"]', () => {
+			this.rightCollapsed = !this.rightCollapsed;
+			this.$el.find(".mx-build").toggleClass("right-collapsed", !!this.rightCollapsed);
+			this._renderInspector();
+		});
 		$el.on("click.mo", '[data-act="fit"]', () => {
 			this.$el.find("[data-stage]").get(0).scrollTo({ left: 0, top: 0, behavior: "smooth" });
 			requestAnimationFrame(() => this._drawEdges());
@@ -2110,6 +2103,7 @@ class IndexWorkspace {
 				<section class="pane"><header class="pane-head">
 					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<strong>${
 						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</strong></div>
+					${tab === "formula" ? `<div class="mx-tools">${window.UCCZoom.controls()}</div>` : ""}
 				</header><div class="pane-body">${
 					tab === "formula" ? this._formula() :
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
@@ -2124,7 +2118,15 @@ class IndexWorkspace {
 		// placeholder) - confusing chrome unrelated to either tab. Scoped to
 		// match every other workspace's inspector (Survey/Objectives/Metrics all
 		// already gate theirs on their own "primary" local tab the same way).
-		if (tab === "formula") this._renderEditor();
+		if (tab === "formula") {
+			this._renderEditor();
+			// The formula tree draws no SVG, so zoom here is pure presentation -
+			// there is no coordinate contract to honour and nothing to redraw.
+			requestAnimationFrame(() => {
+				const $surface = this.$el.find(".formula-surface");
+				this._zoom = window.UCCZoom.attach($surface.parent().get(0), $surface.get(0), null);
+			});
+		}
 	}
 
 	// Bug 2, the same fix as the Survey workspace: static "index name / version"
@@ -2276,6 +2278,9 @@ class IndexWorkspace {
 			this.sel = $(e.currentTarget).data("node");
 			this._draw();
 		});
+		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
+		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
+		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
 		$el.on("click.mo", '[data-act="validate"]', () =>
 			this.app.call(IAPI + "validate_index", { index_version: this.s.indexVersion }).then((r) => {
 				if (!r) return;

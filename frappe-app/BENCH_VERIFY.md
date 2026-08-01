@@ -1651,3 +1651,59 @@ is clickable. Governance shows the real audit trail via a new whitelisted
 UCC Question Mapping — no new storage; if Frappe did not record it, the tab
 says so rather than inventing a log. Duplicate-wording chips jump to the
 question. Both tabs have honest empty states.
+
+## Zoom + pan on all three node canvases, chevron consistency (verify live, v0.18.0)
+
+**ITEM 1 - chevron affordance.** Reused `pane()`/`inspector()`'s existing
+`o.collapse` component (the one the Survey inspector already uses, which renders
+`_collapseButton`'s chevron) on the Objectives Question/objective inspector, the
+Metrics "Metric settings" inspector, and the Indices Formula pane. No second
+implementation of the affordance. Note this is the WORKING Survey pattern, so
+those panes now collapse as Survey's do - if a purely decorative glyph was
+wanted instead, say so and it is a smaller change, not a bigger one.
+
+**ITEM 2 - ONE shared helper, `public/js/mo_zoom.js` (`window.UCCZoom`).**
+Decided after costing both: the helper is ~90 lines and each canvas needs ~4
+(attach + three button handlers), against ~70 duplicated lines each. Sharing is
+both smaller AND safer here for one concrete reason - **two of the three canvases
+draw SVG connectors from measured pixel coordinates, and
+`getBoundingClientRect()` reports POST-transform pixels.** Once a stage is scaled
+by k every measured delta is k times too large and the connectors drift off the
+nodes. That is the same class of coordinate bug this project has already shipped
+twice. One `controller.scale` that both renderers divide by is one place to get
+it right; three copies would have been three chances to get it wrong.
+
+Behaviour: +/- buttons and a live percentage that resets on click; **Ctrl/Cmd +
+wheel** to zoom (not bare wheel - these canvases sit in panes that still scroll,
+and hijacking the wheel would make nodes below the fold unreachable);
+drag-to-pan from empty canvas only. Pan ignores any mousedown whose target is
+inside `[data-node], [data-map-node], .map-node, .mx-node, .node, button, a,
+input, select, textarea, label`, so a pan gesture can never become a node click
+or vice versa. Zoom is anchored on the viewport centre.
+
+**Measured, all three canvases:**
+
+    Metrics    connector drift  0px at 100%, 130% and 85% zoom; viewBox stays
+                                unscaled (860x488) at every level
+    Objectives connector drift  0px at 100%, 130% and 85% zoom
+    Indices    no SVG, so zoom is presentation only - transform applies and
+                                resets cleanly, nodes stay clickable
+    pan        x 64 -> 144 for an 80px drag from background; selection unchanged
+    click      a node click after pan+zoom still selects the right node
+
+**Also fixed: a duplicated method block shipped in v0.17.0.** `ObjectiveWorkspace`
+contained TWO byte-identical `_renderNodeEditor()` definitions. Cause: the
+round-7 patch sliced the file between `str.index("_otherTab")` and
+`str.index("_renderNodeEditor")`, but `_renderNodeEditor` occurred FIRST, so the
+slice duplicated everything between them. JS takes the last definition, so
+behaviour was correct and nothing failed - which is exactly why it survived a
+green test run. 57 dead lines removed, one definition left.
+
+Verify on the bench:
+1. Each canvas: +/- change the zoom, the percentage updates, clicking it resets.
+2. Ctrl/Cmd + wheel zooms; a bare wheel still scrolls the pane.
+3. Drag empty canvas to pan; drag starting ON a node must NOT pan, and a plain
+   click on a node must still select it after panning and zooming.
+4. Objectives and Metrics: connectors stay attached to the nodes at every zoom
+   level and after panning - this is the check that matters most.
+5. Collapse chevrons on the three panes behave like the Survey inspector's.

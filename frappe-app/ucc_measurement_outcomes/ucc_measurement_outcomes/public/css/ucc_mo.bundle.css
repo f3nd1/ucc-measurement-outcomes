@@ -678,3 +678,22 @@
  * tab, so they must read as pressable rather than as labels. */
 .ucc-mo .chip-link { border: 1px solid var(--border); cursor: pointer; margin: 0 4px 5px 0; }
 .ucc-mo .chip-link:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+
+/* ============================================= ZOOM + PAN (round-8 Item 2) ===
+ * One helper (public/js/mo_zoom.js) drives all three node canvases, so there is
+ * one set of styles too. The transform goes on the STAGE; the viewport keeps
+ * its own overflow, so a zoomed-out canvas still scrolls normally. */
+.ucc-mo .mx-zoom { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 8px; padding: 1px; }
+.ucc-mo .mx-zoom .mini { width: 24px; height: 24px; }
+.ucc-mo .mx-zoom [data-zoom-level] { font-size: 9px; font-weight: 700; color: var(--muted); min-width: 30px; display: inline-block; text-align: center; }
+/* grab/grabbing only on the background: nodes keep their own pointer, so the
+ * cursor never promises a pan that a node click is about to take instead. */
+.ucc-mo .mapping-stage, .ucc-mo .formula-surface, .ucc-mo-metrics .mx-stage { cursor: grab; }
+.ucc-mo .mapping-stage.mx-panning, .ucc-mo .formula-surface.mx-panning, .ucc-mo-metrics .mx-stage.mx-panning { cursor: grabbing; user-select: none; }
+.ucc-mo .map-node, .ucc-mo .node, .ucc-mo-metrics .mx-node { cursor: pointer; }
+
+/* Round-8 Item 1: the same collapse affordance the Survey inspector already
+ * had, so the three panes it was added to need the same shrunken-column rules
+ * the builder-shell has. */
+.ucc-mo .objective-shell.right-collapsed { grid-template-columns: 230px minmax(0, 1fr) 44px; }
+.ucc-mo-metrics .mx-build.right-collapsed { grid-template-columns: 228px minmax(0, 1fr) 44px; }
