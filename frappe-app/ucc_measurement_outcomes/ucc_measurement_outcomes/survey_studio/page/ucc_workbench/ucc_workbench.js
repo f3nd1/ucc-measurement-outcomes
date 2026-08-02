@@ -114,10 +114,35 @@ class MeasurementOutcomes {
 		this.applyRouteOptions();
 	}
 
+	// frappe.call fires `callback` ONLY on success. With no error handler, a
+	// server-side throw left this promise PENDING FOREVER: every
+	// `.then(() => { toast(...); this._load(); })` in all five workspaces simply
+	// never ran, so a failed write showed no toast, no refresh and no stale-data
+	// warning - the screen just kept showing what it had. That is
+	// indistinguishable from "it saved but the view did not refresh", which is
+	// exactly the ambiguity the 2026-08-02 objectives report ran into.
+	//
+	// `error` now settles it. It resolves rather than rejects so the existing
+	// `if (!r) return;` guards keep working, and `ok` is what a caller checks
+	// before claiming success - Frappe still raises its own error dialog, so
+	// this adds no second message, only an end to the silent hang.
 	call(method, args) {
-		return new Promise((resolve) =>
-			frappe.call({ method, args, callback: (r) => resolve(r.message) }));
+		return new Promise((resolve) => {
+			let settled = false;
+			const done = (v) => { if (!settled) { settled = true; resolve(v); } };
+			frappe.call({
+				method, args,
+				callback: (r) => { this.lastCallOk = true; done(r.message); },
+				error: () => { this.lastCallOk = false; done(undefined); },
+				always: () => done(undefined),
+			});
+		});
 	}
+
+	// True when the most recent call() came back from the server successfully.
+	// A write that claims "Saved" without checking this is claiming something it
+	// does not know.
+	get ok() { return this.lastCallOk !== false; }
 
 	// Deep linking, per the brief's "preserve deep linking" rule. Same
 	// frappe.route_options idiom every other page in this app uses, so a link
@@ -1302,10 +1327,6 @@ class ObjectiveWorkspace {
 			this.sel = "question";
 			this._draw();
 		});
-		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._zoom && this._zoom.fit());
-		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
-		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
-		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
 		$el.on("click.mo", '[data-act="collapse-right"]', () => {
 			this.rightCollapsed = !this.rightCollapsed;
 			this.$el.find(".objective-shell").toggleClass("right-collapsed", !!this.rightCollapsed);
@@ -1372,6 +1393,14 @@ class ObjectiveWorkspace {
 	_link() {
 		this.app.call(MAPI + "connect_nodes", { a: "q:" + this.s.question, b: "o:" + this.sel })
 			.then((r) => {
+				// Three outcomes, not two. A failed call used to be reported as
+				// "Already linked" - the same blue toast a genuine no-op gets -
+				// because both arrive here with a falsy r. Saying "already done"
+				// when nothing happened is what makes a mapping look like it
+				// vanished.
+				if (!this.app.ok) {
+					return this.app.toast(__("Could not link - the server refused. Nothing was saved."), "red");
+				}
 				this.app.toast(r ? __("Objective linked") : __("Already linked"),
 							   r ? "green" : "blue");
 				this._load();
@@ -1389,7 +1418,13 @@ class ObjectiveWorkspace {
 			question: this.s.question, objective: this.sel,
 			primary_clause: this.$el.find('[data-f="primary_clause"]').val(),
 			related_clauses: this.$el.find('[data-f="related_clauses"]').val(),
-		}).then(() => { this.app.toast(__("Mapping saved")); this._load(); });
+		}).then(() => {
+			if (!this.app.ok) {
+				return this.app.toast(__("Could not save the mapping - nothing was written."), "red");
+			}
+			this.app.toast(__("Mapping saved"));
+			this._load();
+		});
 	}
 }
 // =============================================================== METRICS ===
@@ -2301,7 +2336,8 @@ class IndexWorkspace {
 				<section class="pane"><header class="pane-head">
 					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<strong>${
 						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</strong></div>
-					${tab === "formula" ? `<div class="mx-tools">${window.UCCZoom.controls()}</div>` : ""}
+					<!-- No UCCZoom controls on this tab: UCCNodeCanvas renders its own
+					     +/-/reset toolbar and owns the only transform on this canvas. -->
 				</header><div class="pane-body">${
 					tab === "formula" ? this._formula() :
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
@@ -2318,21 +2354,11 @@ class IndexWorkspace {
 		// already gate theirs on their own "primary" local tab the same way).
 		if (tab === "formula") {
 			this._renderEditor();
-			// STALE COMMENT REMOVED (it said the formula tree draws no SVG and so
-			// has no coordinate contract). It does, since the elbow connectors
-			// were built: _drawTreeEdges is passed as UCCZoom.attach's onChange,
-			// which _apply() calls after every zoom AND every pan. That is the
-			// single correction path - do not add a second one. Measured 0px
-			// drift at 0.5 / 0.7 / 1.0 / 1.3 / 1.75 and after a pan.
+			// The canvas needs a mounted element with a real size, so it goes up
+			// after the markup lands. UCCNodeCanvas owns drag, zoom and the edge
+			// maths; nothing else transforms this pane.
 			requestAnimationFrame(() => {
-				const $surface = this.$el.find(".formula-surface");
-				this._zoom = window.UCCZoom.attach($surface.parent().get(0), $surface.get(0),
-					() => this._drawTreeEdges());
-				this._drawTreeEdges();
-				if (this._zoom && this._fitted !== this.s.indexVersion) {
-					this._fitted = this.s.indexVersion;
-					this._zoom.fit();
-				}
+				this._mountFormulaCanvas();
 			});
 		}
 	}
@@ -2383,43 +2409,6 @@ class IndexWorkspace {
 	// Coordinates go through the SAME divide-by-scale correction as the other
 	// two canvases (see mo_zoom.js) - the bug class that has bitten this project
 	// repeatedly, so the contract is honoured rather than rediscovered.
-	_drawTreeEdges() {
-		const surface = this.$el.find(".formula-surface").get(0);
-		const svg = this.$el.find("[data-tree-edges]").get(0);
-		if (!surface || !svg) return;
-		const k = (this._zoom && this._zoom.scale) || 1;
-		const box = surface.getBoundingClientRect();
-		svg.setAttribute("viewBox", `0 0 ${box.width / k} ${box.height / k}`);
-		const at = {};
-		this.$el.find(".tree-row [data-node]").each((_, el) => {
-			const r = el.getBoundingClientRect();
-			at[el.dataset.node] = {
-				cx: (r.left + r.width / 2 - box.left) / k,
-				top: (r.top - box.top) / k,
-				bottom: (r.bottom - box.top) / k,
-			};
-		});
-		const byParent = {};
-		this.nodes.forEach((n) => (byParent[n.parent_key || ""] ||= []).push(n));
-		let paths = "";
-		Object.keys(byParent).forEach((pk) => {
-			const parent = at[pk];
-			if (!parent) return;                     // root row, or a collapsed branch
-			const kids = byParent[pk].map((n) => at[n.node_key]).filter(Boolean);
-			if (!kids.length) return;
-			// Rail sits midway between the parent's bottom and the nearest child.
-			const firstTop = Math.min(...kids.map((c) => c.top));
-			const rail = parent.bottom + (firstTop - parent.bottom) / 2;
-			paths += `<path class="tree-edge" d="M ${parent.cx} ${parent.bottom} L ${parent.cx} ${rail}"></path>`;
-			const xs = kids.map((c) => c.cx).concat([parent.cx]);
-			paths += `<path class="tree-edge" d="M ${Math.min(...xs)} ${rail} L ${Math.max(...xs)} ${rail}"></path>`;
-			kids.forEach((c) => {
-				paths += `<path class="tree-edge" d="M ${c.cx} ${rail} L ${c.cx} ${c.top}"></path>`;
-			});
-		});
-		svg.innerHTML = paths;
-	}
-
 	// Creates a Draft version from one of the standard templates, via the
 	// existing create_index_from_template - the same starter graph the old Index
 	// Studio used, so a new index arrives with real nodes rather than empty.
@@ -2448,67 +2437,111 @@ class IndexWorkspace {
 		});
 	}
 
+	// Bug 1 (2026-08-02). This WAS an indented tree with elbow connectors, and
+	// the shape was wrong in a way the round-12 measurement could not see: the
+	// rows stack VERTICALLY, so the org-chart "rail" spanning the children came
+	// out 3px wide and the six drops became six overlapping vertical lines from
+	// the index straight down through every card above their target. On screen
+	// that reads as one top-to-bottom chain, which is exactly what Felix saw.
+	//
+	// Replaced with window.UCCNodeCanvas - the SAME component Mapping Studio and
+	// the old Index Studio already use: freely positioned draggable nodes,
+	// bezier connectors converging on the index node, positions persisted in the
+	// pos_x/pos_y fields UCC Index Node has carried all along. Not a second
+	// implementation of anything; the tree is gone rather than added to.
 	_formula() {
+		// The canvas mounts into this div after render (it needs a real element
+		// with a size). The orphan warning stays as MARKUP because it is a
+		// correctness statement, not decoration - a node not reachable from a
+		// root is silently excluded from the score by compute_index.
 		const U = window.UCCMO;
-		const byParent = {};
-		this.nodes.forEach((n) => (byParent[n.parent_key || ""] ||= []).push(n));
-		const seen = new Set();
-		// Round-9 Item 3: the same chevron the panes use, on individual nodes.
-		// U._collapseButton is the round-2 component pane()/inspector() already
-		// call - reused here rather than a second chevron implementation. On a
-		// TREE, collapsing a node means hiding its descendants, so the button
-		// only appears on nodes that actually have children.
-		this._collapsed = this._collapsed || new Set();
-		const row = (n, depth) => {
-			seen.add(n.node_key);
-			const kids = (byParent[n.node_key] || []).length;
-			const shut = this._collapsed.has(n.node_key);
-			return `<div class="tree-row" style="padding-left:${depth * 18}px">
-				${kids ? U._collapseButton({ act: "toggle-node", side: shut ? "left" : "right",
-					collapsed: shut, label: shut ? __("Expand {0}", [n.label || n.node_key])
-											   : __("Collapse {0}", [n.label || n.node_key]),
-					shortLabel: "" }).replace('data-act="toggle-node"',
-						`data-act="toggle-node" data-key="${U.esc(n.node_key)}"`)
-					: `<span class="tree-spacer"></span>`}
-				${U.node({
-					key: n.node_key, title: n.label || n.node_key,
-					kicker: n.node_type, meta: n.source_metric || "",
-					kind: n.node_type === "Metric" ? "metric" : n.node_type === "Index" ? "index" : "",
-					selected: this.sel === n.node_key,
-					style: "width:auto",
-				})}
-				<span class="eyebrow">${n.weight ? n.weight + "%" : ""}</span>
-			</div>`;
-		};
-		// `seen` also makes the walk cycle-proof. A cycle cannot be reached from
-		// a root today (every node in one has a parent, so none is a root), but
-		// that is a property of the data shape, not something this should rely
-		// on to avoid hanging the tab.
-		const draw = (key, depth) => (byParent[key] || [])
-			.filter((n) => !seen.has(n.node_key))
-			// A collapsed node keeps its own row and drops its subtree. seen still
-			// records the whole branch, so collapsing never pushes children into
-			// the "not connected to a root" group.
-			.map((n) => {
-				const r = row(n, depth);
-				// Always walk the subtree, even when collapsed: the walk is what
-				// records `seen`, and a hidden branch must not then be reported
-				// as "not connected to a root". Collapsing only drops the MARKUP.
-				const sub = draw(n.node_key, depth + 1);
-				return r + (this._collapsed.has(n.node_key) ? "" : sub);
-			}).join("");
-
-		const tree = draw("", 0);
-		const orphans = this.nodes.filter((n) => !seen.has(n.node_key));
-		if (!tree && !orphans.length) {
-			return `<div class="tree formula-surface">${U.empty(__("This version has no nodes yet."))}</div>`;
-		}
-		return `<div class="tree formula-surface"><svg class="tree-edges" data-tree-edges></svg>${tree}${orphans.length ? `
-			<div class="published-lock-row" style="max-width:520px">${U.icon("i-warning", "xs")}<div>
+		const reachable = new Set();
+		const walk = (key) => this.nodes
+			.filter((n) => (n.parent_key || "") === key && !reachable.has(n.node_key))
+			.forEach((n) => { reachable.add(n.node_key); walk(n.node_key); });
+		walk("");
+		const orphans = this.nodes.filter((n) => !reachable.has(n.node_key));
+		return `${orphans.length ? `<div class="published-lock-row" style="max-width:520px">${
+			U.icon("i-warning", "xs")}<div>
 				<b>${__("{0} node(s) are not connected to a root", [orphans.length])}</b><br>${
-				__("Their parent is missing, is another unconnected node, or every node has a parent so there is no root. They are shown below and can still be edited; Validate explains what to fix.")}
-			</div></div>
-			${orphans.map((n) => row(n, 0)).join("")}` : ""}</div>`;
+				__("Their parent is missing, is another unconnected node, or every node has a parent so there is no root. They are still on the canvas and can be edited; Validate explains what to fix.")}
+			</div></div>` : ""}
+			<div class="formula-canvas" data-formula-canvas style="height:520px"></div>`;
+	}
+
+	// One mount, reused across redraws. UCCNodeCanvas owns its own scale and
+	// divides by it in _drawEdges, so there is exactly ONE transform on this
+	// canvas - do not also attach UCCZoom here, that would scale the stage twice
+	// and put the connectors back where this bug started.
+	_mountFormulaCanvas() {
+		const host = this.$el.find("[data-formula-canvas]").get(0);
+		if (!host || !window.UCCNodeCanvas) return;
+		this._canvas = new window.UCCNodeCanvas(host, {
+			onSelect: (n) => { this.sel = n.id; this._renderEditor(); },
+			onMove: (n) => this._onNodeMove(n),
+		});
+		// Same gesture the tree had, routed to the canvas's own zoom rather than
+		// to a second zoom implementation.
+		host.addEventListener("wheel", (e) => {
+			e.preventDefault();
+			this._canvas.zoom(e.deltaY < 0 ? 0.1 : -0.1);
+		}, { passive: false });
+		this._paintFormulaCanvas();
+	}
+
+	_paintFormulaCanvas() {
+		if (!this._canvas) return;
+		// Default layout when a node has never been dragged: metrics in a column
+		// on the LEFT, the index they feed on the RIGHT, vertically centred on
+		// them. That order matters - UCCNodeCanvas draws each edge from the
+		// source node's right edge to the target's left and puts the arrowhead
+		// at the target, so metrics-left/index-right is what makes the curves
+		// read as converging INTO the index. Once dragged, pos_x/pos_y win.
+		const children = this.nodes.filter((n) => n.parent_key);
+		const roots = this.nodes.filter((n) => !n.parent_key);
+		const spread = 96;
+		const cnodes = this.nodes.map((n) => {
+			const isRoot = !n.parent_key;
+			const rank = isRoot ? roots.indexOf(n) : children.indexOf(n);
+			return {
+				id: n.node_key,
+				type: (n.node_type || "metric").toLowerCase(),
+				title: n.label || n.node_key,
+				sub: n.node_type === "Metric"
+					? (n.source_metric || __("no metric yet")) + (n.weight ? ` · ${n.weight}%` : "")
+					: (n.weight ? `${n.weight}%` : ""),
+				x: n.pos_x || (isRoot ? 420 : 40),
+				y: n.pos_y || (isRoot
+					? 40 + Math.max(0, children.length - 1) * spread / 2 + rank * spread
+					: 40 + rank * spread),
+			};
+		});
+		// Child -> parent, so every metric curve converges on the index node.
+		// Objectives are never nodes here (docs/09-decision-log.md).
+		const edges = children.map((n) => [n.node_key, n.parent_key]);
+		this._canvas.setGraph(cnodes, edges);
+		if (this.sel) this._canvas.selected = this.sel;
+		if (!cnodes.length) {
+			this._canvas.setEmpty({
+				message: this.editable
+					? __("This index version has no nodes yet. Start from a template.")
+					: __("This published version has no nodes."),
+			});
+		}
+	}
+
+	_onNodeMove(cnode) {
+		const n = this.nodes.find((x) => x.node_key === cnode.id);
+		if (!n) return;
+		n.pos_x = cnode.x;
+		n.pos_y = cnode.y;
+		// Layout only. Published versions are frozen server-side by
+		// UCCIndexVersion.validate, so this is not even attempted on one -
+		// dragging still works locally, it just is not persisted.
+		if (!this.editable) return;
+		this.app.call(IAPI + "save_nodes", {
+			index_version: this.s.indexVersion, nodes: JSON.stringify(this.nodes),
+		});
 	}
 
 	_calculate() {
@@ -2585,21 +2618,13 @@ class IndexWorkspace {
 	_wire() {
 		const $el = this.$el;
 		$el.off("click.mo");
-		$el.on("click.mo", "[data-node]", (e) => {
-			this.sel = $(e.currentTarget).data("node");
-			this._draw();
-		});
+		// Node selection arrives through UCCNodeCanvas.onSelect, which updates
+		// the inspector WITHOUT a _draw() - redrawing would unmount the canvas
+		// and lose the drag positions the user just made.
 		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._zoom && this._zoom.fit());
 		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
 		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
 		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
-		$el.on("click.mo", '[data-act="toggle-node"]', (e) => {
-			e.stopPropagation();          // never let the chevron select the node
-			const k = $(e.currentTarget).data("key");
-			this._collapsed = this._collapsed || new Set();
-			if (this._collapsed.has(k)) this._collapsed.delete(k); else this._collapsed.add(k);
-			this._draw();
-		});
 		$el.on("click.mo", '[data-act="new-index"]', () => this._newIndex());
 		$el.on("click.mo", '[data-act="validate"]', () =>
 			this.app.call(IAPI + "validate_index", { index_version: this.s.indexVersion }).then((r) => {

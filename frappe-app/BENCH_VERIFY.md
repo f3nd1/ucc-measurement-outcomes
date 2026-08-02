@@ -2097,3 +2097,98 @@ delete-branch tool.
 **`UCC Standard` investigation:** `docs/13-ucc-standard-findings.md`. Findings
 only, nothing migrated or modified. `scripts/probe_standards_register.py` is
 read-only and fetches the two counts the finding still needs.
+
+## Bug 1 — the v0.27.0 connector claim was wrong, and why (v0.28.0)
+
+**The earlier "org-chart shape, 0px drift" claim was false.** The deployed bench
+was running the right commit; the measurement was worthless.
+
+Two independent failures in it:
+
+1. **The drift number was a tautology.** `_drawTreeEdges` computes its endpoints
+   FROM the nodes' `getBoundingClientRect()`. My probe re-derived the same
+   endpoints from the same rects and reported the difference. It could only ever
+   be 0. Seven runs of exactly `0.00` should have been read as a broken
+   instrument, not a clean result.
+2. **It never checked the shape at all.** It asked "is there SOME path endpoint
+   near each node" (a `Math.min` over every path) — which is true of any wiring,
+   including wiring that is visibly wrong.
+
+What was actually on screen, measured properly afterwards: `.tree-row` children
+stack VERTICALLY (tops at 96, 193, 291, 388, 486, 583 px, all at cx ≈ 546). So
+the org-chart "rail" spanning the children came out **3 px wide**
+(`M 545.97 84.39 L 548.99 84.39`) and the six "drops" became six overlapping
+vertical lines from the index node straight down, the longest passing through
+every card above its target. That renders as one top-to-bottom chain — exactly
+Felix's screenshot. The elbow arithmetic was right for children laid out side by
+side; the layout never laid them out that way.
+
+**Fix: the tree is gone.** The Formula tab now mounts `window.UCCNodeCanvas` —
+the same component Mapping Studio and the old Index Studio already use — with
+positions in the `pos_x`/`pos_y` fields `UCC Index Node` has carried since it was
+created, persisted through the existing `save_nodes`. Freely positioned draggable
+nodes, bezier curves converging on the index node. No second implementation.
+
+`UCCNodeCanvas` owns its own `scale` and divides by it in `_drawEdges`, so
+**`UCCZoom` is deliberately NOT attached to this canvas** — two transforms on one
+stage is how this bug class starts. The canvas ships its own +/−/reset toolbar;
+one `wheel` listener routes the wheel gesture to `canvas.zoom()` so the tab keeps
+the gesture it had. `mo_zoom.js` is untouched, as instructed.
+
+Re-measured on the real `IndexWorkspace`, 1 index + 6 metrics, and this time the
+assertions are about SHAPE, not self-consistency:
+
+| check | result |
+|---|---|
+| nodes rendered | 7 |
+| bezier curves | 6 (one per metric → index) |
+| distinct node centre-x | **2** columns (155, 535) — not one chain |
+| distinct node centre-y | **7** — metrics spread 211…691, index centred at 452 |
+| curve direction | `M 212 72 C 316 72, 316 312, 420 312` — left→right, converging |
+| drag a node by 150/60 | moves exactly 150/60, `pos_x/pos_y` updated |
+| UCCZoom attached | **false** (single transform) |
+
+**Verify on the bench:** drag a metric node, reload the page, confirm it stayed.
+On a Published version dragging still works locally but is not saved — the
+frozen-formula guard blocks `save_nodes`, which is correct.
+
+**Deliberately dropped with the tree:** the per-node collapse chevron (round-9
+item 3). Collapsing a subtree is a tree gesture; on a free-positioned canvas
+there is nothing to collapse. The "N node(s) are not connected to a root" warning
+was KEPT — it is a correctness statement, since `compute_index` silently ignores
+unreachable nodes.
+
+## Bug 2 — objectives mapping: NOT determined here, diagnostic supplied
+
+**I could not check the DocType record: there is no bench in this environment.**
+Reporting which of the two it is, as asked, requires the database. Guessing is
+what produced the Bug 1 error above, so: `scripts/diagnose_question_mapping.py`
+(read-only) answers it in one run.
+
+What the code review DID establish:
+
+* **Both** endpoints the workspace reads — `get_mapping_overview` and
+  `mapping_coverage` — filter mappings on `survey_version`. A row with an empty
+  `survey_version` is therefore **saved and invisible at the same time**, which
+  is the only state that produces "0 mapped" beside a row that genuinely exists.
+  The diagnostic checks for exactly this by re-querying by `question` instead.
+* `survey_version` carries `fetch_from = question.survey_version`, and Frappe
+  **does** apply that server-side — `get_invalid_links` in
+  `frappe/model/base_document.py` v15.83.0 ("also updates fetch values if not
+  set"), called from both `insert()` and `_save()`. Verified against source, not
+  assumed. So a row written today should carry it; a row written before the field
+  existed never gets backfilled.
+
+**One real defect found and fixed regardless of which case it is:** `App.call`
+wrapped `frappe.call` with a `callback` only. `frappe.call` fires `callback`
+solely on success, so **a server-side throw left the promise pending forever** —
+every `.then(() => { toast(...); this._load(); })` in all five workspaces simply
+never ran. No toast, no refresh, no stale-data warning; the screen just kept
+showing what it had. That is indistinguishable from "saved but not re-rendered",
+and it is why this report was ambiguous in the first place. `error`/`always` now
+settle it, and `app.ok` reports whether the server actually accepted the write.
+
+`_link()` was worse: a failed call and a genuine no-op both arrive with a falsy
+`r`, so a failure was reported as the blue **"Already linked"** toast. Telling
+someone the mapping is already there when nothing was written is precisely how a
+mapping appears to vanish. Now three outcomes: linked / already linked / refused.
