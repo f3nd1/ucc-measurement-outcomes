@@ -2434,3 +2434,63 @@ Verify: `bench --site ucc-sms-v2.orb.local migrate` completes, printing
 `drop_ucc_standard: removing 1 UCC Standard row(s): DEMO-STD-C7` then
 `drop_ucc_standard: UCC Standard DocType removed.` A second `migrate` prints
 `already removed, nothing to do.`
+
+## Question reorder in the workbench; the page cleanup ABANDONED (v0.32.0)
+
+**Reorder built.** Move up / Move down on every question row in the Surveys
+workspace, wired to the existing `api.builder.reorder_questions`. Until now that
+endpoint had exactly two callers, both on the old Survey Builder page, so the
+workbench could not reorder at all.
+
+It moves within the FULL question list, not the visible page: `sequence` is
+version-wide and `_resequence` keeps it dense, so a question at the top of a page
+genuinely crosses the Page Break above it. Clamping to the page would make the
+buttons lie about what sequence means. Measured: moving q2 down past a Page Break
+sends `["q1","pb","q2","q3"]`.
+
+Also removed a **lying affordance**: `UCCMO.questionRow` rendered a `⋮⋮` grip
+titled "Drag to reorder" with no `dragstart` handler anywhere in the app. Two new
+sprite symbols (`i-chevron-up`/`i-chevron-down`) — a missing symbol renders as an
+empty `<use>`, i.e. a silently blank button.
+
+Verified headlessly on the real `SurveyWorkspace`: 2 up + 2 down buttons on a
+3-question page, both icons resolve, no draggable elements left, edges are no-ops
+that never call the server, a Published version offers none of them, a server
+refusal toasts and does not reload, and `.question-row` still has its 4 grid
+tracks (18px 32px 656px 110px).
+
+**THE PAGE CLEANUP WAS REVERTED. My audit's central claim was wrong.**
+
+I deleted the seven old Desk pages, ran `check_repo.sh`, and its
+endpoint-reachability guard reported **14 whitelisted methods with no caller
+anywhere**. Checked each against the workbench: **13 have zero coverage there.**
+
+    bulk_paste_questions, bulk_delete_questions,        builder
+    copy_questions_to_version, create_question
+    list_sources, preview_extraction, commit_extraction  extraction flow
+    list_datasets, export_analysis                       Data Explorer
+    dashboard_filters                                    dashboard
+    list_campaigns                                       campaign analytics
+    mapping_canvas, set_question_metric                  mapping
+
+The audit said "the workbench replaces all of them" on the strength of the five
+workspace NAMES matching the five studios. It never checked endpoint coverage.
+Those pages are not duplicate UI - they are the only front end for bulk question
+paste and delete, copying questions between versions, the whole extraction
+pipeline, dataset export, and metric mapping from the question side.
+
+Everything page-related is restored: the seven pages, the four shared JS files
+and their bundle imports, the workspace shortcuts, the two form routes, the
+`UCC Index Node` layout/normalisation columns (the old Index Studio is their only
+editor), and the three `check_repo.sh` guards that point at those files. No patch
+ships for the Index Node columns.
+
+Kept from this round, all independently safe: the reorder feature, the deletion
+of `docs/13-ucc-standard-findings.md` (decision logged in 09) and of three spent
+one-shot scripts, and the shared-stub refactor (`StubBench(raises_for=...)`) that
+lets `test_patch_drop_ucc_standard` drop its own copy.
+
+`UCC Survey Campaign` was NOT removed either, and for a separate reason found in
+the same pass: `UCC Survey Submission.campaign` is a Link to it, so deleting the
+DocType means dropping a column on an evidence DocType. That was not in the
+approved list and is not a side effect to take quietly.

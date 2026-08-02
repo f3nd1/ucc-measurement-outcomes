@@ -394,7 +394,11 @@ class SurveyWorkspace {
 			? page.items.map((q, i) => U.questionRow(q, {
 				index: i + 1, selected: q.name === this.s.question, editable: this.editable,
 				actions: this.editable
-					? [{ act: "dup", icon: "i-copy", title: __("Duplicate") },
+					// Reorder lives here rather than as a drag gesture: it is
+					// keyboard-reachable, and the grip this replaces was decorative.
+					? [{ act: "q-up", icon: "i-chevron-up", title: __("Move up") },
+					   { act: "q-down", icon: "i-chevron-down", title: __("Move down") },
+					   { act: "dup", icon: "i-copy", title: __("Duplicate") },
 					   { act: "del", icon: "i-trash", title: __("Delete") }]
 					: [],
 			})).join("")
@@ -697,6 +701,10 @@ class SurveyWorkspace {
 			$el.find('[data-pop="types"]').removeClass("open");
 			this._addQuestion($(e.currentTarget).data("pick"));
 		});
+		$el.on("click.mo", '[data-act="q-up"]', (e) =>
+			this._moveQuestion($(e.currentTarget).data("q"), -1));
+		$el.on("click.mo", '[data-act="q-down"]', (e) =>
+			this._moveQuestion($(e.currentTarget).data("q"), 1));
 		$el.on("click.mo", '[data-act="dup"]', (e) => {
 			e.stopPropagation();
 			this.app.call(BAPI + "duplicate_question", { question: $(e.currentTarget).data("q") })
@@ -862,6 +870,33 @@ class SurveyWorkspace {
 					this.app.toast(__("Draft version created"));
 					this.render();
 				}));
+	}
+
+	// Reordering. The old Survey Builder had drag-and-drop and this workspace had
+	// nothing - not even the endpoint call - so `reorder_questions` had exactly
+	// two callers, both on the page being retired. Move up / Move down is the
+	// accessible form of the same operation and the one the old page lacked.
+	//
+	// It moves within the FULL question list, not the current page: `sequence` is
+	// version-wide and _resequence keeps it dense, so a question at the top of a
+	// page moving up genuinely crosses the Page Break above it. Clamping to the
+	// page would make the buttons lie about what sequence means.
+	_moveQuestion(name, dir) {
+		if (!this.editable) return;
+		const order = this.questions.map((q) => q.name);
+		const at = order.indexOf(name);
+		const to = at + dir;
+		if (at < 0 || to < 0 || to >= order.length) return;
+		order.splice(to, 0, order.splice(at, 1)[0]);
+		this.app.call(BAPI + "reorder_questions", {
+			survey_version: this.s.surveyVersion, ordered: JSON.stringify(order),
+		}).then(() => {
+			if (!this.app.ok) {
+				return this.app.toast(__("Could not reorder - nothing was saved."), "red");
+			}
+			this.s.question = name;      // keep the moved question selected
+			this._load();
+		});
 	}
 
 	_newSurvey() {
@@ -3011,7 +3046,7 @@ class IndexWorkspace {
 				label: (meta && meta.metric_name) || code, source_metric: code,
 				// 0% deliberately: silently rebalancing everyone else's weights to
 				// make room is not something an editor should do behind your back.
-				weight: 0, pos_x: 0, pos_y: 0,
+				weight: 0,
 			});
 			last = key;
 		});
@@ -3041,7 +3076,7 @@ class IndexWorkspace {
 				while (this.draft.some((n) => n.node_key === key)) key = key + "_" + (++i);
 				this.draft.push({
 					node_key: key, node_type: "Dimension", parent_key: root.node_key,
-					label: v.label, weight: v.weight || 0, source_metric: null, pos_x: 0, pos_y: 0,
+					label: v.label, weight: v.weight || 0, source_metric: null,
 				});
 				this.expanded.add(key);
 				this.sel = key;

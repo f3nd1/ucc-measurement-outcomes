@@ -105,13 +105,20 @@ class StubDoc:
 
 
 class StubBench(types.ModuleType):
-	"""The narrowest frappe that demo_data actually touches."""
+	"""The narrowest frappe that demo_data actually touches.
 
-	def __init__(self, objectives=(), departments=()):
+	`raises_for` names DocTypes whose controller file is GONE from disk, so
+	get_doc on one raises ModuleNotFoundError exactly as a real bench does. That
+	is the shape a patch removing a DocType has to survive - see
+	test_patch_drop_ucc_standard.
+	"""
+
+	def __init__(self, objectives=(), departments=(), raises_for=()):
 		super().__init__("frappe")
 		self.count, self.docs = {}, {}
 		self._objectives = list(objectives)
 		self._departments = list(departments)
+		self._raises_for = set(raises_for)
 		self.db = types.SimpleNamespace(
 			exists=self._exists, get_value=self._get_value,
 			set_value=lambda *a, **k: None, count=lambda *a, **k: 0,
@@ -120,6 +127,13 @@ class StubBench(types.ModuleType):
 		self.session = types.SimpleNamespace(user="Administrator")
 
 	def get_doc(self, data, *a):
+		doctype = data if isinstance(data, str) else data.get("doctype")
+		if doctype in self._raises_for:
+			raise ModuleNotFoundError(
+				"No module named 'ucc_measurement_outcomes.<module>.doctype."
+				"%s.%s'" % (doctype.lower().replace(" ", "_"), doctype.lower().replace(" ", "_")))
+		if isinstance(data, str):
+			return types.SimpleNamespace(doctype=data, name=a[0] if a else None)
 		return StubDoc(data, self)
 
 	def get_all(self, doctype, **kw):

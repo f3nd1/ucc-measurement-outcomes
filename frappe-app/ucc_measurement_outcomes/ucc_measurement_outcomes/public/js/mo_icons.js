@@ -79,6 +79,8 @@ window.UCCMOIcons = {
 	<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v6h6M12 7v5l3 2"></path></symbol>
 	<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></symbol>
 	<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></symbol>
+	<symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"></path></symbol>
+	<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></symbol>
 	<symbol id="i-email" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m4 7 8 6 8-6"></path></symbol>
 	<symbol id="i-text" viewBox="0 0 24 24"><path d="M5 6h14M12 6v12M8 18h8"></path></symbol>
 	<symbol id="i-paragraph" viewBox="0 0 24 24"><path d="M13 5H9a4 4 0 0 0 0 8h4M13 5v14M17 5v14"></path></symbol>
