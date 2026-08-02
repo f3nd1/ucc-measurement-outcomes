@@ -2192,3 +2192,72 @@ settle it, and `app.ok` reports whether the server actually accepted the write.
 `r`, so a failure was reported as the blue **"Already linked"** toast. Telling
 someone the mapping is already there when nothing was written is precisely how a
 mapping appears to vanish. Now three outcomes: linked / already linked / refused.
+
+## Round 13 (v0.29.0)
+
+**Bug 1 — the click-handler theory was WRONG. The handler fired every time.**
+"Add to canvas" is a `frappe.ui.Dialog` `primary_action`, which is as reliably
+bound as anything in Frappe. Zero network requests was also **correct** — the
+dialog's own comment says "browsing is not committing", so picking an objective
+is deliberately local until you press Link.
+
+The real bug was one dead line inside that handler:
+
+```js
+q.objectives = (q.objectives || []).concat([]);   // copies the array, appends NOTHING
+this._extra = v.objective;                        // written here, read NOWHERE
+```
+
+`concat([])` was meant to be `concat([v.objective])`. So the browsed objective
+reached nothing, `_focusObjectives()` returned `[]`, and the pane kept saying
+"No objectives in view yet". `_extra` — the variable that was supposed to hold
+the pending pick — was assigned and never read anywhere in the file, which is
+why the dead concat survived review.
+
+Fixed by making `_extra` do the job it was named for rather than restoring the
+`concat`: `q.objectives` is SERVER state meaning "linked", so writing a browsed
+candidate into it would draw the node as already-mapped and be wiped by the next
+`_load()`. `_focusObjectives` now shows `_extra` first (so the 5-item cap cannot
+push out the one the user specifically asked for), and `_load()` clears it.
+
+Proven end-to-end against the real `ObjectiveWorkspace`: before, focus set 0 and
+the empty state present; after "Add to canvas", focus set 1, `[data-map-node=
+"OBJ-0360"]` on the canvas, empty state gone, **0 network calls during browse**,
+then `connect_nodes` + the three reload calls on Link.
+
+**Bug 2 — never built, now built.** `node_canvas.js`'s own header line read
+"draggable nodes, **pan-free** zoom". Drag-to-pan is added on the empty
+background with the same `INTERACTIVE` exclusion mo_zoom.js uses, so a node drag
+never becomes a pan. The stage transform is now
+`translate(px,py) scale(k)`; `_drawEdges` measures relative to the stage's own
+box, which moves with it, so the divide-by-scale contract is untouched. Also
+added `fit()` and made reset clear the pan. **mo_zoom.js untouched** — the
+Metrics canvas already had drag-to-pan through it (`down`/`move`/`up` on the
+viewport, `INTERACTIVE` guard); only the UCCNodeCanvas one was missing.
+Measured: background drag of (100, 80) → `translate(100px, 80px)`; node drag
+moved the node 50px and left the transform unchanged.
+
+**Bug 3 — not dropped in v0.28.0; it never existed.** The tree rendered
+read-only rows, and the inspector only ever offered Apply (label/weight) and
+"Open in Metrics workspace". The old Index Studio page had "+ Add root node" and
+nothing else. "+ Add source" is a different verb — it adds a source QUESTION to a
+metric. Added: **"Add metric"** in the Formula header (Link picker over
+`UCC Metric Definition`, refuses a metric already in the formula, generates a
+collision-free `node_key`) and **"Remove from formula"** in the inspector
+(refuses when the node has children, since `compute_index` silently ignores
+anything unreachable from the root). Both write through the SAME `save_nodes`
+endpoint Apply already uses, so the published-version guard covers all of it and
+no new write path exists.
+
+**Bug 4 — duplicate Fit removed.** `UCCZoom.controls()` already renders a fit
+button (the i-target one, which goes through the real zoom state). The text
+"Fit" beside it only did `scrollTo(0,0)` on the pane — a different, weaker
+action wearing the same name. Removed, along with its handler.
+
+**Bug 5 — zoom controls moved to the section header.** The Formula pane header
+now carries `UCCZoom.controls()` markup wired to UCCNodeCanvas's own scale/pan,
+and the canvas's floating `.ucc-nc-tools` toolbar is hidden. Still one transform
+on this canvas. The percentage readout stays in step with wheel zoom too.
+Measured: header shows zoom-fit / zoom-out / zoom-reset / zoom-in, canvas toolbar
+`display:none`, zoom-in → scale 1.10 and label "110%", reset → scale 1 pan 0/0,
+fit → 0.76.

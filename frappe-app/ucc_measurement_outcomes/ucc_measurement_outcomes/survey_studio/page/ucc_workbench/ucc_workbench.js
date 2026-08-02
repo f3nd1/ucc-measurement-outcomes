@@ -1003,6 +1003,10 @@ class ObjectiveWorkspace {
 			this.rows = (ov && ov.questions) || [];
 			this.coverage = cov || {};
 			this.masters = masters || { objectives: [] };
+			// Fresh server state: a browsed candidate that has since been linked
+			// now arrives in q.objectives on its own account, and one that was
+			// not linked is not a pending intent any more.
+			this._extra = null;
 			this.unmapped = new Set(this.coverage.questions_without_objective || []);
 			if (this.s.gotoArg) { this.s.question = this.s.gotoArg; this.s.gotoArg = null; }
 			if (!this.s.question || !this.rows.some((r) => r.name === this.s.question)) {
@@ -1024,6 +1028,9 @@ class ObjectiveWorkspace {
 		if (!q) return [];
 		const linked = q.objectives || [];
 		const nearby = [];
+		// A objective picked through "Browse all" comes first: the user asked for
+		// that one specifically, so it must not be pushed out by the 5-item cap.
+		if (this._extra && linked.indexOf(this._extra) === -1) nearby.push(this._extra);
 		this.rows.forEach((r) => (r.objectives || []).forEach((o) => {
 			if (linked.indexOf(o) === -1 && nearby.indexOf(o) === -1) nearby.push(o);
 		}));
@@ -1377,13 +1384,19 @@ class ObjectiveWorkspace {
 			primary_action: (v) => {
 				d.hide();
 				this.sel = v.objective;
-				// Held so the focused canvas includes it without linking anything -
-				// browsing is not committing.
-				const q = this.question;
-				if (q && (q.objectives || []).indexOf(v.objective) === -1) {
-					q.objectives = (q.objectives || []).concat([]);
-					this._extra = v.objective;
-				}
+				// Bug 1 (2026-08-02). This USED to read
+				//     q.objectives = (q.objectives || []).concat([]);
+				// which copies the array and appends nothing, so the browsed
+				// objective never reached the canvas and the pane kept saying
+				// "No objectives in view yet". `_extra` was written here and read
+				// nowhere, which is why the dead concat went unnoticed.
+				//
+				// q.objectives is SERVER state - it means "linked". A browsed
+				// objective is not linked yet ("browsing is not committing"), so
+				// it is held separately and _focusObjectives shows it as a
+				// candidate. Writing it into q.objectives would draw it as
+				// already-mapped and be wiped by the next _load() anyway.
+				this._extra = v.objective;
 				this._draw();
 			},
 		});
@@ -1562,7 +1575,6 @@ class MetricWorkspace {
 						<span class="mx-legend"><i class="m"></i>${__("Metric")}</span>
 						<span class="mx-legend"><i class="x"></i>${__("Index")}</span>
 						${window.UCCZoom.controls()}
-						${U.button({ label: __("Fit"), small: true, act: "fit" })}
 						${U.button({ label: __("Add source"), small: true, tone: "primary", icon: "i-plus", act: "add-source" })}
 					</div>
 				</header>
@@ -2139,10 +2151,6 @@ class MetricWorkspace {
 			this.$el.find(".mx-build").toggleClass("right-collapsed", !!this.rightCollapsed);
 			this._renderInspector();
 		});
-		$el.on("click.mo", '[data-act="fit"]', () => {
-			this.$el.find("[data-stage]").get(0).scrollTo({ left: 0, top: 0, behavior: "smooth" });
-			requestAnimationFrame(() => this._drawEdges());
-		});
 		$el.on("click.mo", '[data-act="add-source"]', () => this._openDrawer());
 		$el.on("click.mo", '[data-act="close-drawer"]', () => this._closeDrawer());
 		$el.on("click.mo", "[data-drawer]", (e) => {
@@ -2336,8 +2344,10 @@ class IndexWorkspace {
 				<section class="pane"><header class="pane-head">
 					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<strong>${
 						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</strong></div>
-					<!-- No UCCZoom controls on this tab: UCCNodeCanvas renders its own
-					     +/-/reset toolbar and owns the only transform on this canvas. -->
+					${tab === "formula" ? `<div class="mx-tools">${
+						U.button({ label: __("Add metric"), small: true, tone: "primary",
+								   icon: "i-plus", act: "add-metric-node" })}
+						${window.UCCZoom.controls()}</div>` : ""}
 				</header><div class="pane-body">${
 					tab === "formula" ? this._formula() :
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
@@ -2480,13 +2490,18 @@ class IndexWorkspace {
 			onSelect: (n) => { this.sel = n.id; this._renderEditor(); },
 			onMove: (n) => this._onNodeMove(n),
 		});
+		// Bug 5: the canvas's built-in toolbar floats over the diagram. The pane
+		// header carries the controls instead, matching every other canvas here.
+		const own = host.querySelector(".ucc-nc-tools");
+		if (own) own.style.display = "none";
 		// Same gesture the tree had, routed to the canvas's own zoom rather than
 		// to a second zoom implementation.
 		host.addEventListener("wheel", (e) => {
 			e.preventDefault();
-			this._canvas.zoom(e.deltaY < 0 ? 0.1 : -0.1);
+			this._canvasZoom(e.deltaY < 0 ? 0.1 : -0.1);   // keeps the header % in step
 		}, { passive: false });
 		this._paintFormulaCanvas();
+		this._showZoomLevel();
 	}
 
 	_paintFormulaCanvas() {
@@ -2601,7 +2616,10 @@ class IndexWorkspace {
 					: "")
 				+ `<div class="help">${__("Objectives are never part of the formula. They travel with the result as evidence lineage.")}</div>`,
 			footer: this.editable
-				? U.footerActions([{ label: __("Apply"), tone: "primary", icon: "i-save", act: "apply-node" }])
+				? U.footerActions([
+					{ label: __("Apply"), tone: "primary", icon: "i-save", act: "apply-node" },
+					{ label: __("Remove from formula"), icon: "i-trash", act: "remove-node" },
+				])
 				: "",
 		}));
 	}
@@ -2625,6 +2643,22 @@ class IndexWorkspace {
 		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
 		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
 		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
+		// Bug 5: the zoom controls live in the pane header now, like every other
+		// canvas in this workbench. They drive UCCNodeCanvas's own scale/pan -
+		// still one transform on this canvas, not a second one.
+		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._canvas && this._canvas.fit());
+		$el.on("click.mo", '[data-act="zoom-in"]', () => this._canvasZoom(0.1));
+		$el.on("click.mo", '[data-act="zoom-out"]', () => this._canvasZoom(-0.1));
+		$el.on("click.mo", '[data-act="zoom-reset"]', () => {
+			if (!this._canvas) return;
+			this._canvas.scale = 1;
+			this._canvas.panX = 0;
+			this._canvas.panY = 0;
+			this._canvas.render();
+			this._showZoomLevel();
+		});
+		$el.on("click.mo", '[data-act="add-metric-node"]', () => this._addMetricNode());
+		$el.on("click.mo", '[data-act="remove-node"]', () => this._removeNode());
 		$el.on("click.mo", '[data-act="new-index"]', () => this._newIndex());
 		$el.on("click.mo", '[data-act="validate"]', () =>
 			this.app.call(IAPI + "validate_index", { index_version: this.s.indexVersion }).then((r) => {
@@ -2662,6 +2696,97 @@ class IndexWorkspace {
 			this.app.call(IAPI + "save_nodes", {
 				index_version: this.s.indexVersion, nodes: JSON.stringify(this.nodes),
 			}).then(() => { this.app.toast(__("Node updated")); this._load(); });
+		});
+	}
+
+	_canvasZoom(delta) {
+		if (!this._canvas) return;
+		this._canvas.zoom(delta);
+		this._showZoomLevel();
+	}
+
+	_showZoomLevel() {
+		if (!this._canvas) return;
+		this.$el.find("[data-zoom-level]").text(Math.round(this._canvas.scale * 100) + "%");
+	}
+
+	// Bug 3 (2026-08-02). There was NO way to add or remove a metric node here -
+	// not dropped when the tree went, it never existed in this workspace. The old
+	// Index Studio page had "+ Add root node" and nothing else; the tree rendered
+	// read-only rows. "+ Add source" in the Metrics workspace is a different verb
+	// entirely (it adds a source QUESTION to a metric).
+	//
+	// Both write through the SAME save_nodes endpoint the inspector's Apply uses,
+	// so there is one write path and the published-version guard covers all of it.
+	_addMetricNode() {
+		const root = this.nodes.find((n) => !n.parent_key);
+		if (!root) {
+			return frappe.msgprint({
+				title: __("No index node yet"),
+				message: __("This version has no root node to hang a metric on. Create the index from a template first."),
+				indicator: "orange",
+			});
+		}
+		const d = new frappe.ui.Dialog({
+			title: __("Add a metric to this index"),
+			fields: [
+				{ fieldname: "metric", fieldtype: "Link", options: "UCC Metric Definition",
+				  label: __("Metric"), reqd: 1 },
+				{ fieldname: "weight", fieldtype: "Percent", label: __("Weight (%)"), default: 0,
+				  description: __("Weights across one parent should total 100. Validate reports it if they do not.") },
+			],
+			primary_action_label: __("Add to formula"),
+			primary_action: (v) => {
+				if (this.nodes.some((n) => n.source_metric === v.metric)) {
+					d.hide();
+					return frappe.msgprint(__("{0} is already in this formula.", [v.metric]));
+				}
+				d.hide();
+				// Keys must be unique within the version - save_nodes replaces the
+				// whole set and a collision would silently drop a node.
+				let key = (root.node_key + "_" + v.metric).toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+				let i = 1;
+				while (this.nodes.some((n) => n.node_key === key)) key = key + "_" + (++i);
+				this.nodes.push({
+					node_key: key, node_type: "Metric", parent_key: root.node_key,
+					label: v.metric, weight: v.weight || 0, source_metric: v.metric,
+					pos_x: 0, pos_y: 0,
+				});
+				this._persistNodes(__("Metric added"));
+			},
+		});
+		d.show();
+	}
+
+	_removeNode() {
+		const n = this.nodes.find((x) => x.node_key === this.sel);
+		if (!n) return;
+		const kids = this.nodes.filter((x) => x.parent_key === n.node_key);
+		if (kids.length) {
+			return frappe.msgprint({
+				title: __("Node has children"),
+				message: __("{0} node(s) hang off this one and would be orphaned - compute_index silently ignores anything not reachable from the root. Remove them first.", [kids.length]),
+				indicator: "orange",
+			});
+		}
+		frappe.confirm(
+			__("Remove {0} from the formula? Published results already calculated are not affected - they are snapshots of their own version.", [n.label || n.node_key]),
+			() => {
+				this.nodes = this.nodes.filter((x) => x.node_key !== n.node_key);
+				this.sel = null;
+				this._persistNodes(__("Node removed"));
+			});
+	}
+
+	_persistNodes(message) {
+		this.app.call(IAPI + "save_nodes", {
+			index_version: this.s.indexVersion, nodes: JSON.stringify(this.nodes),
+		}).then(() => {
+			if (!this.app.ok) {
+				return this.app.toast(__("The server refused the change - nothing was saved."), "red");
+			}
+			this.app.toast(message);
+			this._load();
 		});
 	}
 

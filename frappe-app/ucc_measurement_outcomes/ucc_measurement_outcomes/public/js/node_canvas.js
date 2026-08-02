@@ -1,5 +1,5 @@
 // Copyright (c) 2026, United Ceres College and contributors
-// Reusable node canvas: draggable nodes, pan-free zoom, bezier connectors,
+// Reusable node canvas: draggable nodes, zoom + drag-to-pan, bezier connectors,
 // click-to-select. Ported from the prototype's vanilla SVG approach (no D3).
 // Shared by Mapping Studio (checkpoint 4) and Index Studio (checkpoint 5).
 
@@ -51,6 +51,8 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		.ucc-nc-node.index{border-left:5px solid #b58a45}
 		.ucc-nc-node.gap{border:1px dashed #b94848;border-left:5px solid #b94848;background:#fbeaea}
 		.ucc-nc-tools{position:absolute;right:10px;top:10px;display:flex;gap:5px;z-index:5}
+		.ucc-nc-shell{cursor:grab}
+		.ucc-nc-panning{cursor:grabbing}
 		.ucc-nc-tools button{width:30px;height:30px;border-radius:7px;border:1px solid var(--border-color,#e2e6ea);background:var(--card-bg,#fff);cursor:pointer}
 		.ucc-nc-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted,#8b95a5);font-size:12px}
 		/* The port is a CHILD of the node, and the node's whole surface starts a
@@ -97,7 +99,10 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		this.emptyEl = this.container.querySelector(".ucc-nc-empty");
 		this.container.querySelector('[data-z="in"]').onclick = () => this.zoom(0.1);
 		this.container.querySelector('[data-z="out"]').onclick = () => this.zoom(-0.1);
-		this.container.querySelector('[data-z="reset"]').onclick = () => { this.scale = 1; this.render(); };
+		this.container.querySelector('[data-z="reset"]').onclick = () => {
+			this.scale = 1; this.panX = 0; this.panY = 0; this.render();
+		};
+		this._makePannable();
 	}
 
 	setGraph(nodes, edges) {
@@ -120,6 +125,56 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 		window.UCCEmptyState.render(this.emptyEl, opts);
 	}
 
+	_transform() {
+		return `translate(${this.panX || 0}px, ${this.panY || 0}px) scale(${this.scale})`;
+	}
+
+	// Drag the empty background to pan, the same convention mo_zoom.js uses on the
+	// other canvases. This canvas was built "pan-free" (its own header said so),
+	// so a node dragged past the edge could not be reached at all. Anything
+	// interactive keeps its own gesture - a node drag must never become a pan.
+	_makePannable() {
+		const INTERACTIVE = ".ucc-nc-node, .ucc-nc-port, .ucc-nc-edge-del, .ucc-nc-tools, button, a, input, select, textarea, label";
+		let on = false, sx = 0, sy = 0, ox = 0, oy = 0;
+		this.container.addEventListener("mousedown", (e) => {
+			if (e.button !== 0 || e.target.closest(INTERACTIVE)) return;
+			on = true;
+			sx = e.clientX; sy = e.clientY;
+			ox = this.panX || 0; oy = this.panY || 0;
+			this.container.classList.add("ucc-nc-panning");
+			e.preventDefault();
+		});
+		document.addEventListener("mousemove", (e) => {
+			if (!on) return;
+			this.panX = ox + (e.clientX - sx);
+			this.panY = oy + (e.clientY - sy);
+			// Translation only. _drawEdges measures everything relative to the
+			// stage's OWN box, which moves with it, so the endpoints stay correct
+			// and the divide-by-scale contract is untouched.
+			this.stage.style.transform = this._transform();
+		});
+		document.addEventListener("mouseup", () => {
+			if (!on) return;
+			on = false;
+			this.container.classList.remove("ucc-nc-panning");
+		});
+	}
+
+	// Frame every node in view - the same job UCCZoom.fit does elsewhere, done in
+	// THIS canvas's scale/pan state so there is still exactly one transform here.
+	fit() {
+		if (!this.nodes.length) return;
+		const box = this.container.getBoundingClientRect();
+		if (!box.width || !box.height) return;
+		const pad = 24;
+		const w = Math.max(...this.nodes.map((n) => n.x || 0)) + 200 + pad * 2;
+		const h = Math.max(...this.nodes.map((n) => n.y || 0)) + 120 + pad * 2;
+		this.scale = Math.max(0.6, Math.min(1.6, Math.min(box.width / w, box.height / h)));
+		this.panX = 0;
+		this.panY = 0;
+		this.render();
+	}
+
 	zoom(delta) {
 		this.scale = Math.max(0.6, Math.min(1.6, this.scale + delta));
 		this.render();
@@ -127,7 +182,7 @@ window.UCCNodeCanvas = class UCCNodeCanvas {
 
 	render() {
 		this.stage.querySelectorAll(".ucc-nc-node").forEach((n) => n.remove());
-		this.stage.style.transform = `scale(${this.scale})`;
+		this.stage.style.transform = this._transform();
 		this.emptyEl.style.display = this.nodes.length ? "none" : "flex";
 		this.nodes.forEach((n) => {
 			const el = document.createElement("div");
