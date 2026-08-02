@@ -2494,3 +2494,35 @@ lets `test_patch_drop_ucc_standard` drop its own copy.
 the same pass: `UCC Survey Submission.campaign` is a Link to it, so deleting the
 DocType means dropping a column on an evidence DocType. That was not in the
 approved list and is not a side effect to take quietly.
+
+## probe_guest_csrf crashed in a diagnostic (v0.32.1)
+
+`has_sid()` read `op.handlers[-1].cookiejar`. `urllib.request.build_opener`
+appends its OWN default handlers AFTER the ones you pass, so the last one is
+`HTTPErrorProcessor`, never the cookie processor:
+
+    ProxyHandler, UnknownHandler, HTTPHandler, HTTPDefaultErrorHandler,
+    HTTPRedirectHandler, FTPHandler, FileHandler, DataHandler, HTTPSHandler,
+    HTTPCookieProcessor, HTTPErrorProcessor      <- [-1]
+
+That line could never have worked on any Python. It had simply never been
+reached before, because the script had never got as far as a live site.
+
+Fixed by keeping the jar: `opener()` now attaches it as `op.cookie_jar` and
+`has_sid` reads that. **No handler indexing remains anywhere** - grepped
+`.handlers` across `scripts/` and `frappe-app/`, and that line was the only one.
+
+Verified offline against a real local HTTP server (the stdlib pair, not a mock):
+fresh opener False, after a plain request False, after `Set-Cookie: sid=...`
+True, a second opener False (jars are isolated), and the old expression still
+raises the exact reported AttributeError.
+
+Also corrected the module docstring, which claimed case C "makes one real
+submission and then deletes it". Nothing in the script deletes anything. Every
+ACCEPTED case stores a submission and an answer; the run prints before/after
+counts and tells you which rows to remove. That is why it points at the PROBE
+survey by default.
+
+**Still not run end to end here - no bench.** The CSRF timing result (cases A,
+B and especially C) is unknown until Felix runs it. What is now known: it will
+not abort in the diagnostic.

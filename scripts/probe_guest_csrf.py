@@ -10,10 +10,11 @@ CAN hold a csrf_token.
     cd ~/ucc-sms-v2/sites
     ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_guest_csrf.py ucc-sms-v2.orb.local
 
-READ-ONLY BY CONSTRUCTION for the cases that matter, except case C, which makes
-one real submission and then deletes it - it is the only way to prove the happy
-path actually stores. Row counts are compared before and after and any drift is
-reported loudly.
+NOT read-only. Every case that is ACCEPTED stores a real submission and its
+answer - that is the only way to prove the happy path actually stores. Nothing
+here deletes them: row counts are printed before and after, and the run ends by
+telling you which rows to remove. Point it at the PROBE survey (it does, by
+default) so those rows are throwaway.
 
 Three cases, in the order a real respondent hits them:
 
@@ -91,9 +92,19 @@ def no_probe_survey(site):
 
 
 def opener():
-	"""A fresh browser: its own cookie jar, so each case is an isolated session."""
-	return urllib.request.build_opener(
-		urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+	"""A fresh browser: its own cookie jar, so each case is an isolated session.
+
+	The jar is attached to the opener rather than fished back out of
+	`op.handlers` later. `build_opener` appends its OWN defaults after the
+	handlers you pass, so the last one is `HTTPErrorProcessor`, not the cookie
+	processor - which is what made has_sid() raise
+	`AttributeError: 'HTTPErrorProcessor' object has no attribute 'cookiejar'`
+	and abort the whole run inside a diagnostic print.
+	"""
+	jar = http.cookiejar.CookieJar()
+	op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+	op.cookie_jar = jar
+	return op
 
 
 def get(op, path):
@@ -127,7 +138,12 @@ def page_csrf(html):
 
 
 def has_sid(op):
-	return any(c.name == "sid" for c in op.handlers[-1].cookiejar) if op.handlers else False
+	"""Does this session carry a `sid` cookie? Diagnostic only.
+
+	Reads the jar the opener was built with. Never indexes into `op.handlers`:
+	their order is urllib's business, not ours.
+	"""
+	return any(c.name == "sid" for c in getattr(op, "cookie_jar", ()))
 
 
 # --- find the campaign ----------------------------------------------------
