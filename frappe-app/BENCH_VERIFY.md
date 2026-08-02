@@ -2322,3 +2322,59 @@ leaf effective weights total 100 — `issues`/`warnings` are unchanged, so
    "Create new version" produces `<INDEX>-V<nn>` with the same nodes.
 6. Validate on a formula with a duplicate metric, a 0% row and an unbalanced
    dimension — each message names its own component.
+
+## UCC Standard removed; probe survey added (v0.31.0)
+
+**Task 1 — UCC Standard is gone.** Every reference was traced before anything was
+deleted: the DocType folder, `UCC Question Mapping.standard`, the picker in
+`api/mapping.mapping_masters`, the `standard` argument and assignment in
+`upsert_question_mapping`, the field in `get_mapping_overview`, the select/hidden
+input and payload key in `mapping_studio.js`, the Data Explorer dimension AND
+filter in `api/explorer.py`, and `demo_data`'s `_demo_standard()` /
+`DEMO-STD-C7` / OWNED entry / teardown plan row. The workbench never sent it.
+`primary_clause` untouched.
+
+The DocType JSON change drops the column on migrate; `patches/v0_31_0/
+drop_ucc_standard.py` removes the DocType and its rows, which a JSON change
+cannot. It prints what it deletes first, so a site that unexpectedly holds real
+standards shows up in the migrate log rather than afterwards.
+
+**This release needs `bench --site ucc-sms-v2.orb.local migrate`** — a DocType is
+removed and a field is dropped. Build + clear-cache alone is not enough.
+
+Verify after migrate:
+1. `frappe.db.exists("DocType", "UCC Standard")` returns None.
+2. The Objectives inspector and old Mapping Studio form show Objective, Primary
+   Clause and Related Clauses, with no Standard field.
+3. Data Explorer's mappings dataset offers `objective` and `survey_version` only.
+4. `demo_data.seed()` runs clean and creates no `DEMO-STD-C7`.
+   (`test_demo_seed_dry.py` already executes the whole seed path against the
+   field-validating stub and passes — 538 answers, 10 mapping rows, unchanged.)
+
+**Task 2 — the throwaway probe survey.** `scripts/setup_probe_survey.py` builds
+`PROBE- Probe test survey (safe to delete)` with one Rating and one NPS question,
+publishes it, and opens a campaign through `api.campaign.start_collecting` so the
+token is minted by `survey_tracking_hooks` — the one place that decides what a
+public token is. `--remove` tears the whole thing down.
+
+**It requires a planning record as an argument and will not invent one.** A
+campaign is a `Survey Tracking` row and educ_sg makes `survey_name` mandatory;
+the 2026-07-26 decision forbids creating stub planning records. Run it with no
+argument and it lists the existing ones.
+
+`add_nps_question.py` and `probe_guest_csrf.py` now find that campaign by walking
+Survey Tracking → version → survey title `PROBE-%`, and **refuse rather than fall
+back to a live campaign** — falling back is exactly what route 2 was chosen to
+avoid. An explicit version/token argument still overrides.
+
+**NOT YET RUN — this environment has no bench.** Every field name and Select
+value the new script writes was validated against the DocType JSONs using the
+same stub as `test_demo_seed_dry.py` (UCC Survey / Version / Rating question with
+choices / NPS question all pass), which catches the three things that kill a
+bench script. What it cannot cover is the educ_sg half: `Survey Tracking`,
+`Survey Management` and the HTTP round-trip. Run in this order and report:
+
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/setup_probe_survey.py ucc-sms-v2.orb.local
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/setup_probe_survey.py ucc-sms-v2.orb.local <planning_record>
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/add_nps_question.py ucc-sms-v2.orb.local
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_guest_csrf.py ucc-sms-v2.orb.local

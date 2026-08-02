@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Add one NPS question to the survey version an open campaign points at.
+"""Add one NPS question to the PROBE test survey.
 
 Why this exists: probe_submit_validation.py has a fourth case ("NPS value of
 47") that it SKIPS whenever the target version holds no NPS question, and it
@@ -10,7 +10,8 @@ Run from the site directory (frappe.init defaults sites_path to "."):
     cd ~/ucc-sms-v2/sites
     ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/add_nps_question.py ucc-sms-v2.orb.local
 
-Pass a version explicitly if the site has more than one open campaign:
+It targets the throwaway PROBE- survey and nothing else. Pass a version
+explicitly only if you mean to act on a different one:
 
     ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/add_nps_question.py ucc-sms-v2.orb.local <survey_version>
 
@@ -38,24 +39,51 @@ QUESTION = "How likely are you to recommend United Ceres College to a friend or 
 frappe.init(site=SITE)
 frappe.connect()
 
+PROBE_PREFIX = "PROBE-"
+
+
+def probe_campaign():
+	"""The throwaway probe campaign, or None. NEVER a live one.
+
+	Decided 2026-08-02 (route 2): these probes run against a survey built for
+	them by scripts/setup_probe_survey.py, not against whatever campaign happens
+	to be open. Ownership is proven by the link chain - Survey Tracking ->
+	version -> survey whose title carries PROBE- - because a Survey Tracking row
+	carries no title of ours to check.
+	"""
+	surveys = frappe.get_all("UCC Survey", filters={"title": ["like", PROBE_PREFIX + "%"]},
+							 pluck="name")
+	if not surveys:
+		return None
+	versions = frappe.get_all("UCC Survey Version", filters={"survey": ["in", surveys]},
+							  pluck="name")
+	if not versions:
+		return None
+	rows = frappe.get_all(
+		"Survey Tracking",
+		filters={"ucc_survey_version": ["in", versions], "ucc_public_token": ["!=", ""],
+				 "ucc_collection_status": "Open"},
+		fields=["ucc_public_token", "ucc_survey_version"])
+	return rows[0] if rows else None
+
+
+def no_probe_survey(site):
+	print("No open PROBE- campaign on this site.")
+	print("These probes deliberately do NOT fall back to a live campaign - that is")
+	print("what route 2 was decided to avoid. Build the throwaway survey first:\n")
+	print("    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/"
+		  "setup_probe_survey.py %s <planning_record>" % site)
+	print("\n(Run it with no planning record to see which ones exist.)")
+
 
 def target_version():
 	if VERSION_ARG:
 		return VERSION_ARG
-	# Same discovery the validation probe uses, so both act on the same version.
-	rows = frappe.get_all(
-		"Survey Tracking",
-		filters={"ucc_public_token": ["!=", ""], "ucc_collection_status": "Open"},
-		fields=["name", "ucc_survey_version"],
-	)
-	if not rows:
-		print("No open campaign with a public token. Pass a survey version as argv[2].")
+	probe = probe_campaign()
+	if not probe:
+		no_probe_survey(SITE)
 		sys.exit(1)
-	if len(rows) > 1:
-		print("More than one open campaign; using the first. Pass a version to choose:")
-		for r in rows:
-			print("   %s  version=%s" % (r.name, r.ucc_survey_version))
-	return rows[0].ucc_survey_version
+	return probe.ucc_survey_version
 
 
 version = target_version()

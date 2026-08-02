@@ -1,4 +1,13 @@
-# UCC Standard — findings only, no action taken
+# UCC Standard — findings, and the decision taken
+
+> **DECIDED 2026-08-02: derive-and-drop.** The probe returned ONE row on the
+> live site and it was the demo record. `UCC Standard` and
+> `UCC Question Mapping.standard` are removed in v0.31.0
+> (`patches/v0_31_0/drop_ucc_standard.py`). `primary_clause` — the field real
+> mapping practice actually uses — is untouched. No score can move: nothing in
+> the calculation chain ever read the removed field.
+
+The findings that led there follow, unchanged.
 
 Asked: is `UCC Standard` an invented local copy of a register the institution
 already maintains, the same way `UCC Objective` was?

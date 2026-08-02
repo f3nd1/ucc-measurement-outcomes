@@ -55,9 +55,9 @@ DATASETS = {
 	},
 	"Objective Mapping": {
 		"doctype": "UCC Question Mapping",
-		"dimensions": ["objective", "standard", "survey_version"],
+		"dimensions": ["objective", "survey_version"],
 		"measures": {"Row Count": ("count", None)},
-		"filters": ["objective", "standard", "survey_version"],
+		"filters": ["objective", "survey_version"],
 	},
 	"Survey Campaigns": {
 		"doctype": "UCC Survey Campaign",

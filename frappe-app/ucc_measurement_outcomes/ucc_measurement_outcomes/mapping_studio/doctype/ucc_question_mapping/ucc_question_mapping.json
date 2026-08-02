@@ -11,7 +11,6 @@
   "survey_version",
   "objective",
   "column_break_map",
-  "standard",
   "primary_clause",
   "related_clauses",
   "notes"
@@ -49,13 +48,6 @@
   {
    "fieldname": "column_break_map",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "standard",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Primary Standard",
-   "options": "UCC Standard"
   },
   {
    "description": "Primary clause code, e.g. GD4_5.2.2.2.",

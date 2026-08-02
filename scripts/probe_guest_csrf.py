@@ -53,6 +53,43 @@ BASE = frappe.utils.get_url()
 ENDPOINT = "/api/method/ucc_measurement_outcomes.api.public.submit_survey"
 
 
+PROBE_PREFIX = "PROBE-"
+
+
+def probe_campaign():
+	"""The throwaway probe campaign, or None. NEVER a live one.
+
+	Decided 2026-08-02 (route 2): these probes run against a survey built for
+	them by scripts/setup_probe_survey.py, not against whatever campaign happens
+	to be open. Ownership is proven by the link chain - Survey Tracking ->
+	version -> survey whose title carries PROBE- - because a Survey Tracking row
+	carries no title of ours to check.
+	"""
+	surveys = frappe.get_all("UCC Survey", filters={"title": ["like", PROBE_PREFIX + "%"]},
+							 pluck="name")
+	if not surveys:
+		return None
+	versions = frappe.get_all("UCC Survey Version", filters={"survey": ["in", surveys]},
+							  pluck="name")
+	if not versions:
+		return None
+	rows = frappe.get_all(
+		"Survey Tracking",
+		filters={"ucc_survey_version": ["in", versions], "ucc_public_token": ["!=", ""],
+				 "ucc_collection_status": "Open"},
+		fields=["ucc_public_token", "ucc_survey_version"])
+	return rows[0] if rows else None
+
+
+def no_probe_survey(site):
+	print("No open PROBE- campaign on this site.")
+	print("These probes deliberately do NOT fall back to a live campaign - that is")
+	print("what route 2 was decided to avoid. Build the throwaway survey first:\n")
+	print("    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/"
+		  "setup_probe_survey.py %s <planning_record>" % site)
+	print("\n(Run it with no planning record to see which ones exist.)")
+
+
 def opener():
 	"""A fresh browser: its own cookie jar, so each case is an isolated session."""
 	return urllib.request.build_opener(
@@ -96,14 +133,11 @@ def has_sid(op):
 # --- find the campaign ----------------------------------------------------
 token = TOKEN_ARG
 if not token:
-	rows = frappe.get_all(
-		"Survey Tracking",
-		filters={"ucc_public_token": ["!=", ""], "ucc_collection_status": "Open"},
-		fields=["ucc_public_token", "ucc_survey_version"])
-	if not rows:
-		print("No open campaign with a public token. Pass one as argv[2].")
+	probe = probe_campaign()
+	if not probe:
+		no_probe_survey(SITE)
 		sys.exit(1)
-	token, version = rows[0].ucc_public_token, rows[0].ucc_survey_version
+	token, version = probe.ucc_public_token, probe.ucc_survey_version
 else:
 	version = frappe.db.get_value("Survey Tracking", {"ucc_public_token": token},
 								  "ucc_survey_version")
@@ -114,6 +148,8 @@ question = frappe.get_all(
 	fields=["name"], order_by="sequence asc", limit_page_length=1)
 if not question:
 	print("No scale question in %s - nothing valid to submit." % version)
+	print("The PROBE survey is built with one; if this is a live version you passed")
+	print("by hand, pass the probe token instead or run setup_probe_survey.py.")
 	sys.exit(1)
 answer = [{"question": question[0].name, "value": "4"}]
 

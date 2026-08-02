@@ -126,3 +126,30 @@ field the dashboard renders as the institution's threshold. The scale and its
 conversion (`1 + score/25`) go in the description, where they are a statement of
 fact. No patch fixes existing records: overwriting a target on a live index is
 not something to do silently, so it is a listed manual check instead.
+
+## 2026-08-02 — UCC Standard removed (derive-and-drop)
+
+`UCC Standard` and `UCC Question Mapping.standard` are deleted.
+`scripts/probe_standards_register.py` settled it on the live site: **one row, and
+it was the demo record** `DEMO-STD-C7`. Real mapping practice uses the free-text
+`primary_clause` on the mapping row, which stays exactly as it is.
+
+The 2026-07-29 entry that removed `UCC Objective` predicted this in writing —
+"`UCC Standard` is untouched and still invented, a smaller version of the same
+question, left open deliberately" — and the shape turned out identical: a local
+copy of something the institution already maintains, reachable through
+`Survey Objective` → Policies And Standards Management. So the standard was
+**derivable from the objective** and nothing derived it; the field was a second,
+hand-set, unvalidated copy that could contradict its own row's objective with no
+check anywhere.
+
+Removal is a delete, not a migration, because there is nothing to carry: the
+calculation chain never read it. `index_calc`, `metric_engine` and `index_engine`
+contain no reference to `UCC Question Mapping.standard`, so no published score
+can move. That is also why it was cheap now and would only get dearer.
+
+`primary_clause` is deliberately NOT touched in the same change. It is free text
+and it is the weaker parallel model the 2026-07-29 entry also named — but it is
+in active use and it is what reaches `UCC Score Breakdown.lineage_clauses`.
+Replacing it is a separate decision with its own evidence, not a side effect of
+this one.

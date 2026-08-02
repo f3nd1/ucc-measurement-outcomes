@@ -51,7 +51,7 @@ YESNO = "Yes/No to 100/0"
 OWNED = frozenset({
 	"UCC Survey", "UCC Survey Version", "UCC Survey Question",
 	"UCC Survey Question Choice", "UCC Survey Campaign", "UCC Survey Submission",
-	"UCC Survey Answer", "UCC Standard", "UCC Question Mapping",
+	"UCC Survey Answer", "UCC Question Mapping",
 	"UCC Metric Definition", "UCC Metric Source", "UCC Metric Result",
 	"UCC Index Definition", "UCC Index Version", "UCC Index Node",
 	"UCC Index Result", "UCC Score Breakdown",
@@ -264,7 +264,6 @@ def _build(spec, publish_index):
 			_new("UCC Survey Answer", submission=submission.name,
 				 question=question.name, answer_value=answers[i])
 
-	standard = _demo_standard()
 	# Objectives are BORROWED, never created. UCC Objective used to exist purely
 	# so demo data could invent six of its own; now that mappings point at the
 	# institution's Survey Objective register, seeding one would put a fake
@@ -278,7 +277,7 @@ def _build(spec, publish_index):
 			continue   # left unmapped on purpose - this is what set B demonstrates
 		if pool:
 			_new("UCC Question Mapping", question=question.name, survey_version=version.name,
-				 objective=pool[i % len(pool)], standard=standard.name, primary_clause="7.1.1")
+				 objective=pool[i % len(pool)], primary_clause="7.1.1")
 		_new("UCC Metric Definition", metric_code=metric_code, metric_name=obj_name,
 			 default_normalisation="Likert 1-5 to 0-100",
 			 sources=[{"source_type": "Survey Question", "source_question": question.name,
@@ -402,7 +401,6 @@ def _build_full():
 		_responses(spec, version, questions)
 		built[skey] = (version, questions)
 
-	standard = _demo_standard()
 	pool = _objective_pool()
 	for skey, spec in SURVEYS_A.items():
 		version, questions = built[skey]
@@ -410,7 +408,7 @@ def _build_full():
 			for objective in _objectives_for(key, pool):
 				_new("UCC Question Mapping", question=questions[key].name,
 					 survey_version=version.name, objective=objective,
-					 standard=standard.name, primary_clause="7.1.1")
+					 primary_clause="7.1.1")
 
 	for code, name, _weight, norm, sources in SEQI_METRICS:
 		_new("UCC Metric Definition", metric_code=code, metric_name=name,
@@ -472,12 +470,6 @@ def _objective_pool(limit=6):
 			  "Metrics and index still seed; Mapping Studio will show every "
 			  "demo question as unmapped, which is a true statement about this site.")
 	return pool
-
-
-def _demo_standard():
-	return _get_or_create("UCC Standard", f"{DEMO_PREFIX}STD-C7",
-						  standard_code=f"{DEMO_PREFIX}STD-C7",
-						  standard_name="Criterion 7 - Quality Assurance (demo)")
 
 
 def _get_or_create(doctype, name, **kwargs):
@@ -560,7 +552,6 @@ def remove(dry_run=0):
 										metrics[0][0] if metrics else None)),
 		("UCC Metric Definition", metrics),
 		("UCC Question Mapping", mappings),
-		("UCC Standard", _prefixed("UCC Standard")),
 		("UCC Survey Answer", answers),
 		("UCC Survey Submission", submissions),
 		("UCC Survey Campaign", campaigns),

@@ -61,7 +61,7 @@ def get_mapping_overview(survey_version):
 	for m in frappe.get_all(
 		MAPPING,
 		filters={"survey_version": survey_version},
-		fields=["question", "objective", "standard", "primary_clause", "related_clauses"],
+		fields=["question", "objective", "primary_clause", "related_clauses"],
 		order_by="creation asc",
 	):
 		mappings.setdefault(m["question"], []).append(m)
@@ -80,7 +80,6 @@ def get_mapping_overview(survey_version):
 		# The single-value fields stay for the existing inspector; `objectives`
 		# carries the full truth so nothing is hidden.
 		q["objective"] = m.get("objective")
-		q["standard"] = m.get("standard")
 		q["primary_clause"] = m.get("primary_clause")
 		q["related_clauses"] = m.get("related_clauses")
 		q["objectives"] = [r["objective"] for r in rows if r.get("objective")]
@@ -99,7 +98,7 @@ def _writable_question(question):
 
 
 @frappe.whitelist()
-def upsert_question_mapping(question, objective, standard=None, primary_clause=None, related_clauses=None):
+def upsert_question_mapping(question, objective, primary_clause=None, related_clauses=None):
 	"""Create or update this question's objective mapping.
 
 	The unique constraint on `question` was removed once real data showed
@@ -119,7 +118,6 @@ def upsert_question_mapping(question, objective, standard=None, primary_clause=N
 	doc = frappe.get_doc(MAPPING, names[0]) if names else frappe.new_doc(MAPPING)
 	doc.question = question
 	doc.objective = objective
-	doc.standard = standard
 	doc.primary_clause = primary_clause
 	doc.related_clauses = related_clauses
 	doc.save()
@@ -284,7 +282,6 @@ def mapping_masters():
 		# along for the canvas's objective panel - one wider query on a list that
 		# was already being fetched beats a round trip per node click.
 		"objectives": frappe.get_all(OBJECTIVE, fields=_objective_fields(), order_by="name"),
-		"standards": frappe.get_all("UCC Standard", fields=["name", "standard_name"], order_by="name"),
 		"metrics": frappe.get_all(METRIC, fields=["name", "metric_name"], order_by="name"),
 	}
 

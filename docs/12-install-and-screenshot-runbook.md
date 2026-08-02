@@ -147,7 +147,9 @@ for val in ("5", "4", "3", "5"):
 # 4) Mapping: objective + map q1 only (q2 stays an unmapped gap)
 obj = frappe.get_doc({"doctype": "UCC Objective", "objective_code": "OBJ-DEMO-1",
                       "objective_name": "Teaching quality"}).insert()
-frappe.get_doc({"doctype": "UCC Standard", "standard_code": "GD4",
+# (UCC Standard was removed in v0.31.0 - clause text lives in
+#  UCC Question Mapping.primary_clause, which is free text.)
+# frappe.get_doc({"doctype": "UCC Standard", "standard_code": "GD4",
                 "standard_name": "GD4"}).insert(ignore_if_duplicate=True)
 frappe.get_doc({"doctype": "UCC Question Mapping", "question": q1, "objective": obj.name,
                 "standard": "GD4", "primary_clause": "GD4_5.2.2.2"}).insert()

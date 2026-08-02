@@ -40,7 +40,7 @@ class MappingStudio {
 	constructor(page) {
 		this.page = page;
 		this.rows = [];
-		this.masters = { objectives: [], standards: [], metrics: [] };
+		this.masters = { objectives: [], metrics: [] };
 		this.selected = null;
 		this.filter = "all";
 		this._injectStyle();
@@ -773,9 +773,6 @@ class MappingStudio {
 				? `<div class="ucc-map-multi">${__("This question carries {0} objectives: {1}. The field above edits one at a time.",
 					[q.objectives.length, frappe.utils.escape_html(q.objectives.join(", "))])}</div>`
 				: ""}
-			${this.masters.standards.length
-				? `<div class="form-group"><label>${__("Standard")}</label><select class="form-control" data-f="standard">${opt(this.masters.standards, q.standard)}</select></div>`
-				: `<input type="hidden" data-f="standard" value="${frappe.utils.escape_html(q.standard || "")}">`}
 			<div class="form-group"><label>${__("Primary Clause")}</label><input class="form-control" data-f="primary_clause" value="${frappe.utils.escape_html(q.primary_clause || "")}"></div>
 			<div class="form-group"><label>${__("Related Clauses")}</label><textarea class="form-control" data-f="related_clauses">${frappe.utils.escape_html(q.related_clauses || "")}</textarea></div>
 			<button class="btn btn-primary btn-sm btn-block ucc-map-save">${__("Save Objective Mapping")}</button>
@@ -822,7 +819,6 @@ class MappingStudio {
 			args: {
 				question: name,
 				objective: this._val("objective"),
-				standard: this._val("standard"),
 				primary_clause: this._val("primary_clause"),
 				related_clauses: this._val("related_clauses"),
 			},
