@@ -205,3 +205,110 @@ def compute_index(nodes, metric_values):
 		else:
 			r["contribution"] = None
 	return {"value": value, "breakdown": rows}
+
+
+def effective_weights(nodes):
+	"""{node_key: effective share of the whole index, in percent}.
+
+	The nominal composition of the formula: a child's effective contribution is
+	its parent's effective contribution times its own weight within its parent.
+	Root = 100.
+
+	This is NOT what compute_index divides by. weighted_score re-bases on the
+	weight actually PRESENT, so a sibling with no metric result silently
+	redistributes its share at calculation time. That is a property of one
+	calculation run against one set of results; this is a property of the
+	formula, which is what an editor and an evidence export need to show.
+	"""
+	children = {}
+	for n in nodes:
+		children.setdefault(n.get("parent_key") or None, []).append(n)
+	out = {}
+
+	def walk(key, share):
+		kids = children.get(key, [])
+		total = sum((k.get("weight") or 0) for k in kids)
+		for k in kids:
+			w = k.get("weight") or 0
+			# Divide by the declared total, not by 100: a parent whose children
+			# total 90 still splits ITS share between them in those proportions,
+			# and showing 90% of the parent's share would hide the gap rather
+			# than let the weight check report it.
+			child_share = share * (w / total) if total else 0
+			out[k["key"]] = child_share
+			walk(k["key"], child_share)
+
+	roots = [n for n in nodes if not n.get("parent_key")]
+	for r in roots:
+		out[r["key"]] = 100.0
+		walk(r["key"], 100.0)
+	return out
+
+
+def component_problems(nodes, metric_facts=None):
+	"""Per-component problems, each naming the exact node it belongs to.
+
+	A generic "formula is invalid" tells nobody which row to fix, which is the
+	whole complaint this answers. Returns
+	[{key, label, severity, message}] with severity "error" or "warning".
+
+	metric_facts: {metric_code: {"exists": bool, "sources": int, "status": str}}
+	Absent means "not checked" - this module never invents a fact about a
+	metric it was not told about.
+	"""
+	facts = metric_facts or {}
+	out = []
+	label_of = {n["key"]: (n.get("label") or n["key"]) for n in nodes}
+
+	def add(key, severity, message):
+		out.append({"key": key, "label": label_of.get(key, key),
+		            "severity": severity, "message": message})
+
+	children = {}
+	for n in nodes:
+		children.setdefault(n.get("parent_key") or None, []).append(n)
+
+	for n in nodes:
+		key, weight = n["key"], (n.get("weight") or 0)
+		is_root = not n.get("parent_key")
+		if not is_root and weight == 0:
+			add(key, "warning", "Weight is 0%, so this contributes nothing.")
+		if weight < 0:
+			add(key, "error", "Weight is negative.")
+		if n.get("type") == "Metric" and not n.get("source_metric"):
+			add(key, "warning", "No metric is attached, so this node scores nothing.")
+		code = n.get("source_metric")
+		if code and code in facts:
+			fact = facts[code]
+			if not fact.get("exists", True):
+				add(key, "error", "Metric '{0}' does not exist.".format(code))
+			elif not fact.get("sources", 1):
+				add(key, "warning",
+				    "Metric '{0}' has no source questions, so it scores nothing.".format(code))
+
+	# Duplicate metric under the SAME parent. Across different parents it may be
+	# deliberate (one metric feeding two dimensions), so that is not flagged here.
+	for parent, kids in children.items():
+		seen = {}
+		for k in kids:
+			code = k.get("source_metric")
+			if not code:
+				continue
+			if code in seen:
+				add(k["key"], "error",
+				    "Metric '{0}' is already used by '{1}' under the same parent.".format(
+					    code, label_of.get(seen[code], seen[code])))
+			else:
+				seen[code] = k["key"]
+
+	# Each parent's children must total 100. Reported against the PARENT, since
+	# that is the row a user fixes, and separately from the top level so a child
+	# gap is never hidden by a balanced root.
+	for parent, kids in children.items():
+		if parent is None:
+			continue
+		total = weights_total([k.get("weight") or 0 for k in kids])
+		if kids and not weights_valid([k.get("weight") or 0 for k in kids]):
+			add(parent, "error",
+			    "Child weights total {0}%, expected 100%.".format(round(total, 2)))
+	return out

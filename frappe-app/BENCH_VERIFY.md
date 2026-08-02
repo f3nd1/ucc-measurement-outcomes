@@ -2261,3 +2261,64 @@ on this canvas. The percentage readout stays in step with wheel zoom too.
 Measured: header shows zoom-fit / zoom-out / zoom-reset / zoom-in, canvas toolbar
 `display:none`, zoom-in → scale 1.10 and label "110%", reset → scale 1 pan 0/0,
 fit → 0.76.
+
+## Index Formula Builder replaces the node canvas (v0.30.0)
+
+**The prototype file `ucc_indices_interactive_proposals.html` was not present** —
+not in `prototype/`, not anywhere reachable. The visual language therefore comes
+from the brief's own density/colour sections plus the design tokens already at
+the top of `ucc_mo.bundle.css`, not from a guess at the artefact. Send the file
+and the CSS can be re-derived with `scripts/scope_prototype_css.py`; the class
+names the brief specified (`.formula-row`, `.composition-segment`,
+`.dimension-row`, `.allocation-lane`, `.formula-inspector`, `.formula-summary`)
+are used as given, so a swap is a stylesheet change, not a rewrite.
+
+**Data model, as discovered — no invention:** `UCC Index Definition` →
+`UCC Index Version` (status Draft/In Review/Published/Closed, `is_immutable`) →
+`UCC Index Node` child table: `node_key`, `node_type`
+(**Source|Metric|Dimension|Index**), `label`, `parent_key` (Data, free-form),
+`source_metric` (Link), `weight` (**Percent, 0-100**), `normalisation`,
+`reverse_scored`, `pos_x/pos_y`.
+
+* **Dimensions ARE supported** and always were — `node_type` includes it and
+  `parent_key` is arbitrary, so the model allows **N levels**, not two.
+  `compute_index` recurses, so a 3-level formula already scores correctly.
+* **No ordering field exists.** Order is the child-table row order `save_nodes`
+  writes. That is why `_formula_signature` sorts by `node_key` — reordering is
+  deliberately NOT a formula content change.
+* One metric may feed several indices (`source_metric` is a plain Link) and
+  several dimensions. Under the SAME parent it is a duplicate, now an error.
+* `UCC Metric Definition` has **no status field**, so there is no published/draft
+  metric gate to enforce. The real gate is `source_count`, which is shown.
+
+**Effective weight, and one deliberate deviation from the brief.** The brief says
+`effective = parent weight x child weight`. This divides by the children's actual
+total instead. When a level balances at 100 the two are identical; when it does
+not, dividing by 100 would print a number the engine would never produce —
+`weighted_score` re-bases on the weight actually present. The displayed figure is
+therefore what a calculation would really do, and the imbalance is reported
+separately on the parent row. Proven in `test_index_engine.test_effective_weights`.
+
+**Added backend:** `index_engine.effective_weights` and
+`index_engine.component_problems` (pure, tested); `validate_index` now also
+returns `problems` (each naming its component) and `effective`, plus a check that
+leaf effective weights total 100 — `issues`/`warnings` are unchanged, so
+`publish_version` reaches exactly the same verdict as before;
+`api.index_studio.new_version_from` copies a frozen formula into a new Draft.
+
+**Nothing about calculation changed.** `aggregate_metric` untouched (P3 open),
+`compute_index` untouched, `calculate` still refuses a non-Published version, and
+`UCC Index Result` still points at the frozen version.
+
+**Verify on the bench:**
+1. A flat index shows a weighted table; add a Dimension and it becomes a
+   hierarchy on the next draw; leave one metric at 100% and it becomes the
+   single-metric card.
+2. Drag a slider — total, effective column, composition bar and status strip all
+   move, and **nothing is written** until Save formula.
+3. Reload mid-edit: the browser warns about unsaved changes.
+4. Save, reload the page, confirm weights AND row order persisted.
+5. On a Published version: no sliders, no add/remove, banner explains why, and
+   "Create new version" produces `<INDEX>-V<nn>` with the same nodes.
+6. Validate on a formula with a duplicate metric, a 0% row and an unbalanced
+   dimension — each message names its own component.

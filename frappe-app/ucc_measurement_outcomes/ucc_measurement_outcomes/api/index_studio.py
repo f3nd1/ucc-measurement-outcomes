@@ -9,6 +9,8 @@ import frappe
 from frappe import _
 
 from ucc_measurement_outcomes.index_engine import (
+	component_problems,
+	effective_weights,
 	structural_issues,
 	structural_warnings,
 	weights_valid,
@@ -193,7 +195,35 @@ def validate_index(index_version):
 			continue  # the root index node has no siblings to total
 		if not weights_valid(weights):
 			issues.append(_("Weights under '{0}' total {1}%, expected 100%.").format(parent, round(sum(weights), 2)))
-	return {"valid": not issues, "issues": issues, "warnings": warnings}
+
+	# Per-component detail. The Formula Builder puts each of these beside the row
+	# it belongs to, which a flat list of sentences cannot do. `issues` and
+	# `warnings` are unchanged so publish_version and every existing caller keep
+	# working off exactly the same verdict as before.
+	codes = sorted({n.source_metric for n in version.nodes if n.source_metric})
+	facts = {}
+	if codes:
+		existing = set(frappe.get_all(
+			METRIC_DEF, filters={"name": ["in", codes]}, pluck="name"))
+		counts = {}
+		for s in frappe.get_all("UCC Metric Source",
+								filters={"parent": ["in", codes], "source_question": ["is", "set"]},
+								fields=["parent"]):
+			counts[s["parent"]] = counts.get(s["parent"], 0) + 1
+		facts = {c: {"exists": c in existing, "sources": counts.get(c, 0)} for c in codes}
+	problems = component_problems(graph, facts)
+	effective = effective_weights(graph)
+	# The formula must resolve to leaf shares that total 100 - the invariant an
+	# evidence export depends on, and one that per-level checks can still miss.
+	leaf_keys = {n["key"] for n in graph} - {n["parent_key"] for n in graph if n.get("parent_key")}
+	leaf_total = round(sum(effective.get(k, 0) for k in leaf_keys), 6)
+	if graph and abs(leaf_total - 100) > 1e-6:
+		issues.append(_("Effective metric weights total {0}%, expected 100%.").format(round(leaf_total, 2)))
+
+	return {
+		"valid": not issues, "issues": issues, "warnings": warnings,
+		"problems": problems, "effective": effective,
+	}
 
 
 @frappe.whitelist()
@@ -206,6 +236,40 @@ def publish_version(index_version):
 	version.status = "Published"
 	version.save()
 	return True
+
+
+@frappe.whitelist()
+def new_version_from(index_version):
+	"""Copy a version's formula into a fresh Draft, and return the new name.
+
+	This is what Review Mode offers instead of editing: a Published version is
+	frozen by UCCIndexVersion.validate, and results already calculated point at
+	it, so the only honest way to change a formula is a new version that new
+	results will point at instead. Nothing about the source version changes.
+	"""
+	if not frappe.has_permission(INDEX_VERSION, "create"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	source = frappe.get_doc(INDEX_VERSION, index_version)
+	# Same probe save_nodes' sibling uses: count alone collides after a deletion.
+	# ponytail: linear probe, fine at human version counts.
+	n = frappe.db.count(INDEX_VERSION, {"index": source.index}) + 1
+	while frappe.db.exists(INDEX_VERSION, f"{source.index}-V{n:02d}"):
+		n += 1
+	fresh = frappe.get_doc({
+		"doctype": INDEX_VERSION, "index": source.index,
+		"version_number": f"{n:02d}", "status": "Draft",
+	})
+	for node in source.nodes:
+		fresh.append("nodes", {
+			"node_key": node.node_key, "node_type": node.node_type,
+			"label": node.label, "parent_key": node.parent_key,
+			"source_metric": node.source_metric, "weight": node.weight,
+			"normalisation": node.normalisation,
+			"reverse_scored": node.reverse_scored,
+			"pos_x": node.pos_x, "pos_y": node.pos_y,
+		})
+	fresh.insert()
+	return fresh.name
 
 
 @frappe.whitelist()

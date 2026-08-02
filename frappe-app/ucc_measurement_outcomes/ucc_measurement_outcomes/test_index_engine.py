@@ -3,7 +3,9 @@ Run: `python test_index_engine.py`
 """
 
 from index_engine import (
+	component_problems,
 	compute_index,
+	effective_weights,
 	normalise,
 	structural_issues,
 	structural_warnings,
@@ -131,6 +133,78 @@ def test_structural_issues():
 	assert weights_valid([120, -20])  # documents WHY the structural check exists
 
 
+def test_effective_weights():
+	# Index -> Dimension -> Metric. A child's effective share is its parent's
+	# share times its weight within that parent.
+	nodes = [
+		{"key": "i", "parent_key": None, "weight": 0, "type": "Index"},
+		{"key": "d1", "parent_key": "i", "weight": 25, "type": "Dimension"},
+		{"key": "m1", "parent_key": "d1", "weight": 40, "type": "Metric"},
+		{"key": "m2", "parent_key": "d1", "weight": 60, "type": "Metric"},
+		{"key": "d2", "parent_key": "i", "weight": 75, "type": "Dimension"},
+		{"key": "m3", "parent_key": "d2", "weight": 100, "type": "Metric"},
+	]
+	eff = effective_weights(nodes)
+	assert eff["i"] == 100
+	assert eff["d1"] == 25 and eff["d2"] == 75
+	assert abs(eff["m1"] - 10) < 1e-9, eff["m1"]     # 25% x 40%
+	assert abs(eff["m2"] - 15) < 1e-9, eff["m2"]     # 25% x 60%
+	assert abs(eff["m3"] - 75) < 1e-9
+	# Leaves total 100 when every level is balanced - the invariant an evidence
+	# export depends on.
+	assert abs(sum(eff[k] for k in ("m1", "m2", "m3")) - 100) < 1e-9
+
+	# A flat formula is the same function with one level.
+	flat = [{"key": "i", "parent_key": None, "weight": 0},
+	        {"key": "a", "parent_key": "i", "weight": 30},
+	        {"key": "b", "parent_key": "i", "weight": 70}]
+	assert effective_weights(flat) == {"i": 100.0, "a": 30.0, "b": 70.0}
+
+	# Unbalanced children still split their parent's share in proportion: hiding
+	# the gap here would let the weight check look clean.
+	odd = [{"key": "i", "parent_key": None, "weight": 0},
+	       {"key": "a", "parent_key": "i", "weight": 30},
+	       {"key": "b", "parent_key": "i", "weight": 60}]
+	assert abs(effective_weights(odd)["a"] - 100 / 3) < 1e-9
+
+
+def test_component_problems_name_the_component():
+	nodes = [
+		{"key": "i", "parent_key": None, "weight": 0, "type": "Index", "label": "TEI"},
+		{"key": "a", "parent_key": "i", "weight": 60, "type": "Metric",
+		 "label": "Application of Skills", "source_metric": "APP"},
+		{"key": "b", "parent_key": "i", "weight": 0, "type": "Metric",
+		 "label": "Passing Rate", "source_metric": "PASS"},
+		{"key": "c", "parent_key": "i", "weight": 30, "type": "Metric",
+		 "label": "Duplicate", "source_metric": "APP"},
+	]
+	found = component_problems(nodes, {"APP": {"exists": True, "sources": 3},
+	                                   "PASS": {"exists": True, "sources": 0}})
+	by_key = {}
+	for p in found:
+		by_key.setdefault(p["key"], []).append(p["message"])
+
+	# Every problem names its own row, never a generic failure.
+	assert all(p["label"] for p in found)
+	assert any("0%" in m for m in by_key["b"]), by_key
+	assert any("no source questions" in m for m in by_key["b"]), by_key
+	assert any("already used" in m for m in by_key["c"]), by_key
+	# The parent carries the totals problem, because that is the row you fix,
+	# and it is reported even though the duplicate above is a different fault.
+	assert any("total 90%" in m for m in by_key["i"]), by_key
+
+	# A missing metric is an error, not a warning.
+	gone = component_problems(
+		[{"key": "x", "parent_key": "i", "weight": 100, "type": "Metric", "source_metric": "NOPE"}],
+		{"NOPE": {"exists": False}})
+	assert any(p["severity"] == "error" and "does not exist" in p["message"] for p in gone)
+
+	# A balanced, fully sourced formula reports nothing.
+	clean = [{"key": "i", "parent_key": None, "weight": 0, "type": "Index"},
+	         {"key": "a", "parent_key": "i", "weight": 100, "type": "Metric", "source_metric": "APP"}]
+	assert component_problems(clean, {"APP": {"exists": True, "sources": 2}}) == []
+
+
 def test_structural_warnings():
 	# A freshly added node sits at 0% - it must be reported but must NOT block
 	# publishing, so it is a warning and structural_issues stays silent on it.
@@ -167,4 +241,6 @@ if __name__ == "__main__":
 	test_partial_coverage()
 	test_structural_issues()
 	test_structural_warnings()
+	test_effective_weights()
+	test_component_problems_name_the_component()
 	print("index engine: all checks passed")

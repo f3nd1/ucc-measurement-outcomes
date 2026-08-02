@@ -2300,6 +2300,10 @@ class IndexWorkspace {
 			this.builder = b;
 			this.nodes = b.nodes || [];
 			this.editable = !!b.editable;
+			// The Formula Builder edits a LOCAL draft and saves on an explicit
+			// action, so a slider drag is not 40 writes. this.nodes stays the
+			// server's copy; this.draft is what the screen shows.
+			this._resetDraft();
 			this.sources = (src || {}).sources || {};
 			this.results = results || [];
 			this.app.counts = Object.assign(this.app.counts || {}, { indices: this.versions.length });
@@ -2333,25 +2337,21 @@ class IndexWorkspace {
 			${U.tabs([{ key: "formula", label: __("Formula") }, { key: "calculate", label: __("Calculate") },
 					  { key: "results", label: __("Results") }], tab)}
 			${U.statusStrip([
-				{ value: this.nodes.length, label: __("nodes") },
-				{ value: this.nodes.filter((n) => n.node_type === "Metric").length, label: __("metrics") },
+				{ value: this.draft.length, label: __("nodes") },
+				{ value: this.draft.filter((n) => n.node_type === "Metric").length, label: __("metrics") },
 				{ value: this.results.length, label: __("results") },
-			], published ? null : {
+			], tab === "formula" ? this._balanceMessage() : published ? null : {
 				text: __("Draft. Publish this version before results can be calculated — a result must tie to a frozen formula."),
 				tone: "warn", icon: "i-warning",
 			})}
-			<div class="workarea"><div class="index-layout" style="${tab === "formula" ? "" : "grid-template-columns:1fr"}">
+			<div class="workarea ucc-mo-indices"><div class="index-layout fx-layout" style="${tab === "formula" ? "" : "grid-template-columns:1fr"}">
 				<section class="pane"><header class="pane-head">
 					<div class="pane-title-with-icon">${U.icon("i-index", "sm")}<strong>${
 						tab === "formula" ? __("Formula") : tab === "calculate" ? __("Calculate") : __("Results")}</strong></div>
-					${tab === "formula" ? `<div class="mx-tools">${
-						U.button({ label: __("Add metric"), small: true, tone: "primary",
-								   icon: "i-plus", act: "add-metric-node" })}
-						${window.UCCZoom.controls()}</div>` : ""}
 				</header><div class="pane-body">${
 					tab === "formula" ? this._formula() :
 					tab === "calculate" ? this._calculate() : this._results()}</div></section>
-				${tab === "formula" ? `<div data-node-editor></div>` : ""}
+				${tab === "formula" ? `<div class="formula-inspector" data-node-editor></div>` : ""}
 			</div></div>`);
 		this._mountPicker();
 		this._wire();
@@ -2364,12 +2364,6 @@ class IndexWorkspace {
 		// already gate theirs on their own "primary" local tab the same way).
 		if (tab === "formula") {
 			this._renderEditor();
-			// The canvas needs a mounted element with a real size, so it goes up
-			// after the markup lands. UCCNodeCanvas owns drag, zoom and the edge
-			// maths; nothing else transforms this pane.
-			requestAnimationFrame(() => {
-				this._mountFormulaCanvas();
-			});
 		}
 	}
 
@@ -2447,115 +2441,643 @@ class IndexWorkspace {
 		});
 	}
 
-	// Bug 1 (2026-08-02). This WAS an indented tree with elbow connectors, and
-	// the shape was wrong in a way the round-12 measurement could not see: the
-	// rows stack VERTICALLY, so the org-chart "rail" spanning the children came
-	// out 3px wide and the six drops became six overlapping vertical lines from
-	// the index straight down through every card above their target. On screen
-	// that reads as one top-to-bottom chain, which is exactly what Felix saw.
+	// ======================================================= FORMULA BUILDER ===
+	// The node canvas is gone as the primary editor. An index formula is a
+	// weighted composition - Metrics -> Index, or Metrics -> Dimension -> Index -
+	// and a graph spent the pane on connector lines all converging into one node
+	// while answering none of the questions actually asked of it: which metrics
+	// are in, what each contributes, whether it totals 100, what is broken.
 	//
-	// Replaced with window.UCCNodeCanvas - the SAME component Mapping Studio and
-	// the old Index Studio already use: freely positioned draggable nodes,
-	// bezier connectors converging on the index node, positions persisted in the
-	// pos_x/pos_y fields UCC Index Node has carried all along. Not a second
-	// implementation of anything; the tree is gone rather than added to.
-	_formula() {
-		// The canvas mounts into this div after render (it needs a real element
-		// with a size). The orphan warning stays as MARKUP because it is a
-		// correctness statement, not decoration - a node not reachable from a
-		// root is silently excluded from the score by compute_index.
-		const U = window.UCCMO;
-		const reachable = new Set();
-		const walk = (key) => this.nodes
-			.filter((n) => (n.parent_key || "") === key && !reachable.has(n.node_key))
-			.forEach((n) => { reachable.add(n.node_key); walk(n.node_key); });
-		walk("");
-		const orphans = this.nodes.filter((n) => !reachable.has(n.node_key));
-		return `${orphans.length ? `<div class="published-lock-row" style="max-width:520px">${
-			U.icon("i-warning", "xs")}<div>
-				<b>${__("{0} node(s) are not connected to a root", [orphans.length])}</b><br>${
-				__("Their parent is missing, is another unconnected node, or every node has a parent so there is no root. They are still on the canvas and can be edited; Validate explains what to fix.")}
-			</div></div>` : ""}
-			<div class="formula-canvas" data-formula-canvas style="height:520px"></div>`;
+	// The presentation adapts to the SHAPE of the formula rather than offering a
+	// mode switch nobody should have to think about:
+	//   flat metrics        -> weighted table
+	//   any Dimension node  -> expandable hierarchy
+	//   one metric at 100%  -> single-metric card
+	// "Allocate" is a second VIEW of the same draft, not a second data model.
+	//
+	// Weights are Percent (0-100) on UCC Index Node, so they are edited as
+	// percentages with whatever precision the field carries - no forced 5% steps.
+
+	// Leaving with unsaved weights loses them silently otherwise. One guard, on
+	// the two ways out of this pane: the browser, and switching index version.
+	_guardUnsaved(go) {
+		if (!this.dirty) return go();
+		frappe.confirm(__("This formula has unsaved changes. Leave without saving?"), go);
 	}
 
-	// One mount, reused across redraws. UCCNodeCanvas owns its own scale and
-	// divides by it in _drawEdges, so there is exactly ONE transform on this
-	// canvas - do not also attach UCCZoom here, that would scale the stage twice
-	// and put the connectors back where this bug started.
-	_mountFormulaCanvas() {
-		const host = this.$el.find("[data-formula-canvas]").get(0);
-		if (!host || !window.UCCNodeCanvas) return;
-		this._canvas = new window.UCCNodeCanvas(host, {
-			onSelect: (n) => { this.sel = n.id; this._renderEditor(); },
-			onMove: (n) => this._onNodeMove(n),
-		});
-		// Bug 5: the canvas's built-in toolbar floats over the diagram. The pane
-		// header carries the controls instead, matching every other canvas here.
-		const own = host.querySelector(".ucc-nc-tools");
-		if (own) own.style.display = "none";
-		// Same gesture the tree had, routed to the canvas's own zoom rather than
-		// to a second zoom implementation.
-		host.addEventListener("wheel", (e) => {
-			e.preventDefault();
-			this._canvasZoom(e.deltaY < 0 ? 0.1 : -0.1);   // keeps the header % in step
-		}, { passive: false });
-		this._paintFormulaCanvas();
-		this._showZoomLevel();
-	}
-
-	_paintFormulaCanvas() {
-		if (!this._canvas) return;
-		// Default layout when a node has never been dragged: metrics in a column
-		// on the LEFT, the index they feed on the RIGHT, vertically centred on
-		// them. That order matters - UCCNodeCanvas draws each edge from the
-		// source node's right edge to the target's left and puts the arrowhead
-		// at the target, so metrics-left/index-right is what makes the curves
-		// read as converging INTO the index. Once dragged, pos_x/pos_y win.
-		const children = this.nodes.filter((n) => n.parent_key);
-		const roots = this.nodes.filter((n) => !n.parent_key);
-		const spread = 96;
-		const cnodes = this.nodes.map((n) => {
-			const isRoot = !n.parent_key;
-			const rank = isRoot ? roots.indexOf(n) : children.indexOf(n);
-			return {
-				id: n.node_key,
-				type: (n.node_type || "metric").toLowerCase(),
-				title: n.label || n.node_key,
-				sub: n.node_type === "Metric"
-					? (n.source_metric || __("no metric yet")) + (n.weight ? ` · ${n.weight}%` : "")
-					: (n.weight ? `${n.weight}%` : ""),
-				x: n.pos_x || (isRoot ? 420 : 40),
-				y: n.pos_y || (isRoot
-					? 40 + Math.max(0, children.length - 1) * spread / 2 + rank * spread
-					: 40 + rank * spread),
+	_resetDraft() {
+		this.draft = (this.nodes || []).map((n) => Object.assign({}, n));
+		this.dirty = false;
+		// The browser's own guard, so a reload or a closed tab is not a silent
+		// loss. Registered once; it reads this.dirty live.
+		if (!this._unloadGuard) {
+			this._unloadGuard = (e) => {
+				if (!this.dirty) return;
+				e.preventDefault();
+				e.returnValue = "";
 			};
-		});
-		// Child -> parent, so every metric curve converges on the index node.
-		// Objectives are never nodes here (docs/09-decision-log.md).
-		const edges = children.map((n) => [n.node_key, n.parent_key]);
-		this._canvas.setGraph(cnodes, edges);
-		if (this.sel) this._canvas.selected = this.sel;
-		if (!cnodes.length) {
-			this._canvas.setEmpty({
-				message: this.editable
-					? __("This index version has no nodes yet. Start from a template.")
-					: __("This published version has no nodes."),
-			});
+			window.addEventListener("beforeunload", this._unloadGuard);
 		}
+		this.expanded = this.expanded || new Set();
+		this.locked = this.locked || new Set();
+		this.fxView = this.fxView || "formula";
 	}
 
-	_onNodeMove(cnode) {
-		const n = this.nodes.find((x) => x.node_key === cnode.id);
+	_root() { return this.draft.find((n) => !n.parent_key); }
+	_kids(key) { return this.draft.filter((n) => (n.parent_key || "") === (key || "")); }
+	_node(key) { return this.draft.find((n) => n.node_key === key); }
+	_topLevel() { const r = this._root(); return r ? this._kids(r.node_key) : this._kids(""); }
+	_hasDimensions() { return this.draft.some((n) => n.node_type === "Dimension"); }
+
+	_isSingleMetric() {
+		const top = this._topLevel();
+		return top.length === 1 && top[0].node_type === "Metric" && (top[0].weight || 0) === 100
+			&& !this._kids(top[0].node_key).length;
+	}
+
+	// Mirror of index_engine.effective_weights. PREVIEW ONLY - validate_index
+	// returns the authoritative map and the server recomputes it before saving,
+	// publishing or calculating.
+	_effective() {
+		const out = {};
+		const walk = (key, share) => {
+			const kids = this._kids(key);
+			const total = kids.reduce((s, k) => s + (k.weight || 0), 0);
+			kids.forEach((k) => {
+				const v = total ? share * ((k.weight || 0) / total) : 0;
+				out[k.node_key] = v;
+				walk(k.node_key, v);
+			});
+		};
+		const r = this._root();
+		if (r) { out[r.node_key] = 100; walk(r.node_key, 100); }
+		return out;
+	}
+
+	_metricFact(code) {
+		return ((this.builder && this.builder.metrics) || []).find((m) => m.name === code) || null;
+	}
+
+	// One component's state, as a word first and a colour second.
+	_statusFor(n) {
+		if (n.node_type === "Dimension") {
+			const kids = this._kids(n.node_key);
+			if (!kids.length) return { tone: "attention", label: __("No metrics") };
+			const total = kids.reduce((s, k) => s + (k.weight || 0), 0);
+			if (Math.abs(total - 100) > 1e-6) {
+				return { tone: "invalid", label: __("Children {0}%", [this._pct(total)]) };
+			}
+		}
+		if (!n.parent_key) return { tone: "ready", label: __("Index") };
+		if (n.node_type === "Metric" && !n.source_metric) {
+			return { tone: "invalid", label: __("No metric") };
+		}
+		if (!(n.weight || 0)) return { tone: "attention", label: __("Weight required") };
+		const fact = n.source_metric && this._metricFact(n.source_metric);
+		if (n.source_metric && !fact) return { tone: "invalid", label: __("Metric missing") };
+		if (fact && !fact.source_count) return { tone: "attention", label: __("No source data") };
+		return { tone: "ready", label: __("Ready") };
+	}
+
+	_pct(v) {
+		const n = Math.round((v || 0) * 100) / 100;
+		return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, "");
+	}
+
+	_totalTop() { return this._topLevel().reduce((s, n) => s + (n.weight || 0), 0); }
+
+	_balanceMessage() {
+		const total = this._totalTop();
+		if (!this._topLevel().length) {
+			return { text: __("This formula has no components yet. Add a metric to begin."), tone: "warn", icon: "i-warning" };
+		}
+		const off = Math.round((total - 100) * 100) / 100;
+		if (off === 0) {
+			const problems = this._componentProblems();
+			return problems.length
+				? { text: __("Weights balance at 100%, but {0} component(s) need attention.", [problems.length]),
+					tone: "warn", icon: "i-warning" }
+				: { text: __("Formula is balanced and ready for validation."), tone: "", icon: "i-check" };
+		}
+		return off < 0
+			? { text: __("{0}% remains unallocated.", [this._pct(-off)]), tone: "warn", icon: "i-warning" }
+			: { text: __("Formula is overallocated by {0}%.", [this._pct(off)]), tone: "warn", icon: "i-warning" };
+	}
+
+	// Client-side preview of api.index_studio.validate_index's `problems`. The
+	// server list is what Validate shows; this drives the row badges live while
+	// editing, which is the whole point of a draft.
+	_componentProblems() {
+		const out = [];
+		this.draft.forEach((n) => {
+			if (!n.parent_key) return;
+			const st = this._statusFor(n);
+			if (st.tone !== "ready") out.push({ key: n.node_key, label: n.label || n.node_key, message: st.label });
+		});
+		return out;
+	}
+
+	_formula() {
+		const U = window.UCCMO;
+		if (!this.draft.length) {
+			return `<div class="fx-main">${U.empty(
+				__("This index version has no components yet."),
+				this.editable ? { label: __("Add metric"), tone: "primary", act: "fx-add-metric" } : null)}</div>`;
+		}
+		const body = this.fxView === "allocate" ? this._allocationView()
+			: this._isSingleMetric() ? this._singleMetricView()
+			: this._hasDimensions() ? this._hierarchyView() : this._flatView();
+		return `<div class="fx-main" style="position:relative">
+			${this.editable ? "" : `<div class="review-banner">${U.icon("i-lock", "xs")}<span>${
+				__("This index version is published and protected. Create a new version to change its formula.")
+			}</span>${U.button({ label: __("Create new version"), small: true, tone: "primary", act: "fx-new-version" })}</div>`}
+			${this._summaryStrip()}
+			${this._compositionBar()}
+			<div class="formula-scroll" data-formula-scroll>${body}</div>
+			${this._drawer ? this._addMetricDrawer() : ""}
+		</div>`;
+	}
+
+	_summaryStrip() {
+		const U = window.UCCMO;
+		const top = this._topLevel();
+		const components = this.draft.filter((n) => n.parent_key).length;
+		const problems = this._componentProblems();
+		const total = this._totalTop();
+		const tone = Math.abs(total - 100) < 1e-6 ? "ok" : "warn";
+		const item = (label, value, cls) => `<div class="sum-item">
+			<span class="sum-label">${label}</span>
+			<span class="sum-value ${cls || ""}" ${cls ? 'aria-live="polite"' : ""}>${value}</span></div>`;
+		return `<div class="formula-summary">
+			${item(__("Components"), components)}
+			${item(__("Total weight"), this._pct(total) + "%", tone)}
+			${item(__("Ready"), components - problems.length, "ok")}
+			${item(__("Need attention"), problems.length, problems.length ? "warn" : "")}
+			<span class="spacer"></span>
+			${this.dirty ? `<span class="eyebrow"><span class="unsaved-dot"></span>${__("Unsaved changes")}</span>` : ""}
+			<span class="segmented" role="tablist" aria-label="${__("Formula view")}">
+				${["formula", "allocate"].map((k) => `<button type="button" role="tab" class="${
+					this.fxView === k ? "active" : ""}" data-fx-view="${k}" aria-selected="${
+					this.fxView === k ? "true" : "false"}">${
+					k === "formula" ? __("Formula") : __("Allocate")}</button>`).join("")}
+			</span>
+			${this.editable ? U.button({ label: __("Add metric"), small: true, tone: "primary", icon: "i-plus", act: "fx-add-metric" }) : ""}
+			${this.editable ? U.button({ label: __("Add dimension"), small: true, icon: "i-plus", act: "fx-add-dimension" }) : ""}
+			${this.editable ? U.button({ label: __("Save formula"), small: true, tone: this.dirty ? "primary" : "", icon: "i-save", act: "fx-save" }) : ""}
+		</div>`;
+	}
+
+	// One segment per TOP-LEVEL component: for a flat formula that is each
+	// metric, for a granular one each dimension. Segments are buttons, not
+	// decorative divs - they select, and they are reachable by keyboard.
+	_compositionBar() {
+		const U = window.UCCMO;
+		const top = this._topLevel();
+		const total = this._totalTop();
+		const shown = Math.min(total, 100);
+		const palette = ["#2859d9", "#6941c6", "#0b7285", "#087a52", "#9d5c00", "#8f4bb8", "#3f6fd8", "#1f7a6a"];
+		const segs = top.map((n, i) => {
+			const w = n.weight || 0;
+			if (!w) return "";
+			const pctOfBar = (w / Math.max(total, 100)) * 100;
+			const name = n.label || n.node_key;
+			return `<button type="button" class="composition-segment ${this.sel === n.node_key ? "selected" : ""}"
+				style="width:${pctOfBar}%;background:${palette[i % palette.length]}"
+				data-segment="${U.esc(n.node_key)}"
+				title="${U.esc(name)} — ${this._pct(w)}%"
+				aria-label="${U.esc(name)}, ${this._pct(w)}%">${pctOfBar > 9 ? U.esc(name) : ""}${
+					pctOfBar > 16 ? " · " + this._pct(w) + "%" : ""}</button>`;
+		}).join("");
+		const rest = total < 100
+			? `<span class="composition-rest">${__("{0}% unallocated", [this._pct(100 - total)])}</span>` : "";
+		return `<div class="composition-bar" role="group" aria-label="${__("Weight composition")}">${segs}${rest}</div>`;
+	}
+
+	_headRow(withSources) {
+		return `<div class="formula-head">
+			<span></span><span>${__("Component")}</span>${withSources ? `<span>${__("Sources")}</span>` : ""}
+			<span>${__("Weight")}</span><span style="text-align:right">${__("Effective")}</span>
+			<span>${__("Status")}</span><span style="text-align:right">${__("Actions")}</span></div>`;
+	}
+
+	_flatView() {
+		const eff = this._effective();
+		return this._headRow(true)
+			+ this._topLevel().map((n, i, arr) => this._componentRow(n, eff, i, arr.length)).join("");
+	}
+
+	_componentRow(n, eff, i, count) {
+		const U = window.UCCMO;
+		const st = this._statusFor(n);
+		const fact = n.source_metric && this._metricFact(n.source_metric);
+		return `<div class="formula-row ${this.sel === n.node_key ? "selected" : ""}" data-component="${U.esc(n.node_key)}">
+			<span class="fx-grip" aria-hidden="true">⠿</span>
+			<div class="fx-name">
+				<div class="fx-title">${U.esc(n.label || n.node_key)}</div>
+				<div class="fx-code">${U.esc(n.source_metric || n.node_type)}</div>
+			</div>
+			<div class="fx-count">${fact ? fact.source_count : "—"}</div>
+			${this._weightEditor(n)}
+			<div class="fx-effective">${this._pct(eff[n.node_key])}%</div>
+			<div><span class="fx-status ${st.tone}">${st.label}</span></div>
+			<div class="fx-actions">
+				${U.button({ label: "↑", small: true, act: "fx-up", disabled: !this.editable || i === 0, title: __("Move up") })}
+				${U.button({ label: "↓", small: true, act: "fx-down", disabled: !this.editable || i === count - 1, title: __("Move down") })}
+				${U.button({ label: "×", small: true, act: "fx-remove", disabled: !this.editable, title: __("Remove from index") })}
+			</div>
+		</div>`;
+	}
+
+	_weightEditor(n) {
+		const U = window.UCCMO;
+		const w = n.weight || 0;
+		const name = U.esc(n.label || n.node_key);
+		if (!this.editable) {
+			return `<div class="weight-editor"><b>${this._pct(w)}</b><span class="pct">%</span></div>`;
+		}
+		return `<div class="weight-editor">
+			<input type="range" min="0" max="100" step="0.5" value="${w}"
+				data-weight="${U.esc(n.node_key)}" aria-label="${__("Weight for {0}, percent", [name])}">
+			<input type="number" class="weight-num" min="0" max="100" step="0.01" value="${this._pct(w)}"
+				data-weight-num="${U.esc(n.node_key)}" aria-label="${__("Weight for {0}, percent", [name])}">
+			<span class="pct">%</span>
+		</div>`;
+	}
+
+	_hierarchyView() {
+		const U = window.UCCMO;
+		const eff = this._effective();
+		const top = this._topLevel();
+		return top.map((n, i) => {
+			if (n.node_type !== "Dimension") return this._componentRow(n, eff, i, top.length);
+			const kids = this._kids(n.node_key);
+			const childTotal = kids.reduce((s, k) => s + (k.weight || 0), 0);
+			const open = this.expanded.has(n.node_key);
+			const st = this._statusFor(n);
+			return `<div class="dimension-row ${this.sel === n.node_key ? "selected" : ""}">
+				<button type="button" class="dimension-head" data-dimension="${U.esc(n.node_key)}"
+						aria-expanded="${open ? "true" : "false"}">
+					<span class="dim-chevron" aria-hidden="true">${open ? "▾" : "▸"}</span>
+					<div class="fx-name">
+						<div class="fx-title">${U.esc(n.label || n.node_key)}</div>
+						<div class="fx-code">${__("{0} metric(s) · children total {1}%", [kids.length, this._pct(childTotal)])}</div>
+					</div>
+					<div class="fx-count">${this._pct(n.weight || 0)}%</div>
+					<div class="fx-effective">${this._pct(eff[n.node_key])}%</div>
+					<div><span class="fx-status ${st.tone}">${st.label}</span></div>
+					<div class="fx-actions"></div>
+				</button>
+				${open ? `<div class="dimension-children">${this._headRow(true)}${
+					kids.map((k, j) => this._componentRow(k, eff, j, kids.length)).join("")
+					|| `<div class="fx-note">${__("No metrics in this dimension yet.")}</div>`}</div>` : ""}
+			</div>`;
+		}).join("");
+	}
+
+	_singleMetricView() {
+		const U = window.UCCMO;
+		const n = this._topLevel()[0];
+		const fact = n.source_metric && this._metricFact(n.source_metric);
+		const st = this._statusFor(n);
+		return `<div class="single-metric" data-component="${U.esc(n.node_key)}">
+			<div class="sm-eyebrow">${__("Formula")}</div>
+			<div class="sm-metric">${U.esc(n.label || n.node_key)}</div>
+			<div class="fx-code">${U.esc(n.source_metric || __("no metric attached"))}${
+				fact ? " · " + __("{0} source question(s)", [fact.source_count]) : ""}</div>
+			<div class="sm-weight">${__("100% of this index")}</div>
+			<div><span class="fx-status ${st.tone}" style="margin-top:8px">${st.label}</span></div>
+			<p class="sm-help">${__("This Index is calculated entirely from one Metric.")}</p>
+			<div class="sm-actions">
+				${this.editable ? U.button({ label: __("Change metric"), small: true, act: "fx-change-metric" }) : ""}
+				${U.button({ label: __("Open metric"), small: true, act: "goto-metric" })}
+				${this.editable ? U.button({ label: __("Convert to multi-metric formula"), small: true, tone: "primary", act: "fx-add-metric" }) : ""}
+			</div>
+		</div>`;
+	}
+
+	// Allocation edits the SAME draft: no second data model, no second save path.
+	_allocationView() {
+		const U = window.UCCMO;
+		const eff = this._effective();
+		const total = this._totalTop();
+		const top = this._topLevel();
+		const lanes = top.map((n) => {
+			const w = n.weight || 0;
+			const st = this._statusFor(n);
+			const locked = this.locked.has(n.node_key);
+			return `<div class="allocation-lane ${this.sel === n.node_key ? "selected" : ""}" data-component="${U.esc(n.node_key)}">
+				<div class="lane-name">
+					<div class="fx-title">${U.esc(n.label || n.node_key)}</div>
+					<div class="fx-code">${U.esc(n.source_metric || n.node_type)} · ${
+						__("effective {0}%", [this._pct(eff[n.node_key])])}</div>
+				</div>
+				<button type="button" class="lane-step" data-step="-1" data-key="${U.esc(n.node_key)}"
+					aria-label="${__("Decrease weight for {0}", [U.esc(n.label || n.node_key)])}" ${
+					this.editable && !locked ? "" : "disabled"}>−</button>
+				<input type="number" class="weight-num" min="0" max="100" step="0.01" value="${this._pct(w)}"
+					data-weight-num="${U.esc(n.node_key)}" ${this.editable && !locked ? "" : "disabled"}
+					aria-label="${__("Weight for {0}, percent", [U.esc(n.label || n.node_key)])}">
+				<button type="button" class="lane-step" data-step="1" data-key="${U.esc(n.node_key)}"
+					aria-label="${__("Increase weight for {0}", [U.esc(n.label || n.node_key)])}" ${
+					this.editable && !locked ? "" : "disabled"}>+</button>
+				<div><span class="fx-status ${st.tone}">${st.label}</span></div>
+				<button type="button" class="lane-lock ${locked ? "on" : ""}" data-lock="${U.esc(n.node_key)}"
+					aria-pressed="${locked ? "true" : "false"}"
+					title="${__("Lock this weight during auto-balance")}">${locked ? "🔒" : "🔓"}</button>
+				<div class="lane-bar"><div class="lane-fill" style="width:${Math.min(100, w)}%"></div></div>
+			</div>`;
+		}).join("");
+		const msg = Math.abs(total - 100) < 1e-6 ? __("Balanced at 100%")
+			: total < 100 ? __("{0}% allocated, {1}% remaining", [this._pct(total), this._pct(100 - total)])
+			: __("{0}% allocated, reduce by {1}%", [this._pct(total), this._pct(total - 100)]);
+		return `<div class="fx-note" aria-live="polite" style="margin-bottom:8px">${msg}</div>
+			${this.editable ? U.button({ label: __("Auto-balance"), small: true, act: "fx-balance" }) : ""}
+			<div style="margin-top:8px">${lanes}</div>`;
+	}
+
+	// ---- editing -----------------------------------------------------------
+
+	_setWeight(key, value) {
+		const n = this._node(key);
+		if (!n || !this.editable) return;
+		const v = Math.max(0, Math.min(100, parseFloat(value) || 0));
+		if (n.weight === v) return;
+		n.weight = v;
+		this.dirty = true;
+		this._refreshNumbers();
+	}
+
+	// Patch the numbers in place rather than re-rendering: a full redraw on every
+	// slider step would drop focus mid-drag and lose the caret while typing.
+	_refreshNumbers() {
+		const eff = this._effective();
+		const U = window.UCCMO;
+		this.$el.find("[data-component]").each((_, el) => {
+			const k = el.getAttribute("data-component");
+			$(el).find(".fx-effective").text(this._pct(eff[k]) + "%");
+			$(el).find(".lane-fill").css("width", Math.min(100, this._node(k) ? (this._node(k).weight || 0) : 0) + "%");
+			const st = this._statusFor(this._node(k) || {});
+			$(el).find(".fx-status").attr("class", "fx-status " + st.tone).text(st.label);
+		});
+		// The summary, composition bar and status strip all read the same totals.
+		this.$el.find(".formula-summary").replaceWith(this._summaryStrip());
+		this.$el.find(".composition-bar").replaceWith(this._compositionBar());
+		const msg = this._balanceMessage();
+		this.$el.find(".status-message").attr("class", "status-message " + (msg.tone || ""))
+			.html(U.icon(msg.icon, "xs") + U.esc(msg.text));
+		this._renderEditor();
+	}
+
+	_selectComponent(key) {
+		this.sel = key;
+		this.$el.find(".formula-row, .dimension-row, .allocation-lane").removeClass("selected");
+		this.$el.find(`[data-component="${key}"]`).addClass("selected").closest(".dimension-row").addClass("selected");
+		this.$el.find(".composition-segment").removeClass("selected");
+		this.$el.find(`[data-segment="${key}"]`).addClass("selected");
+		const row = this.$el.find(`[data-component="${key}"]`).get(0);
+		if (row && row.scrollIntoView) row.scrollIntoView({ block: "nearest" });
+		this._renderEditor();
+	}
+
+	_move(key, dir) {
+		const n = this._node(key);
+		if (!n || !this.editable) return;
+		const sibs = this._kids(n.parent_key || "");
+		const at = sibs.indexOf(n);
+		const to = at + dir;
+		if (to < 0 || to >= sibs.length) return;
+		// Order is the child-table row order save_nodes writes; it is display and
+		// evidence order only - compute_index never reads it.
+		const a = this.draft.indexOf(sibs[at]);
+		const b = this.draft.indexOf(sibs[to]);
+		this.draft.splice(b, 0, this.draft.splice(a, 1)[0]);
+		this.dirty = true;
+		this._draw();
+	}
+
+	_removeComponent(key) {
+		const n = this._node(key);
+		if (!n || !this.editable) return;
+		const kids = this._kids(key);
+		const ask = kids.length
+			? __("Remove {0} and its {1} child metric(s) from this formula? The metrics themselves are not deleted - only their place in this index.", [n.label || key, kids.length])
+			: __("Remove {0} from this formula? The metric itself is not deleted.", [n.label || key]);
+		frappe.confirm(ask, () => {
+			const doomed = new Set([key]);
+			let grew = true;
+			while (grew) {
+				grew = false;
+				this.draft.forEach((x) => {
+					if (x.parent_key && doomed.has(x.parent_key) && !doomed.has(x.node_key)) {
+						doomed.add(x.node_key); grew = true;
+					}
+				});
+			}
+			this.draft = this.draft.filter((x) => !doomed.has(x.node_key));
+			this.sel = null;
+			this.dirty = true;
+			this._draw();
+		});
+	}
+
+	_stepWeight(key, dir) {
+		const n = this._node(key);
 		if (!n) return;
-		n.pos_x = cnode.x;
-		n.pos_y = cnode.y;
-		// Layout only. Published versions are frozen server-side by
-		// UCCIndexVersion.validate, so this is not even attempted on one -
-		// dragging still works locally, it just is not persisted.
+		this._setWeight(key, (n.weight || 0) + dir * 5);
+		this.$el.find(`[data-weight-num="${key}"]`).val(this._pct(this._node(key).weight));
+		this.$el.find(`[data-weight="${key}"]`).val(this._node(key).weight);
+	}
+
+	_autoBalance() {
+		const top = this._topLevel();
+		if (!top.length) return;
+		const locked = top.filter((n) => this.locked.has(n.node_key));
+		const free = top.filter((n) => !this.locked.has(n.node_key));
+		if (!free.length) {
+			return frappe.msgprint(__("Every component is locked. Unlock at least one to balance."));
+		}
+		const lockedTotal = locked.reduce((s, n) => s + (n.weight || 0), 0);
+		const remaining = 100 - lockedTotal;
+		if (remaining < 0) {
+			return frappe.msgprint(__("Locked weights already total {0}%. Unlock or reduce one before balancing.", [this._pct(lockedTotal)]));
+		}
+		const share = Math.round((remaining / free.length) * 100) / 100;
+		const preview = free.map((n) => `${n.label || n.node_key}: ${this._pct(n.weight || 0)}% → ${this._pct(share)}%`).join("<br>");
+		// Never silently overwrite: show exactly what changes first.
+		frappe.confirm(
+			__("Distribute {0}% equally across {1} unlocked component(s)?", [this._pct(remaining), free.length])
+			+ (locked.length ? "<br><br><b>" + __("Kept:") + "</b><br>"
+				+ locked.map((n) => `${n.label || n.node_key}: ${this._pct(n.weight || 0)}%`).join("<br>") : "")
+			+ "<br><br><b>" + __("Changes:") + "</b><br>" + preview,
+			() => {
+				free.forEach((n) => { n.weight = share; });
+				// Absorb the rounding remainder on the last free lane so the total
+				// is exactly 100 rather than 99.99.
+				const drift = 100 - this._totalTop();
+				if (Math.abs(drift) > 1e-9) free[free.length - 1].weight = Math.round((free[free.length - 1].weight + drift) * 100) / 100;
+				this.dirty = true;
+				this._draw();
+			});
+	}
+
+	// ---- add metric / add dimension ----------------------------------------
+	//
+	// BACKEND RULES this drawer enforces, all confirmed against the real model:
+	//   * The same metric MAY appear under different dimensions - nothing forbids
+	//     it and it is meaningful (one metric feeding two dimensions). Under the
+	//     SAME parent it is a duplicate, which validate_index reports as an error,
+	//     so the drawer refuses it there.
+	//   * A metric may be consumed by any number of indices: source_metric is a
+	//     plain Link and `used_by` counts them.
+	//   * UCC Metric Definition has NO status field, so there is no published /
+	//     draft distinction to gate on. The real gate is `source_count` - a metric
+	//     with no source questions scores nothing - and that is shown, not blocked.
+	// Duplicates are detected on the metric CODE (the docname), never the label.
+
+	_openAddMetric() {
+		this._drawer = { parent: this._dimensionParent() };
+		this._picked = new Set();
+		this._drawerSearch = "";
+		this._draw();
+	}
+
+	// Where a new metric lands: inside the selected dimension if one is selected,
+	// otherwise directly under the index root.
+	_dimensionParent() {
+		const sel = this.sel && this._node(this.sel);
+		if (sel && sel.node_type === "Dimension") return sel.node_key;
+		if (sel && sel.parent_key) {
+			const p = this._node(sel.parent_key);
+			if (p && p.node_type === "Dimension") return p.node_key;
+		}
+		const root = this._root();
+		return root ? root.node_key : "";
+	}
+
+	_addMetricDrawer() {
+		const U = window.UCCMO;
+		const parentKey = this._drawer.parent;
+		const parent = this._node(parentKey);
+		const siblings = new Set(this._kids(parentKey).map((n) => n.source_metric).filter(Boolean));
+		const q = (this._drawerSearch || "").toLowerCase();
+		const rows = ((this.builder && this.builder.metrics) || []).filter((m) =>
+			!q || (m.name + " " + (m.metric_name || "")).toLowerCase().indexOf(q) !== -1);
+		return `<aside class="fx-drawer" role="dialog" aria-label="${__("Add metrics to the formula")}">
+			<header class="pane-head">
+				<div class="pane-title-with-icon">${U.icon("i-metric", "sm")}<strong>${__("Add metric")}</strong>
+					<span class="count">${__("into {0}", [U.esc(parent && parent.node_type === "Dimension"
+						? (parent.label || parentKey) : __("the index"))])}</span></div>
+				${U.button({ label: "×", small: true, act: "fx-close-drawer", title: __("Close") })}
+			</header>
+			<div class="add-search" style="margin:8px 12px 0">${U.icon("i-search", "sm")}
+				<input type="text" data-metric-search placeholder="${__("Search metrics…")}"
+					value="${U.esc(this._drawerSearch || "")}" aria-label="${__("Search metrics")}"></div>
+			<div class="drawer-scroll">${rows.length ? rows.map((m) => {
+				const already = siblings.has(m.name);
+				const picked = this._picked.has(m.name);
+				return `<div class="drawer-metric ${already ? "disabled" : ""} ${picked ? "picked" : ""}"
+						data-pick-metric="${U.esc(m.name)}" role="checkbox"
+						aria-checked="${picked ? "true" : "false"}" aria-disabled="${already ? "true" : "false"}">
+					<span>${already ? "✓" : picked ? "☑" : "☐"}</span>
+					<div style="min-width:0">
+						<div class="fx-title">${U.esc(m.metric_name || m.name)}</div>
+						<div class="fx-code">${U.esc(m.name)} · ${__("{0} source question(s)", [m.source_count])}${
+							m.effective_normalisation ? " · " + U.esc(m.effective_normalisation) : ""}</div>
+					</div>
+					<span class="fx-status ${already ? "ready" : m.source_count ? "ready" : "attention"}">${
+						already ? __("Already included") : m.source_count ? __("Available") : __("No sources")}</span>
+				</div>`;
+			}).join("") : U.empty(__("No metrics match that search."))}</div>
+			<footer class="pane-foot" style="padding:8px 12px">
+				${U.button({ label: __("Add {0} metric(s)", [this._picked.size]), tone: "primary",
+							 small: true, act: "fx-confirm-metrics", disabled: !this._picked.size })}
+				${U.button({ label: __("Cancel"), small: true, act: "fx-close-drawer" })}
+			</footer>
+		</aside>`;
+	}
+
+	_confirmAddMetrics() {
+		const parentKey = this._drawer.parent;
+		let last = null;
+		this._picked.forEach((code) => {
+			// Keys must be unique across the version: save_nodes replaces the whole
+			// child table, so a collision silently drops a node.
+			let key = (parentKey + "_" + code).toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+			let i = 1;
+			while (this.draft.some((n) => n.node_key === key)) key = key + "_" + (++i);
+			const meta = this._metricFact(code);
+			this.draft.push({
+				node_key: key, node_type: "Metric", parent_key: parentKey,
+				label: (meta && meta.metric_name) || code, source_metric: code,
+				// 0% deliberately: silently rebalancing everyone else's weights to
+				// make room is not something an editor should do behind your back.
+				weight: 0, pos_x: 0, pos_y: 0,
+			});
+			last = key;
+		});
+		this._drawer = null;
+		this._picked = new Set();
+		this.dirty = true;
+		this.sel = last;
+		this._draw();
+	}
+
+	_addDimension() {
+		const root = this._root();
+		if (!root) return frappe.msgprint(__("This version has no index node to add a dimension to."));
+		const d = new frappe.ui.Dialog({
+			title: __("Add a dimension"),
+			fields: [
+				{ fieldname: "label", fieldtype: "Data", label: __("Dimension name"), reqd: 1 },
+				{ fieldname: "code", fieldtype: "Data", label: __("Code"),
+				  description: __("Optional. Used as the node key; generated from the name if left blank.") },
+				{ fieldname: "weight", fieldtype: "Percent", label: __("Weight in index (%)"), default: 0 },
+			],
+			primary_action_label: __("Add dimension"),
+			primary_action: (v) => {
+				d.hide();
+				let key = (v.code || v.label).toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+				let i = 1;
+				while (this.draft.some((n) => n.node_key === key)) key = key + "_" + (++i);
+				this.draft.push({
+					node_key: key, node_type: "Dimension", parent_key: root.node_key,
+					label: v.label, weight: v.weight || 0, source_metric: null, pos_x: 0, pos_y: 0,
+				});
+				this.expanded.add(key);
+				this.sel = key;
+				this.dirty = true;
+				this._draw();
+			},
+		});
+		d.show();
+	}
+
+	// ---- persistence -------------------------------------------------------
+
+	_saveFormula() {
 		if (!this.editable) return;
 		this.app.call(IAPI + "save_nodes", {
-			index_version: this.s.indexVersion, nodes: JSON.stringify(this.nodes),
+			index_version: this.s.indexVersion, nodes: JSON.stringify(this.draft),
+		}).then(() => {
+			if (!this.app.ok) {
+				return this.app.toast(__("The server refused the formula - nothing was saved."), "red");
+			}
+			this.dirty = false;
+			this.app.toast(__("Formula saved"));
+			// Reload rather than trust the local copy: the server is the canonical
+			// shape, and save_nodes may normalise what it stored.
+			this._load();
+		});
+	}
+
+	_newVersion() {
+		this.app.call(IAPI + "new_version_from", { index_version: this.s.indexVersion }).then((name) => {
+			if (!this.app.ok || !name) {
+				return this.app.toast(__("Could not create a new version."), "red");
+			}
+			this.app.toast(__("Created {0}", [name]));
+			this.s.indexVersion = name;
+			this.render();
 		});
 	}
 
@@ -2588,40 +3110,121 @@ class IndexWorkspace {
 		</table><div data-breakdown></div></div>`;
 	}
 
+	// The inspector reflects whatever is selected: the index itself, a dimension,
+	// or one metric component. It never edits a metric's own sources or
+	// normalisation - those belong to the Metrics workspace, and duplicating them
+	// here would be a second place to change one fact.
 	_renderEditor() {
 		const U = window.UCCMO;
-		const n = this.nodes.find((x) => x.node_key === this.sel);
 		const $slot = this.$el.find("[data-node-editor]");
-		if (!n) {
-			return $slot.html(U.inspector({
-				title: __("Node"), icon: "i-index",
-				body: U.empty(__("Select a node in the formula to edit it.")),
-			}));
-		}
-		const isMetric = n.node_type === "Metric";
-		const t = isMetric && this.sources[n.source_metric];
-		$slot.html(U.inspector({
-			title: n.label || n.node_key, icon: isMetric ? "i-metric" : "i-index",
+		if (!$slot.length) return;
+		const n = this.sel && this._node(this.sel);
+		if (!n) return $slot.html(this._indexInspector());
+		return $slot.html(n.node_type === "Dimension" ? this._dimensionInspector(n) : this._metricInspector(n));
+	}
+
+	_facts(pairs) {
+		const U = window.UCCMO;
+		return `<div class="insp-facts">${pairs.map(([k, v, cls]) =>
+			`<div><div class="k">${k}</div><div class="v ${cls || ""}">${v}</div></div>`).join("")}</div>`;
+	}
+
+	_indexInspector() {
+		const U = window.UCCMO;
+		const b = this.builder || {};
+		const total = this._totalTop();
+		const problems = this._componentProblems();
+		const balanced = Math.abs(total - 100) < 1e-6;
+		return U.inspector({
+			title: b.index || __("Index"), icon: "i-index",
+			body: this._facts([
+				[__("Index code"), U.esc(b.index || "—")],
+				[__("Version"), U.esc(b.name || "—")],
+				[__("Status"), U.esc(b.status || "—")],
+				[__("Formula type"), this._isSingleMetric() ? __("Single metric")
+					: this._hasDimensions() ? __("Dimension hierarchy") : __("Flat weighted")],
+				[__("Components"), this.draft.filter((x) => x.parent_key).length],
+				[__("Total weight"), this._pct(total) + "%", balanced ? "" : "purple"],
+			])
+			+ `<div class="help">${balanced && !problems.length
+				? __("Balanced and ready for validation.")
+				: __("{0} component(s) need attention. Validate for the server's full list.", [problems.length || 1])}</div>`
+			+ (problems.length ? `<div class="section-label">${__("Needs attention")}</div>`
+				+ problems.map((p) => `<button type="button" class="problem-jump" data-component-jump="${U.esc(p.key)}">
+					<b>${U.esc(p.label)}</b><span>${U.esc(p.message)}</span></button>`).join("") : ""),
+			footer: this.editable
+				? U.footerActions([
+					{ label: __("Save formula"), tone: "primary", icon: "i-save", act: "fx-save" },
+					{ label: __("Validate"), icon: "i-check", act: "validate" },
+				])
+				: U.footerActions([{ label: __("Create new version"), tone: "primary", icon: "i-plus", act: "fx-new-version" }]),
+		});
+	}
+
+	_dimensionInspector(n) {
+		const U = window.UCCMO;
+		const kids = this._kids(n.node_key);
+		const childTotal = kids.reduce((s, k) => s + (k.weight || 0), 0);
+		const eff = this._effective();
+		return U.inspector({
+			title: n.label || n.node_key, icon: "i-index",
+			body: U.field({ label: __("Dimension name"), name: "label", value: n.label, locked: !this.editable })
+				+ U.field({ label: __("Weight in index (%)"), name: "weight", type: "number",
+							value: n.weight, locked: !this.editable })
+				+ this._facts([
+					[__("Code"), U.esc(n.node_key)],
+					[__("Child metrics"), kids.length],
+					[__("Child weight total"), this._pct(childTotal) + "%",
+					 Math.abs(childTotal - 100) < 1e-6 ? "" : "purple"],
+					[__("Effective contribution"), this._pct(eff[n.node_key]) + "%", "purple"],
+				])
+				+ (Math.abs(childTotal - 100) > 1e-6 && kids.length
+					? `<div class="published-lock-row"><b>${__("Child weights total {0}%", [this._pct(childTotal)])}</b><br>${
+						__("Allocate the remaining {0}%. A balanced index total does not make this valid.", [this._pct(100 - childTotal)])}</div>`
+					: ""),
+			footer: this.editable
+				? U.footerActions([
+					{ label: __("Apply"), tone: "primary", icon: "i-save", act: "fx-apply-node" },
+					{ label: __("Add child metric"), icon: "i-plus", act: "fx-add-metric" },
+					{ label: __("Remove dimension"), icon: "i-trash", act: "fx-remove-selected" },
+				])
+				: "",
+		});
+	}
+
+	_metricInspector(n) {
+		const U = window.UCCMO;
+		const eff = this._effective();
+		const fact = n.source_metric && this._metricFact(n.source_metric);
+		const trace = n.source_metric && this.sources[n.source_metric];
+		const parent = n.parent_key && this._node(n.parent_key);
+		const st = this._statusFor(n);
+		return U.inspector({
+			title: n.label || n.node_key, icon: "i-metric",
 			body: U.field({ label: __("Label"), name: "label", value: n.label, locked: !this.editable })
-				+ U.field({ label: __("Weight (%)"), name: "weight", type: "number", value: n.weight,
-							locked: !this.editable })
-				+ (isMetric
-					? U.field({ label: __("Source metric"), name: "source_metric", value: n.source_metric, locked: true })
-					+ (t && t.questions.length
-						? `<div class="section-label">${__("Fed by {0} question(s)", [t.questions.length])}</div>
-							${this._byVersion(t)}`
-						: `<div class="published-lock-row"><b>${__("Nothing feeds this node")}</b><br>${
-							__("This metric has no survey questions as sources, so it will score nothing.")}</div>`)
-					+ U.button({ label: __("Open in Metrics workspace"), small: true, icon: "i-metric", act: "goto-metric" })
-					: "")
+				+ U.field({ label: __("Weight in parent (%)"), name: "weight", type: "number",
+							value: n.weight, locked: !this.editable })
+				+ this._facts([
+					[__("Metric code"), U.esc(n.source_metric || "—")],
+					[__("Effective in index"), this._pct(eff[n.node_key]) + "%", "purple"],
+					[__("Source questions"), fact ? fact.source_count : "—"],
+					[__("Normalisation"), U.esc((fact && fact.effective_normalisation) || "—")],
+					[__("Parent"), U.esc(parent && parent.node_type === "Dimension" ? (parent.label || parent.node_key) : __("Index"))],
+					[__("Status"), `<span class="fx-status ${st.tone}">${st.label}</span>`],
+				])
+				+ (trace && trace.questions.length
+					? `<div class="section-label">${__("Fed by {0} question(s)", [trace.questions.length])}</div>${this._byVersion(trace)}`
+					: `<div class="published-lock-row"><b>${__("Nothing feeds this node")}</b><br>${
+						__("This metric has no survey questions as sources, so it will score nothing.")}</div>`)
 				+ `<div class="help">${__("Objectives are never part of the formula. They travel with the result as evidence lineage.")}</div>`,
 			footer: this.editable
 				? U.footerActions([
-					{ label: __("Apply"), tone: "primary", icon: "i-save", act: "apply-node" },
-					{ label: __("Remove from formula"), icon: "i-trash", act: "remove-node" },
+					{ label: __("Apply"), tone: "primary", icon: "i-save", act: "fx-apply-node" },
+					{ label: __("Open metric"), icon: "i-metric", act: "goto-metric" },
+					{ label: __("Remove"), icon: "i-trash", act: "fx-remove-selected" },
 				])
-				: "",
-		}));
+				: U.footerActions([{ label: __("Open metric"), icon: "i-metric", act: "goto-metric" }]),
+		});
 	}
 
 	_byVersion(t) {
@@ -2636,39 +3239,116 @@ class IndexWorkspace {
 	_wire() {
 		const $el = this.$el;
 		$el.off("click.mo");
-		// Node selection arrives through UCCNodeCanvas.onSelect, which updates
-		// the inspector WITHOUT a _draw() - redrawing would unmount the canvas
-		// and lose the drag positions the user just made.
-		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._zoom && this._zoom.fit());
-		$el.on("click.mo", '[data-act="zoom-in"]', () => this._zoom && this._zoom.zoomIn());
-		$el.on("click.mo", '[data-act="zoom-out"]', () => this._zoom && this._zoom.zoomOut());
-		$el.on("click.mo", '[data-act="zoom-reset"]', () => this._zoom && this._zoom.reset());
-		// Bug 5: the zoom controls live in the pane header now, like every other
-		// canvas in this workbench. They drive UCCNodeCanvas's own scale/pan -
-		// still one transform on this canvas, not a second one.
-		$el.on("click.mo", '[data-act="zoom-fit"]', () => this._canvas && this._canvas.fit());
-		$el.on("click.mo", '[data-act="zoom-in"]', () => this._canvasZoom(0.1));
-		$el.on("click.mo", '[data-act="zoom-out"]', () => this._canvasZoom(-0.1));
-		$el.on("click.mo", '[data-act="zoom-reset"]', () => {
-			if (!this._canvas) return;
-			this._canvas.scale = 1;
-			this._canvas.panX = 0;
-			this._canvas.panY = 0;
-			this._canvas.render();
-			this._showZoomLevel();
+		// --- selection -----------------------------------------------------
+		$el.on("click.mo", "[data-component]", (e) => {
+			if ($(e.target).closest("input, button.lane-step, .lane-lock, .fx-actions").length) return;
+			this._selectComponent($(e.currentTarget).data("component"));
 		});
-		$el.on("click.mo", '[data-act="add-metric-node"]', () => this._addMetricNode());
-		$el.on("click.mo", '[data-act="remove-node"]', () => this._removeNode());
+		$el.on("click.mo", "[data-segment]", (e) =>
+			this._selectComponent($(e.currentTarget).data("segment")));
+		$el.on("click.mo", "[data-component-jump]", (e) =>
+			this._selectComponent($(e.currentTarget).data("component-jump")));
+		$el.on("click.mo", "[data-dimension]", (e) => {
+			const k = $(e.currentTarget).data("dimension");
+			if (this.expanded.has(k)) this.expanded.delete(k); else this.expanded.add(k);
+			this.sel = k;
+			this._draw();
+		});
+
+		// --- view toggle ---------------------------------------------------
+		$el.on("click.mo", "[data-fx-view]", (e) => {
+			// Same draft, different presentation. Nothing is saved or reloaded.
+			this.fxView = $(e.currentTarget).data("fx-view");
+			this._draw();
+		});
+
+		// --- weight editing ------------------------------------------------
+		// `input` for the slider so the numbers move with the thumb; `change` for
+		// the numeric box so a half-typed "1" is not read as 1%.
+		$el.on("input.mo", "[data-weight]", (e) => {
+			const k = $(e.currentTarget).data("weight");
+			this._setWeight(k, e.currentTarget.value);
+			$el.find(`[data-weight-num="${k}"]`).val(this._pct(this._node(k).weight));
+		});
+		$el.on("change.mo", "[data-weight-num]", (e) => {
+			const k = $(e.currentTarget).data("weight-num");
+			this._setWeight(k, e.currentTarget.value);
+			$el.find(`[data-weight="${k}"]`).val(this._node(k).weight);
+			e.currentTarget.value = this._pct(this._node(k).weight);
+		});
+		$el.on("click.mo", "[data-step]", (e) =>
+			this._stepWeight($(e.currentTarget).data("key"), parseInt($(e.currentTarget).data("step"), 10)));
+		$el.on("click.mo", "[data-lock]", (e) => {
+			const k = $(e.currentTarget).data("lock");
+			if (this.locked.has(k)) this.locked.delete(k); else this.locked.add(k);
+			this._draw();
+		});
+
+		// --- structure -----------------------------------------------------
+		$el.on("click.mo", '[data-act="fx-up"]', (e) =>
+			this._move($(e.currentTarget).closest("[data-component]").data("component"), -1));
+		$el.on("click.mo", '[data-act="fx-down"]', (e) =>
+			this._move($(e.currentTarget).closest("[data-component]").data("component"), 1));
+		$el.on("click.mo", '[data-act="fx-remove"]', (e) =>
+			this._removeComponent($(e.currentTarget).closest("[data-component]").data("component")));
+		$el.on("click.mo", '[data-act="fx-remove-selected"]', () => this._removeComponent(this.sel));
+		$el.on("click.mo", '[data-act="fx-add-metric"], [data-act="fx-change-metric"]', () => this._openAddMetric());
+		$el.on("click.mo", '[data-act="fx-add-dimension"]', () => this._addDimension());
+		$el.on("click.mo", '[data-act="fx-balance"]', () => this._autoBalance());
+		$el.on("click.mo", '[data-act="fx-save"]', () => this._saveFormula());
+		$el.on("click.mo", '[data-act="fx-new-version"]', () => this._newVersion());
+		$el.on("click.mo", '[data-act="fx-apply-node"]', () => {
+			const n = this._node(this.sel);
+			if (!n) return;
+			n.label = $el.find('[data-f="label"]').val() || n.label;
+			const w = parseFloat($el.find('[data-f="weight"]').val());
+			if (!isNaN(w)) n.weight = Math.max(0, Math.min(100, w));
+			this.dirty = true;
+			this._draw();
+		});
+
+		// --- add-metric drawer ---------------------------------------------
+		$el.on("click.mo", '[data-act="fx-close-drawer"]', () => { this._drawer = null; this._draw(); });
+		$el.on("click.mo", "[data-pick-metric]", (e) => {
+			const code = $(e.currentTarget).data("pick-metric");
+			if ($(e.currentTarget).hasClass("disabled")) return;
+			this._picked = this._picked || new Set();
+			if (this._picked.has(code)) this._picked.delete(code); else this._picked.add(code);
+			this._draw();
+		});
+		$el.on("input.mo", "[data-metric-search]", (e) => {
+			this._drawerSearch = e.currentTarget.value;
+			this._draw();
+			this.$el.find("[data-metric-search]").focus().val(this._drawerSearch);
+		});
+		$el.on("click.mo", '[data-act="fx-confirm-metrics"]', () => this._confirmAddMetrics());
+
 		$el.on("click.mo", '[data-act="new-index"]', () => this._newIndex());
-		$el.on("click.mo", '[data-act="validate"]', () =>
+		$el.on("click.mo", '[data-act="validate"]', () => {
+			// Server-side is authoritative. The row badges are a live preview of
+			// the same rules; this is the verdict.
+			if (this.dirty) {
+				return frappe.confirm(
+					__("Validation runs against the SAVED formula, and this draft has unsaved changes. Save first?"),
+					() => this._saveFormula());
+			}
 			this.app.call(IAPI + "validate_index", { index_version: this.s.indexVersion }).then((r) => {
 				if (!r) return;
+				const U = window.UCCMO;
+				// Each problem names its own component - a bare "invalid" tells
+				// nobody which row to fix, which is the whole point of `problems`.
+				const perComponent = (r.problems || []).map((p) =>
+					`<div style="margin:2px 0"><b>${U.esc(p.label)}</b> — ${U.esc(p.message)}</div>`).join("");
 				frappe.msgprint({
 					title: r.valid ? __("Valid") : __("Not valid"),
 					indicator: r.valid ? "green" : "red",
-					message: (r.issues || []).concat(r.warnings || []).join("<br>") || __("Weights valid."),
+					message: (r.issues || []).map((i) => `<div>${U.esc(i)}</div>`).join("")
+						+ (perComponent ? `<div style="margin-top:8px"><b>${__("By component")}</b></div>` + perComponent : "")
+						+ (r.warnings || []).map((w) => `<div style="color:#9d5c00">${U.esc(w)}</div>`).join("")
+						|| __("Weights valid."),
 				});
-			}));
+			});
+		});
 		$el.on("click.mo", '[data-act="publish"]', () =>
 			frappe.confirm(__("Publish this index version? It becomes immutable."), () =>
 				this.app.call(IAPI + "publish_version", { index_version: this.s.indexVersion })
@@ -2696,97 +3376,6 @@ class IndexWorkspace {
 			this.app.call(IAPI + "save_nodes", {
 				index_version: this.s.indexVersion, nodes: JSON.stringify(this.nodes),
 			}).then(() => { this.app.toast(__("Node updated")); this._load(); });
-		});
-	}
-
-	_canvasZoom(delta) {
-		if (!this._canvas) return;
-		this._canvas.zoom(delta);
-		this._showZoomLevel();
-	}
-
-	_showZoomLevel() {
-		if (!this._canvas) return;
-		this.$el.find("[data-zoom-level]").text(Math.round(this._canvas.scale * 100) + "%");
-	}
-
-	// Bug 3 (2026-08-02). There was NO way to add or remove a metric node here -
-	// not dropped when the tree went, it never existed in this workspace. The old
-	// Index Studio page had "+ Add root node" and nothing else; the tree rendered
-	// read-only rows. "+ Add source" in the Metrics workspace is a different verb
-	// entirely (it adds a source QUESTION to a metric).
-	//
-	// Both write through the SAME save_nodes endpoint the inspector's Apply uses,
-	// so there is one write path and the published-version guard covers all of it.
-	_addMetricNode() {
-		const root = this.nodes.find((n) => !n.parent_key);
-		if (!root) {
-			return frappe.msgprint({
-				title: __("No index node yet"),
-				message: __("This version has no root node to hang a metric on. Create the index from a template first."),
-				indicator: "orange",
-			});
-		}
-		const d = new frappe.ui.Dialog({
-			title: __("Add a metric to this index"),
-			fields: [
-				{ fieldname: "metric", fieldtype: "Link", options: "UCC Metric Definition",
-				  label: __("Metric"), reqd: 1 },
-				{ fieldname: "weight", fieldtype: "Percent", label: __("Weight (%)"), default: 0,
-				  description: __("Weights across one parent should total 100. Validate reports it if they do not.") },
-			],
-			primary_action_label: __("Add to formula"),
-			primary_action: (v) => {
-				if (this.nodes.some((n) => n.source_metric === v.metric)) {
-					d.hide();
-					return frappe.msgprint(__("{0} is already in this formula.", [v.metric]));
-				}
-				d.hide();
-				// Keys must be unique within the version - save_nodes replaces the
-				// whole set and a collision would silently drop a node.
-				let key = (root.node_key + "_" + v.metric).toLowerCase().replace(/[^a-z0-9_]+/g, "_");
-				let i = 1;
-				while (this.nodes.some((n) => n.node_key === key)) key = key + "_" + (++i);
-				this.nodes.push({
-					node_key: key, node_type: "Metric", parent_key: root.node_key,
-					label: v.metric, weight: v.weight || 0, source_metric: v.metric,
-					pos_x: 0, pos_y: 0,
-				});
-				this._persistNodes(__("Metric added"));
-			},
-		});
-		d.show();
-	}
-
-	_removeNode() {
-		const n = this.nodes.find((x) => x.node_key === this.sel);
-		if (!n) return;
-		const kids = this.nodes.filter((x) => x.parent_key === n.node_key);
-		if (kids.length) {
-			return frappe.msgprint({
-				title: __("Node has children"),
-				message: __("{0} node(s) hang off this one and would be orphaned - compute_index silently ignores anything not reachable from the root. Remove them first.", [kids.length]),
-				indicator: "orange",
-			});
-		}
-		frappe.confirm(
-			__("Remove {0} from the formula? Published results already calculated are not affected - they are snapshots of their own version.", [n.label || n.node_key]),
-			() => {
-				this.nodes = this.nodes.filter((x) => x.node_key !== n.node_key);
-				this.sel = null;
-				this._persistNodes(__("Node removed"));
-			});
-	}
-
-	_persistNodes(message) {
-		this.app.call(IAPI + "save_nodes", {
-			index_version: this.s.indexVersion, nodes: JSON.stringify(this.nodes),
-		}).then(() => {
-			if (!this.app.ok) {
-				return this.app.toast(__("The server refused the change - nothing was saved."), "red");
-			}
-			this.app.toast(message);
-			this._load();
 		});
 	}
 
