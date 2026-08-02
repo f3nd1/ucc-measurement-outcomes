@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """READ-ONLY. Did the objective mapping save, or is the canvas not refreshing?
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/diagnose_question_mapping.py ucc-sms-v2.orb.local
-    env/bin/python apps/.../diagnose_question_mapping.py ucc-sms-v2.orb.local <survey_version>
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/diagnose_question_mapping.py ucc-sms-v2.orb.local
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/diagnose_question_mapping.py ucc-sms-v2.orb.local <survey_version>
 
 Writes nothing. It answers the one question that cannot be answered by reading
 code: is there a UCC Question Mapping row for this survey version, and if so why

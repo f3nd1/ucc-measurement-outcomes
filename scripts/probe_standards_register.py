@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """READ-ONLY. Is there a real standards register that UCC Standard duplicates?
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/probe_standards_register.py ucc-sms-v2.orb.local
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_standards_register.py ucc-sms-v2.orb.local
 
 This writes NOTHING and decides NOTHING. It answers the four counting questions
 that docs/13-ucc-standard-findings.md could not answer without a bench, which is

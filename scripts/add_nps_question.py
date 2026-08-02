@@ -5,14 +5,14 @@ Why this exists: probe_submit_validation.py has a fourth case ("NPS value of
 47") that it SKIPS whenever the target version holds no NPS question, and it
 has been skipping it. This adds the one question that case needs.
 
-Run from the bench directory:
+Run from the site directory (frappe.init defaults sites_path to "."):
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/add_nps_question.py ucc-sms-v2.orb.local
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/add_nps_question.py ucc-sms-v2.orb.local
 
 Pass a version explicitly if the site has more than one open campaign:
 
-    env/bin/python apps/.../add_nps_question.py ucc-sms-v2.orb.local <survey_version>
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/add_nps_question.py ucc-sms-v2.orb.local <survey_version>
 
 IT REFUSES ON A PUBLISHED VERSION, and that is the point rather than a
 limitation. A published version's answer-determining content is frozen -
@@ -108,6 +108,6 @@ frappe.db.commit()
 print("\nAdded %s at sequence %d." % (doc.name, sequence))
 print("  %s" % QUESTION)
 print("\nNow re-run the validation probe; its NPS case will no longer skip:")
-print("  env/bin/python apps/ucc_measurement_outcomes/scripts/probe_submit_validation.py %s" % SITE)
+print("  ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_submit_validation.py %s" % SITE)
 
 frappe.destroy()

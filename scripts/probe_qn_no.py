@@ -4,11 +4,11 @@ section), independent of wording?
 
 READ-ONLY. No insert, no save, no delete, no db.set_value anywhere in this file.
 
-Run from the bench directory (NOT bench console - IPython has mangled piped
+Run from the site directory, NOT bench console (IPython has mangled piped
 multi-line input twice on this project):
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/probe_qn_no.py ucc.local > probe_out.txt 2>&1
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_qn_no.py ucc-sms-v2.orb.local > probe_out.txt 2>&1
 
 Then send probe_out.txt back.
 

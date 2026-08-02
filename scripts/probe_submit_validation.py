@@ -9,14 +9,14 @@ written. The script counts UCC Survey Submission and UCC Survey Answer rows
 before and after and fails loudly if either moved. If a case is NOT rejected,
 that IS the finding - and the row it created is reported, not hidden.
 
-Run from the bench directory:
+Run from the site directory (frappe.init defaults sites_path to "."):
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/probe_submit_validation.py ucc.local
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_submit_validation.py ucc-sms-v2.orb.local
 
 Pass a token explicitly if the site has more than one open campaign:
 
-    env/bin/python apps/.../probe_submit_validation.py ucc.local <public_token>
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_submit_validation.py ucc-sms-v2.orb.local <public_token>
 """
 
 import json

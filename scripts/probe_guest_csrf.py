@@ -7,8 +7,8 @@ Every earlier probe posted with NO cookie at all. Frappe's CSRF check
 the check. A real browser is not cookie-less: it holds a `sid`, and that session
 CAN hold a csrf_token.
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/probe_guest_csrf.py ucc-sms-v2.orb.local
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_guest_csrf.py ucc-sms-v2.orb.local
 
 READ-ONLY BY CONSTRUCTION for the cases that matter, except case C, which makes
 one real submission and then deletes it - it is the only way to prove the happy

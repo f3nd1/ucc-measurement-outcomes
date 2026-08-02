@@ -6,11 +6,11 @@ READ-ONLY. No insert, no save, no delete, no db.set_value anywhere in this file.
 This reports; it does not repair. Historical rows are evidence and stay as they
 are — the new check is submit-time only.
 
-Run from the bench directory (NOT bench console — IPython has mangled piped
+Run from the site directory, NOT bench console (IPython has mangled piped
 multi-line input twice on this project):
 
-    cd ~/frappe-bench
-    env/bin/python apps/ucc_measurement_outcomes/scripts/audit_answer_values.py ucc.local
+    cd ~/ucc-sms-v2/sites
+    ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/audit_answer_values.py ucc-sms-v2.orb.local
 
 It uses submission_utils.value_allowed itself rather than hand-rolled SQL, so
 the audit and the endpoint can never disagree about what "invalid" means.
