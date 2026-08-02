@@ -2378,3 +2378,59 @@ bench script. What it cannot cover is the educ_sg half: `Survey Tracking`,
     ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/setup_probe_survey.py ucc-sms-v2.orb.local <planning_record>
     ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/add_nps_question.py ucc-sms-v2.orb.local
     ../env/bin/python ../apps/ucc_measurement_outcomes_repo/scripts/probe_guest_csrf.py ucc-sms-v2.orb.local
+
+## drop_ucc_standard crashed on the live migrate — fixed (v0.31.1)
+
+**My bug, and an ordering one.** The patch deleted the rows with
+`frappe.delete_doc(DOCTYPE, name)`. `delete_doc` on a normal row calls
+`frappe.get_doc`, which imports the DocType's **controller class** — and this
+same release deletes that file. The patch runs under `[post_model_sync]`, i.e.
+AFTER the sync that removed it, so on a live migrate it raised:
+
+    ModuleNotFoundError: ucc_measurement_outcomes.mapping_studio.doctype
+                         .ucc_standard.ucc_standard
+
+The general rule, now written into the patch: **a patch that removes a DocType
+can never load one of that DocType's rows as a document.**
+
+Rows now go out by `frappe.db.delete` (a plain DELETE query — verified in
+`frappe/database/database.py` v15.83.0), and the names are read by raw SQL rather
+than `frappe.get_all`, because `get_all` builds its query from meta and the meta
+is gone the moment the DocType row is deleted — which is a state a re-run can
+genuinely meet.
+
+Deleting the DOCTYPE was never the problem and is unchanged: `delete_doc("DocType",
+…)` loads the *DocType* document, whose controller is Frappe's own, and its
+`delete_controllers` step is skipped during migrate
+(`frappe/model/delete_doc.py` v15.83.0). `force=True` stays — a non-custom DocType
+is otherwise refused with "Standard DocType can not be deleted".
+
+**Is DEMO-STD-C7 still in the database? Yes.** `patch_handler.execute_patch`
+calls `update_patch_log` only after the patch returns, and rolls back on
+exception. So (a) the failed patch is NOT in the Patch Log and re-runs on the next
+migrate, and (b) the rollback undid deletes that were never committed — and in
+fact the very first `delete_doc` raised, so nothing was deleted at all. The row,
+the DocType record and the (now empty) `tabUCC Standard` are all still there;
+`UCC Question Mapping.standard` IS already dropped, because model sync completed
+before patches ran. The fixed patch is written for exactly that state.
+
+The same patch module name is kept deliberately. A new name would be needed only
+if the old one had been logged as done, and it was not.
+
+**`test_patch_drop_ucc_standard.py`** executes the real `execute()` against a stub
+whose `get_doc` raises the same `ModuleNotFoundError` a real bench raises, across
+every state the patch can meet: the exact failed state (row present, DocType
+present), a clean re-run, an empty table, DocType gone but table left behind, and
+a site holding several real rows. One negative test asserts the stub still
+reproduces the original crash, so a regression to `delete_doc` on a row fails here
+rather than on Felix's site.
+
+`tabUCC Standard` is left in place. Frappe does not drop the physical table when a
+DocType is deleted (`delete_from_table` only clears rows), and a patch issuing
+DROP TABLE is destructive beyond what was asked. Empty orphan; drop by hand if the
+space matters.
+
+Verify: `bench --site ucc-sms-v2.orb.local migrate` completes, printing
+`drop_ucc_standard: removing 1 UCC Standard row(s): DEMO-STD-C7` then
+`drop_ucc_standard: UCC Standard DocType removed.` A second `migrate` prints
+`already removed, nothing to do.`
