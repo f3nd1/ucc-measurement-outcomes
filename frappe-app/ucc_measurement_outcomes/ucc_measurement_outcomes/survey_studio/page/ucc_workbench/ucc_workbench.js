@@ -1088,8 +1088,8 @@ class ObjectiveWorkspace {
 				statusTone: this.unmapped.size ? "warn" : "ok",
 				actions: [{ label: __("Browse all objectives"), icon: "i-target", act: "browse-all" }],
 			})}
-			${U.tabs([{ key: "map", label: __("Map") }, { key: "coverage", label: __("Coverage") },
-					  { key: "governance", label: __("Governance") }], tab)}
+			${U.tabs([{ key: "map", label: __("Map") },
+					  { key: "coverage", label: __("Coverage") }], tab)}
 			${U.statusStrip([
 				{ value: (this.coverage.counts || {}).questions || 0, label: __("questions") },
 				{ value: (this.coverage.counts || {}).questions_mapped || 0, label: __("mapped") },
@@ -1150,7 +1150,6 @@ class ObjectiveWorkspace {
 				}
 			});
 		}
-		if (tab === "governance") this._fillHistory();
 	}
 
 	_canvas() {
@@ -1212,67 +1211,6 @@ class ObjectiveWorkspace {
 	// click, which is why they read as "dunno how to use". Each now opens with a
 	// caption saying what it is FOR, and every number and chip is a way back into
 	// the Map tab rather than a dead label.
-	_otherTab(tab) {
-		const U = window.UCCMO;
-		const c = this.coverage.counts || {};
-		if (tab === "coverage") {
-			const idle = this.coverage.unmapped_objectives || [];
-			const unmapped = this.unmapped.size;
-			return `<div class="pane" style="height:100%"><div class="pane-body" style="padding:12px">
-				<div class="canvas-help">${__("Which objectives this survey reaches, and which it misses. Mapping is evidence lineage - it changes no index score. Click any figure or objective below to work on it in the Map tab.")}</div>
-				<div class="status-strip" style="border:0;padding:0;margin-bottom:12px">
-					<button class="stat status-link" data-act="go-unmapped" title="${
-						__("Show the questions that still need an objective")}">
-						<b>${c.questions_mapped || 0}/${c.questions || 0}</b> <span>${__("questions mapped")}</span></button>
-					<span class="stat-divider"></span>
-					<span class="stat"><b>${c.objectives_used || 0}/${c.objectives || 0}</b>
-						<span>${__("objectives reached")}</span></span>
-				</div>
-				${unmapped ? `<div class="published-lock-row">${U.icon("i-warning", "xs")}<div>
-					<b>${__("{0} question(s) still have no objective", [unmapped])}</b><br>${
-					__("Those questions still score normally; they just carry no governance lineage into Criterion 7.")}
-					</div></div>` : ""}
-				<div class="section-label">${__("Objectives this survey does not reach")} (${idle.length})</div>
-				${idle.length ? `<div>${idle.slice(0, 40).map((o) =>
-					`<button class="chip chip-link" data-objective="${U.esc(o)}" title="${
-						__("Open the Map tab and look for a question to link to {0}", [o])}">${
-						U.icon("i-target", "xs")}${U.esc(o)}</button>`).join(" ")}${
-					idle.length > 40 ? `<span class="eyebrow"> +${idle.length - 40} ${__("more")}</span>` : ""}</div>`
-					: `<div class="help">${__("Every objective in the register is reached by at least one question in this survey.")}</div>`}
-			</div></div>`;
-		}
-		return `<div class="pane" style="height:100%"><div class="pane-body" style="padding:12px">
-			<div class="canvas-help">${__("Who changed a mapping and when, plus data-quality warnings worth resolving before this survey is published.")}</div>
-			<div class="section-label">${__("Recent mapping changes")}</div>
-			<div data-history>${U.empty(__("Loading history…"))}</div>
-			<div class="section-label" style="margin-top:12px">${__("Duplicate question text")}</div>
-			${(this.coverage.duplicate_questions || []).length
-				? `<div>${(this.coverage.duplicate_questions || []).map((g) =>
-					`<button class="chip warn chip-link" data-dupe="${U.esc(g[0])}" title="${
-						__("Open the first of these questions in the Map tab")}">${U.esc(g.join(" / "))}</button>`).join(" ")}</div>
-				   <div class="help">${__("Identical wording in two questions makes an objective mapping ambiguous to read later. Rename one, or map both deliberately.")}</div>`
-				: `<div class="help">${__("No two questions in this version share the same wording.")}</div>`}
-		</div></div>`;
-	}
-
-	_fillHistory() {
-		const U = window.UCCMO;
-		this.app.call(MAPI + "mapping_history", { survey_version: this.s.surveyVersion, limit: 25 })
-			.then((rows) => {
-				const $h = this.$el.find("[data-history]");
-				if (!$h.length) return;
-				if (!rows || !rows.length) {
-					return $h.html(U.empty(__("No mapping changes recorded yet for this survey version.")));
-				}
-				$h.html(rows.map((r) => `<div class="source-row" style="margin-bottom:6px">
-					<span class="type-icon">${U.icon(r.created ? "i-plus" : "i-history", "sm")}</span>
-					<div><b>${U.esc(r.mapping)}</b><div class="eyebrow">${
-						r.created ? __("created") : __("changed {0}", [r.fields.join(", ") || __("a field")])} · ${
-						U.esc(r.user)} · ${r.on ? frappe.datetime.str_to_user(r.on) : ""}</div></div>
-					<span></span><span></span></div>`).join(""));
-			});
-	}
-
 	_renderNodeEditor() {
 		const U = window.UCCMO;
 		const $slot = this.$el.find("[data-node-editor]");
@@ -1352,13 +1290,11 @@ class ObjectiveWorkspace {
 					idle.length > 40 ? `<span class="eyebrow"> +${idle.length - 40} ${__("more")}</span>` : ""}</div>
 			</div></div>`;
 		}
-		return `<div class="pane" style="height:100%"><div class="pane-body" style="padding:12px">
-			<div class="help">${__("Every mapping change is recorded by Frappe's document history on UCC Question Mapping, including who made it and when.")}</div>
-			<div class="section-label" style="margin-top:12px">${__("Duplicate question text")}</div>
-			<div>${(this.coverage.duplicate_questions || []).length
-				? (this.coverage.duplicate_questions || []).map((g) => U.chip(g.join(" / "), "warn")).join(" ")
-				: `<span class="eyebrow">${__("None found.")}</span>`}</div>
-		</div></div>`;
+		// Only Coverage reaches here now: Map renders itself and Governance is
+		// gone. Frappe's own document history on UCC Question Mapping still
+		// records every change - that is the audit evidence, and it never
+		// depended on this tab.
+		return "";
 	}
 
 	_wire() {
@@ -1374,18 +1310,11 @@ class ObjectiveWorkspace {
 			this.$el.find(".objective-shell").toggleClass("right-collapsed", !!this.rightCollapsed);
 			this._renderNodeEditor();
 		});
-		// Coverage/Governance chips are the way back into the Map tab.
-		$el.on("click.mo", '[data-act="go-unmapped"]', () => {
-			this.queueShowAll = false;
-			this.app.state.objectivesTab = "map";
-			this._draw();
-		});
-		$el.on("click.mo", "[data-objective], [data-dupe]", (e) => {
-			const dupe = $(e.currentTarget).data("dupe");
-			if (dupe) this.s.question = dupe;
-			this.app.state.objectivesTab = "map";
-			this._draw();
-		});
+		// NOTE: the handlers for [data-act="go-unmapped"] and [data-objective]
+		// were removed with the Governance tab, because their markup lived in a
+		// DUPLICATE _otherTab definition that JS never used - see the 2026-08-02
+		// note in BENCH_VERIFY. Nothing in this workspace emits either selector
+		// today, so they were dead listeners, not a missing feature's plumbing.
 		$el.on("click.mo", "[data-map-node]", (e) => {
 			this.sel = $(e.currentTarget).data("map-node");
 			this._draw();

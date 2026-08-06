@@ -2526,3 +2526,62 @@ survey by default.
 **Still not run end to end here - no bench.** The CSRF timing result (cases A,
 B and especially C) is unknown until Felix runs it. What is now known: it will
 not abort in the diagnostic.
+
+## Governance tab removed from Objectives (v0.33.0)
+
+Removed: the tab itself, `_fillHistory()`, and `api.mapping.mapping_history`
+(one caller, now gone). Objectives is Map + Coverage.
+
+**Frappe's document history is untouched and still recording.** `mapping_history`
+was a read-only convenience view over core's `Version` DocType; `track_changes`
+on `UCC Question Mapping` is what actually records who changed what and when, it
+is core platform behaviour, and nothing in this change touches it. The audit
+evidence for EduTrust/ISO is the Version records and the document's own history
+sidebar on the form, both unaffected.
+
+**The duplicate-question-text check STAYS.** `find_duplicate_questions` and
+`coverage_summary["duplicate_questions"]` have another consumer:
+`mapping_studio.js:423` reads `c.duplicate_questions.length` **unguarded**, so
+removing the key would throw on that page. Only the Governance tab's rendering of
+it went. `test_coverage.py` still covers the function.
+
+### THE THIRD DUPLICATE-METHOD DEFECT, found while investigating
+
+`ObjectiveWorkspace` had **two `_otherTab(tab)` definitions**. JS keeps the LAST
+one, so the copy that actually rendered was the OLDER, simpler pair - and the
+round-7 Coverage work has never been on screen:
+
+| in the DEAD copy (never rendered) | in the LIVE copy |
+|---|---|
+| clickable "N/N questions mapped" stat (`go-unmapped`) | plain text |
+| objective chips as `chip-link` buttons jumping to Map | inert `U.chip` spans |
+| "N question(s) still have no objective" warning block | absent |
+| Governance with real history + clickable dupe chips | Governance with a static line |
+
+Felix's description of the tab matched the LIVE copy exactly, which is how the
+duplicate was confirmed rather than guessed.
+
+Consequences, all now resolved: `_fillHistory` fetched 25 history rows and wrote
+them into a `[data-history]` element that no rendered markup contained, so
+`mapping_history` was called on every Governance visit and its result discarded;
+and the `[data-act="go-unmapped"]` and `[data-objective]` click handlers had no
+markup emitting either selector anywhere in the app. Both handlers removed as
+dead listeners.
+
+**This is the third occurrence of this defect class** (v0.17.0
+`_renderNodeEditor`, v0.19.0 `_openDrawer`/`_closeDrawer`, now `_otherTab`), and
+it bit again during this very edit: slicing out the dead `_otherTab` swallowed
+`_renderNodeEditor`, which sat between it and `_fillHistory`. Caught by the
+headless test, restored from git, verified by diffing the method list before and
+after - which also confirmed no other method was lost and no duplicates remain in
+`ObjectiveWorkspace`.
+
+**OPEN FOR FELIX, not decided here.** The live Coverage tab has no way back to
+the Map tab - no clickable stat, no clickable chips - because that was the dead
+copy. Restoring the round-7 Coverage behaviour is a separate change (the code is
+in git at `d079f7b`), and the brief for this round said not to touch Coverage.
+
+Verify on the bench: Objectives shows Map and Coverage only; Coverage renders its
+counts and unreached-objective list exactly as before; the Map tab and its node
+editor still work; and `UCC Question Mapping` form still shows its History
+sidebar with prior edits.
