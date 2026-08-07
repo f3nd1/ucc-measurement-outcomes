@@ -863,3 +863,31 @@
 .ucc-mo-indices .problem-jump:hover { border-color: var(--primary); background: var(--primary-soft); }
 .ucc-mo-indices .problem-jump b { display: block; font-size: 12px; }
 .ucc-mo-indices .problem-jump span { font-size: 11px; color: var(--warning); }
+
+/* --- Objectives > Coverage --------------------------------------------------
+ * The chip wall this replaces filled the top 120px of a full-height pane and
+ * left the rest empty, and capped at 40 of 97 objectives with no way to reach
+ * the other 57. Two panes: the whole register (searchable) and one objective's
+ * evidence, both scrolling inside a shell that fills the workarea. */
+.ucc-mo .coverage-shell { height: 100%; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 10px; }
+/* head / search / scrolling list - .pane-body's grid-row: -2/-1 puts the list
+ * in the last track on its own, so only the row template changes. */
+.ucc-mo .coverage-list { grid-template-rows: 42px auto 1fr; }
+.ucc-mo .cov-search { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.ucc-mo .cov-search input { width: 100%; border: 1px solid var(--border); border-radius: 7px; padding: 5px 8px; font-size: 11px; background: white; }
+.ucc-mo .cov-search input:focus { outline: none; border-color: var(--primary); }
+.ucc-mo .coverage-list .pane-body { display: grid; gap: 6px; align-content: start; }
+.ucc-mo .cov-item.selected { border-color: var(--primary); background: var(--primary-soft); }
+.ucc-mo .cov-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ucc-mo .cov-detail-head h3 { margin: 2px 0 0; font-size: 15px; }
+.ucc-mo .cov-name { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.ucc-mo .cov-facts { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; padding: 8px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.ucc-mo .cov-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.ucc-mo .cov-group { margin-top: 4px; }
+.ucc-mo .cov-group .queue-item + .queue-item { margin-top: 6px; }
+@media (max-width: 1180px) {
+	.ucc-mo .coverage-shell { grid-template-columns: 260px minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+	.ucc-mo .coverage-shell { grid-template-columns: 1fr; height: auto; }
+}

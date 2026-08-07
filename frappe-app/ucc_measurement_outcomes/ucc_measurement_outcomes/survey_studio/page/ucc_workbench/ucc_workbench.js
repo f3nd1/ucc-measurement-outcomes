@@ -1034,14 +1034,25 @@ class ObjectiveWorkspace {
 			this.app.call(MAPI + "get_mapping_overview", { survey_version: this.s.surveyVersion }),
 			this.app.call(MAPI + "mapping_coverage", { survey_version: this.s.surveyVersion }),
 			this.app.call(MAPI + "mapping_masters"),
-		]).then(([ov, cov, masters]) => {
+			// Cross-survey, unlike the two above. Coverage's drill-down needs it
+			// and it is the only place "reached by a DIFFERENT survey" exists.
+			this.app.call(MAPI + "objective_usage"),
+		]).then(([ov, cov, masters, usage]) => {
 			this.rows = (ov && ov.questions) || [];
 			this.coverage = cov || {};
 			this.masters = masters || { objectives: [] };
+			this.usage = (usage && usage.usage) || {};
 			// Fresh server state: a browsed candidate that has since been linked
 			// now arrives in q.objectives on its own account, and one that was
 			// not linked is not a pending intent any more.
 			this._extra = null;
+			// A jump out of Coverage into Map carries its objective through app
+			// state, because switching tabs re-renders the whole workspace and
+			// throws this instance (and `_extra` with it) away.
+			if (this.s.objectiveFocus) {
+				this._extra = this.sel = this.s.objectiveFocus;
+				this.s.objectiveFocus = null;
+			}
 			this.unmapped = new Set(this.coverage.questions_without_objective || []);
 			if (this.s.gotoArg) { this.s.question = this.s.gotoArg; this.s.gotoArg = null; }
 			if (!this.s.question || !this.rows.some((r) => r.name === this.s.question)) {
@@ -1275,31 +1286,148 @@ class ObjectiveWorkspace {
 	}
 
 	_otherTab(tab) {
+		// Only Coverage reaches here: Map renders itself and Governance is gone.
+		// Frappe's own document history on UCC Question Mapping still records
+		// every change - that is the audit evidence, and it never depended on a
+		// tab of ours.
+		return tab === "coverage" ? this._coverageTab() : "";
+	}
+
+	// ---------------------------------------------------------- coverage ---
+	// A drill-down, not a wall of chips. The chip wall it replaces capped at 40
+	// of 97 with "+57 more" and no way to reach the rest, and every chip was a
+	// dead label: you could see that an objective was unreached and do nothing
+	// about it. Left = the whole register, searchable; right = one objective's
+	// real evidence, with a way into Map.
+	_coverageObjectives() {
+		const q = (this.covQuery || "").trim().toLowerCase();
+		const idle = new Set(this.coverage.unmapped_objectives || []);
+		return (this.masters.objectives || []).map((o) => {
+			const uses = this.usage[o.name] || [];
+			return {
+				code: o.name,
+				detail: o,
+				label: o.objective_name || o.objective || o.description || o.objective_description || "",
+				clause: o.clause_or_criterion || "",
+				uses,
+				// Two different truths, deliberately both shown: reached by ANY
+				// survey (uses) and reached by THIS version (idle). Collapsing
+				// them is how "unreached" ends up meaning neither one.
+				inSurvey: !idle.has(o.name),
+			};
+		}).filter((o) => !q
+			|| o.code.toLowerCase().indexOf(q) !== -1
+			|| String(o.label).toLowerCase().indexOf(q) !== -1
+			|| String(o.clause).toLowerCase().indexOf(q) !== -1);
+	}
+
+	_coverageRows(list) {
+		const U = window.UCCMO;
+		if (!list.length) {
+			return U.empty(this.covQuery
+				? __("No objective matches “{0}”.", [this.covQuery])
+				: __("The objective register is empty on this site."));
+		}
+		return list.map((o) => `
+			<button class="queue-item cov-item ${o.code === this.covSel ? "selected" : ""}" data-cov="${U.esc(o.code)}">
+				<span class="outline-icon">${U.icon("i-target", "xs")}</span>
+				<span class="question-copy"><strong>${U.esc(o.code)}</strong>
+					<span class="eyebrow">${U.esc(o.label || o.clause || __("No name in register"))}</span></span>
+				${o.uses.length
+					? U.chip(o.uses.length === 1 ? __("1 question")
+												 : __("{0} questions", [o.uses.length]), "ok")
+					: U.chip(__("Not reached"), "warn")}
+			</button>`).join("");
+	}
+
+	_coverageDetail(list) {
+		const U = window.UCCMO;
+		const o = list.find((x) => x.code === this.covSel)
+			|| this._coverageObjectives().find((x) => x.code === this.covSel);
+		if (!o) {
+			return U.empty(__("Pick an objective to see which questions evidence it."));
+		}
+		const bySurvey = {};
+		o.uses.forEach((u) => {
+			const key = u.survey_title || u.survey || __("Unknown survey");
+			(bySurvey[key] = bySurvey[key] || []).push(u);
+		});
+		const groups = Object.keys(bySurvey).sort().map((title) => `
+			<div class="cov-group">
+				<div class="section-label">${U.esc(title)}</div>
+				${bySurvey[title].map((u) => `
+					<button class="queue-item cov-use" data-cov-q="${U.esc(u.question)}"
+							data-cov-obj="${U.esc(o.code)}" data-cov-ver="${U.esc(u.survey_version)}"
+							title="${__("Open this question in Map")}">
+						<span class="outline-icon">${U.icon("i-survey", "xs")}</span>
+						<span class="question-copy">${U.esc((u.question_text || u.question).slice(0, 90))}
+							<span class="eyebrow">${U.esc(u.survey_version)}${
+								u.version_number ? " · v" + U.esc(u.version_number) : ""}</span></span>
+						${u.survey_version === this.s.surveyVersion
+							? U.chip(__("This version"), "") : ""}
+					</button>`).join("")}
+			</div>`).join("");
+		return `
+			<div class="cov-detail-head">
+				<div>
+					<div class="eyebrow">${__("Objective")}</div>
+					<h3>${U.esc(o.code)}</h3>
+					${o.label ? `<div class="cov-name">${U.esc(o.label)}</div>` : ""}
+				</div>
+				${o.uses.length ? U.chip(o.uses.length === 1 ? __("Reached by 1 question")
+															: __("Reached by {0} questions", [o.uses.length]), "ok")
+								: U.chip(__("No question maps to this"), "warn")}
+			</div>
+			<div class="cov-facts">
+				${o.clause ? `<span class="stat"><b>${U.esc(o.clause)}</b> <span>${__("clause / criterion")}</span></span>` : ""}
+				${o.detail.status ? `<span class="stat"><b>${U.esc(o.detail.status)}</b> <span>${__("status")}</span></span>` : ""}
+				<span class="stat"><b>${o.inSurvey ? __("Yes") : __("No")}</b> <span>${
+					__("reached by this survey version")}</span></span>
+			</div>
+			<div class="cov-actions">
+				${U.button({ label: o.uses.length ? __("Map another question to this")
+											      : __("Map a question to this objective"),
+							 tone: "primary", small: true, icon: "i-link", act: "cov-map" })}
+				${U.button({ label: __("Open in register"), small: true, icon: "i-target", act: "cov-register" })}
+			</div>
+			${o.uses.length ? groups : U.empty(
+				__("No question evidences this objective yet, in any survey."))}`;
+	}
+
+	_coverageTab() {
 		const U = window.UCCMO;
 		const c = this.coverage.counts || {};
-		if (tab === "coverage") {
-			const idle = this.coverage.unmapped_objectives || [];
-			return `<div class="pane" style="height:100%"><div class="pane-body" style="padding:12px">
-				<div class="status-strip" style="border:0;padding:0;margin-bottom:12px">
-					<span class="stat"><b>${c.questions_mapped || 0}/${c.questions || 0}</b> <span>${__("questions mapped")}</span></span>
-					<span class="stat-divider"></span>
-					<span class="stat"><b>${c.objectives_used || 0}/${c.objectives || 0}</b> <span>${__("objectives reached")}</span></span>
-				</div>
-				<div class="section-label">${__("Objectives this survey does not reach")} (${idle.length})</div>
-				<div>${idle.slice(0, 40).map((o) => U.chip(o, "")).join(" ")}${
-					idle.length > 40 ? `<span class="eyebrow"> +${idle.length - 40} ${__("more")}</span>` : ""}</div>
-			</div></div>`;
-		}
-		// Only Coverage reaches here now: Map renders itself and Governance is
-		// gone. Frappe's own document history on UCC Question Mapping still
-		// records every change - that is the audit evidence, and it never
-		// depended on this tab.
-		return "";
+		const list = this._coverageObjectives();
+		const total = (this.masters.objectives || []).length;
+		return `<div class="coverage-shell">
+			<section class="pane coverage-list">
+				<header class="pane-head">
+					<div class="pane-title-with-icon">${U.icon("i-target", "sm")}<strong>${
+						__("Objective register")}</strong><span class="count">${list.length}/${total}</span></div>
+				</header>
+				<div class="cov-search"><input type="search" data-cov-search
+					placeholder="${__("Search code, name or clause…")}" value="${U.esc(this.covQuery || "")}"></div>
+				<div class="pane-body" data-cov-rows>${this._coverageRows(list)}</div>
+			</section>
+			<section class="pane coverage-detail">
+				<header class="pane-head">
+					<div class="pane-title-with-icon">${U.icon("i-link", "sm")}<strong>${
+						__("Evidence")}</strong></div>
+					<span>${__("{0}/{1} questions mapped · {2}/{3} objectives reached by this survey",
+						[c.questions_mapped || 0, c.questions || 0,
+						 c.objectives_used || 0, c.objectives || 0])}</span>
+				</header>
+				<div class="pane-body" data-cov-detail>${this._coverageDetail(list)}</div>
+			</section>
+		</div>`;
 	}
 
 	_wire() {
 		const $el = this.$el;
-		$el.off("click.mo");
+		// Namespace-only, not "click.mo": Coverage's search box binds `input.mo`
+		// too, and off("click.mo") would leave a second one behind on every
+		// redraw.
+		$el.off(".mo");
 		$el.on("click.mo", "[data-q]", (e) => {
 			this.s.question = $(e.currentTarget).data("q");
 			this.sel = "question";
@@ -1310,11 +1438,32 @@ class ObjectiveWorkspace {
 			this.$el.find(".objective-shell").toggleClass("right-collapsed", !!this.rightCollapsed);
 			this._renderNodeEditor();
 		});
-		// NOTE: the handlers for [data-act="go-unmapped"] and [data-objective]
-		// were removed with the Governance tab, because their markup lived in a
-		// DUPLICATE _otherTab definition that JS never used - see the 2026-08-02
-		// note in BENCH_VERIFY. Nothing in this workspace emits either selector
-		// today, so they were dead listeners, not a missing feature's plumbing.
+		// --- Coverage drill-down. Every one of these has markup in
+		// _coverageTab; the dead [data-act="go-unmapped"] / [data-objective]
+		// pair removed in v0.33.0 did not, which is the whole reason that tab
+		// was a wall of unclickable chips.
+		$el.on("input.mo", "[data-cov-search]", (e) => {
+			this.covQuery = $(e.currentTarget).val();
+			// Only the list and the count are redrawn: re-rendering the pane
+			// would take the focus and the caret with it on every keystroke.
+			const list = this._coverageObjectives();
+			$el.find("[data-cov-rows]").html(this._coverageRows(list));
+			$el.find(".coverage-list .count").text(
+				list.length + "/" + ((this.masters.objectives || []).length));
+		});
+		$el.on("click.mo", "[data-cov]", (e) => {
+			this.covSel = $(e.currentTarget).data("cov");
+			$el.find("[data-cov]").removeClass("selected");
+			$(e.currentTarget).addClass("selected");
+			$el.find("[data-cov-detail]").html(this._coverageDetail(this._coverageObjectives()));
+		});
+		$el.on("click.mo", "[data-cov-q]", (e) => {
+			const $b = $(e.currentTarget);
+			this._gotoMap($b.data("cov-obj"), $b.data("cov-q"), $b.data("cov-ver"));
+		});
+		$el.on("click.mo", '[data-act="cov-map"]', () => this._gotoMap(this.covSel));
+		$el.on("click.mo", '[data-act="cov-register"]', () =>
+			frappe.set_route("Form", "Survey Objective", this.covSel));
 		$el.on("click.mo", "[data-map-node]", (e) => {
 			this.sel = $(e.currentTarget).data("map-node");
 			this._draw();
@@ -1337,6 +1486,21 @@ class ObjectiveWorkspace {
 			frappe.set_route("Form", "Survey Objective", this.sel));
 		$el.on("click.mo", '[data-act="open-mappings"]', () =>
 			frappe.set_route("List", "UCC Question Mapping", { question: this.s.question }));
+	}
+
+	// Coverage -> Map. The tab switch re-renders the workspace from scratch, so
+	// the objective travels through app state and `_load` picks it up; setting
+	// `this._extra` here would be thrown away with this instance.
+	_gotoMap(objective, question, version) {
+		if (!objective) return;
+		this.s.objectiveFocus = objective;
+		// An objective's evidence can live in another survey entirely, which is
+		// the point of the cross-survey usage query. Follow it there rather than
+		// landing on a question the current version does not contain.
+		if (version && version !== this.s.surveyVersion) this.s.surveyVersion = version;
+		if (question) this.s.gotoArg = question;
+		this.s.objectivesTab = "map";
+		this.app.render();
 	}
 
 	_browseAll() {

@@ -275,6 +275,53 @@ def mapping_coverage(survey_version):
 
 
 @frappe.whitelist()
+def objective_usage():
+	"""Every question -> objective mapping in the app, grouped by objective.
+
+	Coverage's drill-down asks the one thing no per-version endpoint can answer:
+	which questions reach this objective, and from which surveys. Both
+	`mapping_coverage` and `get_mapping_overview` are scoped to a single
+	survey_version by design, so "reached by another survey" is invisible to
+	them - and an objective the Coverage tab calls unreached may well be carried
+	by a different instrument.
+
+	One pass over the mapping table, not one call per objective: the payload is
+	bounded by the number of mappings that exist, not by the 97-row register.
+	"""
+	# Cross-version by definition, so the gate is the DocType-level read right
+	# rather than one document's. Rows are lineage metadata (question text and
+	# survey title), never answers.
+	if not frappe.has_permission(VERSION, "read"):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	rows = frappe.get_all(MAPPING, fields=["question", "objective", "survey_version"],
+						  order_by="creation asc")
+	q_text = {q["name"]: q["question_text"] for q in frappe.get_all(
+		QUESTION, filters={"name": ["in", [r["question"] for r in rows] or [""]]},
+		fields=["name", "question_text"])}
+	versions = {v["name"]: v for v in frappe.get_all(
+		VERSION, filters={"name": ["in", [r["survey_version"] for r in rows] or [""]]},
+		fields=["name", "survey", "version_number"])}
+	titles = {s["name"]: s["title"] for s in frappe.get_all(
+		"UCC Survey", filters={"name": ["in", [v["survey"] for v in versions.values()] or [""]]},
+		fields=["name", "title"])}
+
+	usage = {}
+	for r in rows:
+		if not r.get("objective"):
+			continue
+		v = versions.get(r["survey_version"], {})
+		usage.setdefault(r["objective"], []).append({
+			"question": r["question"],
+			"question_text": q_text.get(r["question"], r["question"]),
+			"survey_version": r["survey_version"],
+			"survey": v.get("survey"),
+			"survey_title": titles.get(v.get("survey")) or v.get("survey") or "",
+			"version_number": v.get("version_number"),
+		})
+	return {"usage": usage}
+
+
+@frappe.whitelist()
 def mapping_masters():
 	"""Dropdown data for the mapping inspector."""
 	return {

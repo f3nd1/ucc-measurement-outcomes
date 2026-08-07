@@ -153,3 +153,36 @@ and it is the weaker parallel model the 2026-07-29 entry also named — but it i
 in active use and it is what reaches `UCC Score Breakdown.lineage_clauses`.
 Replacing it is a separate decision with its own evidence, not a side effect of
 this one.
+
+## 2026-08-07 — Coverage is a drill-down; objective usage is read cross-survey
+
+Objectives > Coverage was a flat chip wall: the 97-row register truncated at 40
+with `+57 more` and no way to reach the rest, every chip a dead label, and a
+full-height pane holding about 120px of content. It is now two panes — the whole
+register, searchable, on the left; one objective's real evidence on the right —
+with a way from either into Map.
+
+The load-bearing decision is the new endpoint, `api/mapping.objective_usage`.
+Both existing coverage endpoints (`mapping_coverage`, `get_mapping_overview`)
+are scoped to a single `survey_version` **by design**, so "this objective is
+unreached" has only ever meant *unreached by the survey you are looking at*.
+Against 97 institutional objectives and several instruments that is a materially
+different claim from *nothing in the college evidences this*, and the old tab
+showed only the first while reading like the second. The drill-down needs the
+second, so it is queried once across all mappings and grouped by objective,
+rather than 97 per-objective round trips.
+
+Both truths are now on screen and labelled apart: the row chip counts questions
+from **any** survey, and the detail says in words whether **this survey version**
+reaches it. Collapsing them into one number is what made the old read misleading.
+
+The endpoint returns lineage metadata only — question text, survey title, version
+— never an answer, and it gates on DocType-level read on `UCC Survey Version`
+because it is cross-version by definition and has no single document to check.
+
+Two notes for whoever touches this next. `_gotoMap` routes the objective through
+**app state** (`state.objectiveFocus`), not the workspace instance: switching tab
+re-renders the workspace from scratch, so anything left on `this` is discarded —
+the same shape as the existing `gotoArg`. And `_wire` now clears `.mo` rather
+than `click.mo`, because the search box binds `input.mo` and the old `off` would
+have stacked a fresh handler on every redraw.
