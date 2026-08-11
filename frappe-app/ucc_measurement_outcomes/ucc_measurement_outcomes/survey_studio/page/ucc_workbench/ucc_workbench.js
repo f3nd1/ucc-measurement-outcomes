@@ -3546,7 +3546,6 @@ class Criterion7Workspace {
 
 	_draw() {
 		const U = window.UCCMO;
-		const tab = this.app.tab("overview");
 		const k = this.data.kpis || {};
 		this.$el.html(`
 			${U.contextBar({
@@ -3556,14 +3555,25 @@ class Criterion7Workspace {
 				statusTone: "ok", statusIcon: "i-lock",
 				actions: [{ label: __("Export"), icon: "i-save", act: "export" }],
 			})}
-			${U.tabs([{ key: "overview", label: __("Overview") },
-					  { key: "narrative", label: __("Evidence narrative") },
-					  { key: "lineage", label: __("Lineage") }], tab)}
+			${/* One tab, because there is one thing here. "Evidence narrative"
+				and a second "Lineage" were tab labels with nothing behind them -
+				no endpoint, no DocType, no field, never specified anywhere - and
+				until 2026-08-01 they silently repainted this tab's own content
+				(QA Bug C), then an honest placeholder after it. Deleted
+				2026-08-11. What was called "Overview" IS the lineage report:
+				api/lineage.get_lineage over the frozen UCC Score Breakdown
+				snapshot, which is what the label now says.
+
+				The active key is passed literally rather than through
+				app.tab(): with one tab there is nothing to choose, and reading
+				state would let a stale in-session "overview" render the strip
+				with nothing marked active. */""}
+			${U.tabs([{ key: "lineage", label: __("Lineage") }], "lineage")}
 			${U.statusStrip([
 				{ value: this.results.length, label: __("published results") },
 			], { text: __("Every figure here is the snapshot taken at calculation. Editing a mapping today does not change it."),
 				 tone: "", icon: "i-lock" })}
-			<div class="workarea">${tab === "overview" ? `<div class="dashboard-layout">
+			<div class="workarea"><div class="dashboard-layout">
 				${U.pane({
 					cls: "", title: __("Results"), icon: "i-chart", count: this.results.length,
 					body: this.results.map((r) => `
@@ -3575,20 +3585,12 @@ class Criterion7Workspace {
 				<section class="pane"><div class="pane-body" data-main style="padding:12px">
 					${__("Loading…")}</div></section>
 				<div data-side></div>
-			</div>` : `<div class="pane" style="height:100%"><div class="pane-body">${
-				U.empty(__("This tab is not built yet. See Overview for the current evidence view."))}</div></div>`}</div>`);
+			</div></div>`);
 		this._wire();
-		// Overview's Results/main/side dashboard is the only content that
-		// exists for this workspace right now (2026-08-01 QA Bug C: Narrative
-		// and Lineage previously reused Overview's markup and never repainted
-		// for their own tab, since _fill() ignored the tab argument entirely -
-		// switching tabs silently changed nothing). Rather than leave that
-		// stale copy in place, an honest placeholder replaces it until
-		// Narrative/Lineage get real content of their own.
-		if (tab === "overview") this._fill(tab);
+		this._fill();
 	}
 
-	_fill(tab) {
+	_fill() {
 		const U = window.UCCMO;
 		if (!this.s.result) {
 			return this.$el.find("[data-main]").html(U.empty(__("Calculate an index result to see evidence here.")));

@@ -2585,3 +2585,40 @@ Verify on the bench: Objectives shows Map and Coverage only; Coverage renders it
 counts and unreached-objective list exactly as before; the Map tab and its node
 editor still work; and `UCC Question Mapping` form still shows its History
 sidebar with prior edits.
+
+## 2026-08-11 — Criterion 7 has one tab, and it says what it shows
+
+`Evidence narrative` and the second `Lineage` tab are deleted. Both were tab
+labels with nothing behind them: no endpoint, no DocType, no field, no doc,
+no prototype section, no mention in the Criterion 7.1.1 reference PDFs. They
+were introduced as labels in the first workbench commit (7a8496e) and never
+specified anywhere. Until 2026-08-01 they silently repainted the Overview
+tab's own content (QA Bug C above); after that fix they showed an honest
+"not built yet" placeholder. Neither ever had a write path, so no narrative
+text exists anywhere to migrate or lose.
+
+What was labelled `Overview` is now labelled `Lineage`, because that is what
+it is: `api/lineage.get_lineage` over the frozen `UCC Score Breakdown`
+snapshot - score card, By objective, clauses, question text, wording-corrected
+markers. No data, endpoint or logic changed; the rendered workarea DOM is
+byte-identical to what the Overview tab produced (measured, not asserted -
+the old file and the new one were both rendered headlessly against the same
+canned lineage payload and the two DOM strings compared).
+
+Two notes for whoever is next in this class:
+
+- The active tab key is now passed to `U.tabs` literally instead of through
+  `app.tab()`. With one tab there is nothing to choose, and a stale in-session
+  `criterion7Tab: "overview"` would otherwise render the strip with nothing
+  marked active. Verified headlessly against exactly that stale state.
+- `Criterion7Workspace._fill()` no longer takes a `tab` argument. That
+  parameter is what made QA Bug C possible: it was accepted and never branched
+  on, so every tab rendered Overview. With one tab it is dead, and leaving it
+  invites the same bug back the moment a second tab is added.
+
+**Pre-existing, NOT changed here, for a later decision:** `_draw()` still has
+`const k = this.data.kpis || {}` and `k` is read nowhere - it was already dead
+before this change. `this.data` is fed by the `get_dashboard_data` call in
+`render()`, which therefore has no consumer in this workspace either. Removing
+the variable means removing that server call, which is a behaviour change
+outside a tab-strip rename, so it is reported rather than done.
